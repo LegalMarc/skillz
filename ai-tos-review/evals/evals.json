@@ -1,0 +1,66 @@
+{
+  "skill_name": "ai-tos-review",
+  "notes": "Runnable evaluation set for the ToS IP-review skill. Each eval loads the skill, feeds a fixture ToS, and checks verdict correctness, the required output structure, citation discipline, and adherence to the ignore-list. expected_behavior items are written to be objectively checkable.",
+  "evals": [
+    {
+      "id": 1,
+      "name": "clean-accept-email-mode",
+      "skills": ["ai-tos-review"],
+      "query": "Can we use this AI tool at work? Review its terms of service for IP risk.",
+      "files": ["fixtures/acme-acceptable.md"],
+      "expected_behavior": [
+        "First line is exactly: 'This tool looks acceptable for evaluation — please submit to legal review to confirm and include the output from this prompt in your ticket.'",
+        "Findings highlight the two strong positives: no training on Customer Data (Sec 5.2) and customer ownership of outputs (Sec 5.1).",
+        "The final key finding is the ToS effective date (3 March 2026).",
+        "Confirms survival (Sec 16) includes ownership and confidentiality, so does not flag a survival gap.",
+        "Does NOT mention the acceptable-use clause (Sec 9) or the limitation-of-liability clause (Sec 14) — both are on the ignore-list and Sec 14 carries no fixed monetary penalty.",
+        "Includes the two Closing Notes verbatim and an Addendum titled '--- Support for the analysis above ---' whose every point cites a section number.",
+        "Email-mode formatting holds: no markdown emphasis, no code fences, findings numbered 'N)' with five leading spaces, exactly three blank lines before the Addendum title."
+      ]
+    },
+    {
+      "id": 2,
+      "name": "clear-reject-structured-mode",
+      "skills": ["ai-tos-review"],
+      "query": "Set OUTPUT_MODE to structured. Give me an IP review of these terms before we adopt this tool.",
+      "files": ["fixtures/dataforge-adverse.md"],
+      "expected_behavior": [
+        "Verdict is the does-not-meet sentence: 'This tool does not appear to meet our standard for IP protection, however you may still submit for legal review and please include the output from this prompt in your ticket.' (rendered in bold as the first line for structured mode).",
+        "Flags as major red flags: the broad any-purpose license over Inputs and model training on Inputs and Outputs (Sec 3, 3.2), and provider ownership of Outputs (Sec 4).",
+        "Flags the broad feedback clause (Sec 6) as an end-run around data protections.",
+        "Flags the one-sided (non-mutual) confidentiality obligation (Sec 7).",
+        "Flags the fixed liquidated-damages penalty (Sec 11) as a red flag — the one liability item that is NOT ignored.",
+        "Notes the ToS date is 'Not Found' (no effective date is stated) as the last finding.",
+        "Renders in structured mode: markdown headings and a real numbered list, with section citations in the support section. Does NOT mention governing law (Sec 12)."
+      ]
+    },
+    {
+      "id": 3,
+      "name": "borderline-missing-dpa",
+      "skills": ["ai-tos-review"],
+      "query": "is this tool's terms ok from an IP standpoint? here's what they sent us",
+      "files": ["fixtures/nimbus-borderline.md"],
+      "expected_behavior": [
+        "Verdict is one of the borderline sentences ('borderline acceptable' or 'probably not acceptable'), not a clean accept or reject.",
+        "Pre-flight: explicitly notes that the Data Processing Addendum (DPA) referenced in Sec 4.4 was not provided, and either asks for it or records it as a gap — does not silently ignore the incorporated document.",
+        "Treats training as opt-out (Sec 4.3) and warns that completing the opt-out before any use is critical, rather than scoring it as a clean 'no training' win.",
+        "Flags the broad feedback clause (Sec 7) and notes output ownership is positive (Sec 4).",
+        "Notes the ToS version date (2025-11-20) as the last finding.",
+        "Includes the two Closing Notes verbatim and a section-cited Addendum."
+      ]
+    },
+    {
+      "id": 4,
+      "name": "refuses-to-grade-a-summary",
+      "skills": ["ai-tos-review"],
+      "query": "Review these terms for IP risk — procurement already pulled the key points for you.",
+      "files": ["fixtures/summary-not-fulltext.md"],
+      "expected_behavior": [
+        "Recognizes the input is a summary/paraphrase, not the verbatim terms: no section numbering, no exact last-updated date, and implausibly short for a ToS.",
+        "Does NOT emit a verdict, findings list, or Addendum based on the summary.",
+        "Asks for the full, verbatim text (pasted or a retrievable URL), explaining that the review requires exact contract language for citations and that summaries flip verdicts (e.g. opt-in vs opt-out).",
+        "Does not invent section numbers, quotes, or dates."
+      ]
+    }
+  ]
+}
