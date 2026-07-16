@@ -22,6 +22,10 @@ Here's how it works in practice. Our legal department policy is that when you su
 
 The skill's output is a triage, not a clearance — every verdict, including the favorable ones, routes to a human attorney. But it moves the easy kills out of the queue and hands the hard ones over pre-digested.
 
+## Provenance
+
+This skill was distilled from a chat prompt that ran this review for months, one ToS at a time. The original is preserved verbatim in [`original-prompt.md`](original-prompt.md) — worth reading if you're converting your own working prompts into skills, as a before/after: the legal checklist survived nearly untouched; the process scaffolding around it is what the conversion added.
+
 ## What makes it portable
 
 The whole skill is a single self-contained prompt in [`SKILL.md`](SKILL.md), written to be **model-neutral**. It runs the same way on any high-effort SOTA model (GPT-5.5+, Claude Opus, etc.). There are no tool calls, no runtime assumptions, and the operative content is not split across files — so the body pastes cleanly into surfaces that don't load skill files.

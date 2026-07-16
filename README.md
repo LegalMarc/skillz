@@ -20,6 +20,14 @@ Two rules make it safe for legal workflows: it **never fabricates registration d
 
 **Intended workflow:** run it on every candidate name *before* anyone falls in love with one; the report routes to attorney review with the key records located, quoted, and pre-verified.
 
+### [workflow-loop](workflow-loop/)
+
+Turn a goal into self-contained GitHub issues, then grind through them **AFK** with a deterministic multi-agent loop: fresh clean-context coder per ticket, independent adversarial reviewer who re-runs all verification, committer that lands with evidence — and blocked tickets are *parked* (work stashed, findings posted to the issue, triage label applied) so an overnight queue never dies at the first stubborn ticket. Model-agnostic: roles are capability tiers and effort levels, not model names. Requires a runtime with a Workflow-style orchestration tool (built for Claude Code).
+
+## Provenance
+
+`ai-tos-review` and `tm-clearance` each ship an `original-prompt.md` — the verbatim chat prompt the skill was distilled from, kept as a historical artifact. If you're converting your own working prompts into skills, the before/after pairs show exactly what conversion adds: the domain expertise carries over nearly untouched, while verification gates, deterministic rubrics, self-checks, and eval sets grow around it.
+
 ## License
 
 MIT — see [LICENSE](LICENSE).

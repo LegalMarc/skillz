@@ -1,0 +1,59 @@
+{
+  "skill_name": "workflow-loop",
+  "notes": "Hermetic evals: they test Phase 1 decomposition quality and invoke-time configuration behavior, which decide the loop's quality — no live repo or GitHub access required. Run each query with the skill loaded and grade the produced plan/issue drafts/invocation against expected_behavior.",
+  "evals": [
+    {
+      "id": 1,
+      "name": "decompose-prd-into-self-contained-issues",
+      "skills": ["workflow-loop"],
+      "query": "Here's the PRD for our webhook service's API key feature. Break it into tickets I can grind through with the workflow loop tonight.",
+      "files": ["fixtures/mini-prd.md"],
+      "expected_behavior": [
+        "Produces vertical tracer-bullet slices (e.g., schema+model+migration as the base slice, then endpoint slices, middleware slice, rate limiting, audit) — not horizontal layers like 'all models' / 'all endpoints' / 'all tests'.",
+        "Every drafted issue contains ALL template sections: Goal, Dependencies, Scope, Out of scope, Acceptance criteria, Required verification, Notes.",
+        "Every Required verification section contains copy-pasteable commands including the repo check command (bash scripts/check.sh), and slices that add migrations or middleware include an integration-level verification command, not just unit tests.",
+        "Dependencies are explicit ('needs #N' or named references to sibling tickets) and form a valid order: schema slice first, middleware before rate limiting, etc.",
+        "PRD constraints (never log plaintext keys, use existing hash_secret() helper, session-cookie auth must keep working) are copied into the Notes of the relevant issues — not assumed known.",
+        "Presents the breakdown for user confirmation BEFORE creating any issues (no gh issue create without sign-off)."
+      ]
+    },
+    {
+      "id": 2,
+      "name": "model-agnostic-invocation",
+      "skills": ["workflow-loop"],
+      "query": "Issues are already created and labeled 'afk' in acme/webhook-svc, all with verification sections. Kick off the loop — I'm going AFK overnight. Use the strongest model you have for review.",
+      "files": [],
+      "expected_behavior": [
+        "Invokes the Workflow tool with the skill's workflow-loop.js script and args including repo, label 'afk', and the repo check command (asking for it if unknown).",
+        "Model configuration follows the tier policy: reviewerModel left empty (inherit session frontier model) or set to the strongest available tier — with reviewerEffort 'xhigh'; coderModel either empty or a mid-tier model with coderEffort 'high'. No hardcoded legacy model names pulled from memory of old defaults.",
+        "onBlocked is 'skip' (or left to default) for an overnight AFK run — the loop must not halt at the first blocked ticket.",
+        "Suggests or performs a dryRun first to sanity-check the queue, OR verifies prerequisites (gh auth, green baseline, clean tree) before the real run.",
+        "Does not edit workflow-loop.js — all project specifics go through args."
+      ]
+    },
+    {
+      "id": 3,
+      "name": "existing-issues-missing-verification",
+      "skills": ["workflow-loop"],
+      "query": "We already have 6 open issues labeled 'afk' for this feature. Three of them just say 'add tests later' with no commands. Start the loop.",
+      "files": [],
+      "expected_behavior": [
+        "Refuses to start the loop as-is: identifies that issues lacking Required verification sections cannot self-verify and will cause drift.",
+        "Offers to (or proceeds to) add Required verification sections with concrete commands to the deficient issues first, then run the loop.",
+        "Does not weaken the requirement (e.g., does not suggest running with verification 'to be added later')."
+      ]
+    },
+    {
+      "id": 4,
+      "name": "triage-after-afk-run",
+      "skills": ["workflow-loop"],
+      "query": "The overnight loop finished: 9 landed, 2 parked. What's my triage workflow this morning?",
+      "files": [],
+      "expected_behavior": [
+        "Explains parked-ticket triage: list them via the blocked label (gh issue list --label afk-blocked), read the loop's findings comment on each issue, recover stashed work via git stash list if needed.",
+        "Explains the re-run path: fix or refine the issue, remove the blocked label, invoke the loop again — discovery recomputes from GitHub state and closed issues drop out automatically.",
+        "Notes that dependents of parked tickets were automatically held back and will become eligible once the parked ticket lands."
+      ]
+    }
+  ]
+}

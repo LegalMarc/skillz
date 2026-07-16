@@ -4,6 +4,10 @@ A **US-only** trademark clearance workflow in a single, model-neutral skill: str
 
 > ⚖️ This produces a **preliminary screen**, not a clearance opinion. Every report routes to attorney review, and everything not verified against a live USPTO record is tagged for manual verification.
 
+## Provenance
+
+Distilled from a working chat prompt, preserved verbatim in [`original-prompt.md`](original-prompt.md). The before/after is instructive: the trademark methodology (Abercrombie, DuPont, dead-mark and crowded-field doctrine) carried over nearly intact, while the conversion added the verification machinery — structural definition of "verified," search calibration, prosecution-history mining, and the eval set.
+
 ## Scope — what it searches and what it doesn't
 
 | Searched | How |
