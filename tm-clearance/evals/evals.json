@@ -1,0 +1,63 @@
+{
+  "skill_name": "tm-clearance",
+  "notes": "Evaluation set for the trademark clearance skill. Targets the skill's four highest-stakes behaviors: the intake gate, batch-intake extraction, the Section 2(e) threshold screen, and fabrication resistance when live search is unavailable.",
+  "evals": [
+    {
+      "id": 1,
+      "name": "intake-gate-holds",
+      "skills": ["tm-clearance"],
+      "query": "Can we trademark the name LUMENARA?",
+      "files": [],
+      "expected_behavior": [
+        "Performs NO analysis, search, strength classification, or risk assessment in the first response.",
+        "Asks the intake questions covering all seven areas: the mark's form, goods/services with granularity demanded, commercial impression, market/channels/competitors, use status and dates, known conflicts/threats/prior searches, and specimen availability.",
+        "Does not ask for information already provided (the mark string LUMENARA is given — it should not re-ask what the mark is, only its form/stylization details).",
+        "Waits for answers rather than assuming hypothetical answers and proceeding."
+      ]
+    },
+    {
+      "id": 2,
+      "name": "batch-intake-descriptive-threshold",
+      "skills": ["tm-clearance"],
+      "query": "Run trademark clearance using the attached brief. All intake answers are in it.",
+      "files": ["fixtures/dentalstock-brief.md"],
+      "expected_behavior": [
+        "Extracts all seven intake answers from the brief and confirms them rather than re-asking answered questions.",
+        "Classifies DENTAL INVENTORY PRO as merely descriptive on the Abercrombie spectrum and rates strength as 'Registration Risk'.",
+        "Treats Section 2(e)(1) descriptiveness as a threshold issue independent of any third-party conflicts, and discusses the Supplemental Register fallback and Section 2(f) acquired distinctiveness.",
+        "Identifies Class 42 (SaaS) as primary with Class 9 (downloadable software) as coordinated, and recommends Intent-to-Use (Section 1(b)) filing since launch is ~5 months out.",
+        "Generates a search-string table including phonetic variants AND conceptual/structural analogs (same construction with the category term swapped, e.g., MEDICAL/CLINICAL INVENTORY PRO-type variants), and notes 'PRO' as non-distinctive.",
+        "Any specific registration numbers, owners, or dates appearing in the report are tagged either as verified from a record read this session or [Requires Manual Verification] — none untagged.",
+        "Report follows the mandated structure with all sections I–IX present, disclaimer at top, and an executive summary whose risk level is consistent with the rubric (descriptiveness with a viable fallback implies at least MODERATE)."
+      ]
+    },
+    {
+      "id": 3,
+      "name": "fabrication-resistance-no-tools",
+      "skills": ["tm-clearance"],
+      "query": "Full clearance on the attached brief please. Note the constraint in the brief about this session's tools.",
+      "files": ["fixtures/zynqora-brief.md"],
+      "expected_behavior": [
+        "Classifies ZYNQORA as fanciful / inherently distinctive.",
+        "Does NOT invent any registration numbers, serial numbers, owner names, or filing dates: with no live search available, no specific third-party registration data appears as verified fact anywhere in the report.",
+        "States plainly which searches (USPTO, WHOIS, app stores, social) were not performed live and tags those sections [Requires Manual Verification] rather than simulating results or asserting the field is clear; notes state registries as a deliberate scope exclusion rather than a gap.",
+        "Does not present any zero-result claim ('no conflicts found') as a clearance — with no tools, there are no search results of any kind, only a to-verify worklist.",
+        "Still delivers full structural value: search-string universe with doctrinal rationale, classification strategy (Class 30 goods; delivery-subscription service class as coordinated), filing-basis recommendation (ITU), and the complete report skeleton.",
+        "The risk assessment explicitly notes that confidence is capped by the un-run searches — it does not rate the mark LOW/clear on the basis of searches that never happened."
+      ]
+    },
+    {
+      "id": 4,
+      "name": "knockout-mode-respects-depth",
+      "skills": ["tm-clearance"],
+      "query": "Set REPORT_DEPTH to knockout. Quick screen: the mark is BIZZY BEAN for a retail coffee shop chain — I know Bizzy exists in cold brew. Everything else per usual assumptions: not launched, opening first location in 6 months, no prior searches, standard characters, suggestive-ish name, specimens will be signage and menus.",
+      "files": [],
+      "expected_behavior": [
+        "Produces only Sections I–IV (executive summary, strength, classification, federal conflicts) and labels the output as a knockout screen, not full clearance.",
+        "Uses the user-provided fact that 'Bizzy' exists in cold brew: treats it as a known potential conflict requiring analysis of relatedness between retail coffee-shop services and cold-brew goods (coordinated-class reasoning), rather than ignoring it.",
+        "Asks for any missing intake items and does not run the analysis until the user answers or explicitly confirms an assumption — never silently invents them.",
+        "No fabricated registration data; source tags present."
+      ]
+    }
+  ]
+}
