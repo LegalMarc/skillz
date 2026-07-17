@@ -17,6 +17,8 @@
 //     reviewerEffort: "xhigh",
 //     onBlocked: "skip",              // "skip" = park & continue (AFK); "halt" = stop at first block
 //     blockedLabel: "afk-blocked",    // label applied to parked tickets
+//     reportIssue: 0,                 // 0 = off; "auto" = create/reuse "AFK run log" issue; or an issue number
+//     autoRecover: false,             // restart flows ONLY: stash a crashed run's dirty tree and proceed
 //     commitPrefix: "",
 //     maxTickets: 0,                  // 0 = all eligible
 //     maxReviewIterations: 3,
@@ -64,6 +66,13 @@ const cfg = {
   reviewerEffort: A.reviewerEffort || 'xhigh',
   onBlocked: A.onBlocked === 'halt' ? 'halt' : 'skip',
   blockedLabel: A.blockedLabel || 'afk-blocked',
+  // Run journal + end-of-run report target: 0 = off, "auto" = create/reuse an issue
+  // titled "AFK run log", or an explicit issue number.
+  reportIssue: A.reportIssue === 'auto' ? 'auto' : typeof A.reportIssue === 'number' ? A.reportIssue : 0,
+  // Unattended-restart mode: a dirty tree at discovery is stashed (afk-crash-recovery)
+  // and the run proceeds, instead of refusing. Set ONLY by auto-restart flows; attended
+  // runs keep the strict gate so a human inspects crashed state.
+  autoRecover: !!A.autoRecover,
   commitPrefix: A.commitPrefix || '',
   maxTickets: typeof A.maxTickets === 'number' ? A.maxTickets : 0,
   maxReviewIterations: typeof A.maxReviewIterations === 'number' ? A.maxReviewIterations : 3,
@@ -115,12 +124,21 @@ const mechanicalOpts = (extra) => ({
   effort: 'medium',
   ...extra,
 })
+// FINAL fix round only: the strongest configuration the run knows — one max-strength
+// attempt at the cliff edge before parking is where extra tokens pay best. If no
+// reviewerModel is set, omit the model entirely (inherit the session model, presumed
+// strongest) rather than keeping a deliberately cheaper coderModel.
+const escalatedOpts = (extra) => ({
+  ...(cfg.reviewerModel ? { model: cfg.reviewerModel } : {}),
+  effort: cfg.reviewerEffort,
+  ...extra,
+})
 
 // ─── Schemas ─────────────────────────────────────────────────────────────────
 
 const QUEUE_SCHEMA = {
   type: 'object',
-  required: ['ok', 'reason', 'tickets', 'pendingCount'],
+  required: ['ok', 'reason', 'tickets', 'malformed', 'pendingCount'],
   properties: {
     ok: { type: 'boolean' },
     reason: { type: 'string' },
@@ -132,6 +150,18 @@ const QUEUE_SCHEMA = {
         properties: {
           number: { type: 'number' },
           title: { type: 'string' },
+        },
+      },
+    },
+    malformed: {
+      type: 'array',
+      description: 'eligible issues excluded by the lint gate (already commented + labeled); empty array if none',
+      items: {
+        type: 'object',
+        required: ['number', 'why'],
+        properties: {
+          number: { type: 'number' },
+          why: { type: 'string' },
         },
       },
     },
@@ -155,13 +185,18 @@ const CODER_SCHEMA = {
 
 const REVIEWER_SCHEMA = {
   type: 'object',
-  required: ['verdict', 'findings'],
+  required: ['verdict', 'findings', 'lesson'],
   properties: {
     verdict: { type: 'string', enum: ['APPROVE', 'REQUEST_CHANGES'] },
     findings: {
       type: 'string',
       description:
         'If REQUEST_CHANGES: numbered findings, each "N. <file>:<line> — <problem> — <required change>". If APPROVE: one line of evidence.',
+    },
+    lesson: {
+      type: 'string',
+      description:
+        'REQUEST_CHANGES only: ONE factual sentence a future coder in THIS repo should know to avoid this class of finding (e.g. "when a migration tightens a constraint, update every writer of that table"). Empty string on APPROVE or when the finding is purely ticket-specific.',
     },
   },
 }
@@ -185,7 +220,51 @@ const PARK_SCHEMA = {
   },
 }
 
+const JOURNAL_SCHEMA = {
+  type: 'object',
+  required: ['status', 'issue', 'reason'],
+  properties: {
+    status: { type: 'string', enum: ['ok', 'failed'] },
+    issue: { type: 'number', description: 'the journal issue number (0 if failed)' },
+    reason: { type: 'string', description: 'max 1 sentence' },
+  },
+}
+
+// ─── Run ledger ──────────────────────────────────────────────────────────────
+// Cross-ticket lessons distilled from reviewer findings. Bounded and factual:
+// the run learns repo-specific failure classes while each ticket stays
+// otherwise clean-context. FIFO, max 5 one-liners.
+
+const lessons = []
+const LEDGER_MAX = 5
+const recordLesson = (lesson) => {
+  const l = (lesson || '').trim()
+  if (!l) return
+  if (lessons.includes(l)) return
+  lessons.push(l)
+  while (lessons.length > LEDGER_MAX) lessons.shift()
+}
+const lessonsBlock = () =>
+  lessons.length
+    ? `\nRUN LEDGER — independent reviewers in THIS run rejected earlier tickets for the following; do not repeat these mistakes:\n${lessons.map((l, i) => `${i + 1}. ${l}`).join('\n')}\n`
+    : ''
+
+// One bounded re-run per failing verification command; a retry-pass must be disclosed.
+const FLAKY_RULE = `FLAKY-RETRY RULE: if a verification command fails, re-run THAT command exactly once.
+   If it passes on the retry, continue — but you MUST disclose "passed on retry — possible
+   flake" for that command in your summary. Never retry twice: two failures = a real failure.`
+
 // ─── Prompts ─────────────────────────────────────────────────────────────────
+
+const dirtyTreePolicy = cfg.autoRecover
+  ? `   - If the tree is dirty (has non-"??" lines): this is an UNATTENDED RESTART (autoRecover on).
+     Preserve the crashed run's leftovers, then proceed:
+     git stash push -u -m "afk-crash-recovery"
+     Confirm the tree is clean afterwards (git status --short: no non-"??" lines). If the stash
+     fails or the tree stays dirty →
+     {ok:false, reason:"autoRecover stash failed — human inspection needed", tickets:[], malformed:[], pendingCount:0}`
+  : `   - If the tree is dirty (has non-"??" lines) →
+     {ok:false, reason:"working tree dirty (possibly a crashed prior run) — inspect git status, then commit/stash/reset by hand", tickets:[], malformed:[], pendingCount:0}`
 
 const DISCOVER_PROMPT = `Sync gate and eligibility discovery for an autonomous build loop.
 Repo: ${cfg.repo}   Loop label: ${cfg.label}   Branch: ${cfg.branch}
@@ -195,12 +274,11 @@ Repo: ${cfg.repo}   Loop label: ${cfg.label}   Branch: ${cfg.branch}
    git status --short
    git rev-list --left-right --count origin/${cfg.branch}...HEAD
    - If local is BEHIND origin/${cfg.branch} (left count > 0) →
-     {ok:false, reason:"local behind origin/${cfg.branch} — fast-forward first", tickets:[], pendingCount:0}
+     {ok:false, reason:"local behind origin/${cfg.branch} — fast-forward first", tickets:[], malformed:[], pendingCount:0}
    - Tree is DIRTY if git status --short contains any lines NOT starting with "??" (i.e., staged
      changes, modified tracked files, deletions, renames). Untracked-only lines ("?? ...") are safe
      to ignore and do NOT make the tree dirty.
-   - If the tree is dirty (has non-"??" lines) →
-     {ok:false, reason:"working tree dirty (possibly a crashed prior run) — inspect git status, then commit/stash/reset by hand", tickets:[], pendingCount:0}
+${dirtyTreePolicy}
 
 2. LIST OPEN ISSUES:
    gh issue list --repo ${cfg.repo} --label ${cfg.label} --state open --json number,title,body,labels --limit 100
@@ -210,10 +288,22 @@ Repo: ${cfg.repo}   Loop label: ${cfg.label}   Branch: ${cfg.branch}
    gh issue view <dep> --repo ${cfg.repo} --json state
    (Dependencies on issues in the open set are by definition not closed — no API call needed.)
 
-3. ORDER eligible issues topologically (dependencies first). If you detect a dependency
-   cycle, exclude the cycle members and mention it in reason.
+3. LINT each eligible issue before admitting it to the queue — an issue that cannot
+   self-verify wastes a full coder+reviewer cycle, so it must not enter the loop:
+   - the body has a non-empty "## Required verification" section whose entries look like
+     runnable commands (reject prose placeholders like "add tests later");
+   - its dependency references parse ("None" or "#N" forms).
+   For each malformed issue: post a comment naming exactly what is missing
+   (gh issue comment <n> --repo ${cfg.repo} --body "..."), apply the "${cfg.blockedLabel}"
+   label (create it first if needed; ignore an already-exists error), and EXCLUDE it
+   from the queue. Report it in malformed.
 
-4. Return {ok:true, reason:"<N> eligible", tickets:[{number,title}...], pendingCount:<open label-matching issues that are NOT eligible>}`
+4. ORDER the remaining eligible issues topologically (dependencies first). If you detect
+   a dependency cycle, exclude the cycle members and mention it in reason.
+
+5. Return {ok:true, reason:"<N> eligible", tickets:[{number,title}...],
+   malformed:[{number, why}...] (empty array if none),
+   pendingCount:<open label-matching issues that are NOT eligible>}`
 
 // When referenceMode is on, derive the ticket's bracketed id (e.g. "[ABC-004]" → "abc-004")
 // and tell the coder to mine the matching reference branch's tip commit as a guide to adapt.
@@ -259,13 +349,14 @@ ${referenceSection(ticket)}
    reuse helpers, honor every constraint in the issue Notes (security invariants, refs).
    If the ticket is ambiguous on a load-bearing decision (security, privilege,
    data integrity) → return blocked with the ambiguity. Do NOT guess.
-
+${lessonsBlock()}
 4. VERIFY: run EVERY command in the issue's "Required verification" section AND PASTE its
    real exit status. Do NOT claim "checks pass" for a command you did not actually run.
    ${checkLine}
    If the ticket lists BOTH unit and integration verification, run BOTH — unit suites often
    bypass the layer your change constrains (migrations, infra, external seams), so passing
    units alone proves nothing about that layer.
+   ${FLAKY_RULE}
    git diff --check (must be clean).
 
 5. STAGE the complete change set: git add <files>; confirm git diff --cached --stat
@@ -285,6 +376,9 @@ The coder claims its checks pass. Do not trust the claim — verify everything y
 1. Read the staged diff: git diff --cached
 2. Re-read the ticket's acceptance criteria AND comments: gh issue view ${ticket.number} --repo ${cfg.repo} --comments
 3. Re-run the ticket's "Required verification" commands yourself.
+   ${FLAKY_RULE}
+   If the coder disclosed a "passed on retry" flake, re-run that command yourself with
+   extra attention — two independent retry-passes may be a flake; a failure is real.
 4. ${checkLine}
 5. git diff --check (clean).
 6. Judge against acceptance criteria and the issue Notes' invariants. For security or
@@ -292,8 +386,11 @@ The coder claims its checks pass. Do not trust the claim — verify everything y
    happy path. Check the staged set is complete (nothing left unstaged that belongs).
 7. You may NOT edit anything. Findings only.
 
-APPROVE only if you personally ran the verification and it passed. Otherwise
-REQUEST_CHANGES with numbered findings: "N. <file>:<line> — <problem> — <required change>".`
+APPROVE only if you personally ran the verification and it passed (retry-passes disclosed
+in your evidence line). Otherwise REQUEST_CHANGES with numbered findings:
+"N. <file>:<line> — <problem> — <required change>". When you REQUEST_CHANGES, also fill
+"lesson": one factual sentence a future coder in this repo should know to avoid this CLASS
+of mistake — empty string if the finding is purely ticket-specific.`
 }
 
 function fixPrompt(ticket, iter, findings) {
@@ -302,8 +399,9 @@ Repo: ${cfg.repo}
 ${setupPrefix}
 Findings (fix each exactly; change nothing else):
 ${findings}
-${cfg.referenceMode ? 'If useful, the reference branch for this ticket (see git branch -a) shows how the original handled this — adapt, do not blind-copy.\n' : ''}
+${cfg.referenceMode ? 'If useful, the reference branch for this ticket (see git branch -a) shows how the original handled this — adapt, do not blind-copy.\n' : ''}${lessonsBlock()}
 Then re-run the ticket's "Required verification" commands (gh issue view ${ticket.number} --repo ${cfg.repo} if needed). ${checkLine}
+${FLAKY_RULE}
 git diff --check (clean). Re-stage the COMPLETE set: git add <files>; confirm git diff --cached --stat.
 
 Return status "staged" with a ≤2-sentence summary of what changed, or "failed" with a 1-sentence reason. Do not commit.
@@ -364,6 +462,40 @@ ${why}
 Return {status:"parked", reason:"<1 sentence>"} or {status:"failed", reason:"<why parking failed>"}.`
 }
 
+function journalStartPrompt() {
+  return `You are opening the RUN JOURNAL for an autonomous build loop that is starting now.
+Repo: ${cfg.repo}   Journal setting: ${cfg.reportIssue}
+${setupPrefix}
+1. Resolve the journal issue:
+   ${typeof cfg.reportIssue === 'number' && cfg.reportIssue > 0
+     ? `Use issue #${cfg.reportIssue}.`
+     : `Find an OPEN issue titled exactly "AFK run log":
+   gh issue list --repo ${cfg.repo} --search "AFK run log in:title" --state open --json number,title
+   If none exists, create it:
+   gh issue create --repo ${cfg.repo} --title "AFK run log" --body "Journal for autonomous workflow-loop runs. Each run posts a start comment and an end-of-run report here."`}
+2. Post the start comment (get the timestamp from: date -u):
+   gh issue comment <issue> --repo ${cfg.repo} --body "🟢 Run started <UTC timestamp>. Label: ${cfg.label} · branch: ${cfg.branch} · onBlocked: ${cfg.onBlocked}."
+
+Return {status:"ok", issue:<number>, reason:""} or {status:"failed", issue:0, reason:"<1 sentence>"}.`
+}
+
+function reportPrompt(journalIssue, resultLines) {
+  return `You are posting the END-OF-RUN report for an autonomous build loop.
+Repo: ${cfg.repo}   Journal issue: #${journalIssue}
+${setupPrefix}
+Post ONE comment on issue #${journalIssue} (get the timestamp from: date -u) containing,
+as GitHub markdown:
+- First line: "🔴 Run ended <UTC timestamp>."
+- Then a results table with columns: Ticket | Outcome | Detail. One row per line below.
+  For landed rows the detail is the short SHA (verify against git log if useful);
+  for parked rows, the one-line reason plus "findings on the ticket".
+
+Results:
+${resultLines}
+
+Return {status:"ok", issue:${journalIssue}, reason:""} or {status:"failed", issue:0, reason:"<1 sentence>"}.`
+}
+
 // ─── Park helper: preserve work, annotate issue, keep the loop grinding ──────
 
 async function park(ticket, why, completed) {
@@ -389,6 +521,7 @@ let landedTotal = 0
 let parkedTotal = 0
 let halted = false
 let haltReason = ''
+let journalIssue = 0
 
 for (let round = 1; round <= MAX_ROUNDS && !halted; round++) {
   phase('Discover')
@@ -412,10 +545,35 @@ for (let round = 1; round <= MAX_ROUNDS && !halted; round++) {
     break
   }
   log(`Round ${round} eligible: ${queue.map((t) => '#' + t.number).join(', ')} (${discovery.pendingCount} still blocked on deps)`)
+  if (discovery.malformed && discovery.malformed.length) {
+    log(`Lint gate excluded ${discovery.malformed.length} issue(s): ${discovery.malformed.map((m) => `#${m.number} (${m.why})`).join('; ')} — commented + labeled ${cfg.blockedLabel}`)
+    for (const m of discovery.malformed) {
+      if (!attempted.has(m.number)) {
+        attempted.add(m.number)
+        completed.push({ ticket: m.number, status: 'parked', commit_sha: '', reason: `lint gate: ${m.why}` })
+        parkedTotal++
+      }
+    }
+  }
 
   if (cfg.dryRun) {
     log('dryRun — reporting queue without changing anything.')
-    return { done: true, dryRun: true, eligible: queue, pendingCount: discovery.pendingCount, completed: [] }
+    return { done: true, dryRun: true, eligible: queue, malformed: discovery.malformed || [], pendingCount: discovery.pendingCount, completed: [] }
+  }
+
+  // Open the run journal once, on the first live round with work to do.
+  if (cfg.reportIssue && !journalIssue) {
+    const opened = await agent(journalStartPrompt(), {
+      ...mechanicalOpts({ label: 'journal-start', phase: 'Discover' }),
+      schema: JOURNAL_SCHEMA,
+    })
+    if (opened && opened.status === 'ok' && opened.issue > 0) {
+      journalIssue = opened.issue
+      log(`Run journal: issue #${journalIssue}`)
+    } else {
+      // Reporting must never affect outcomes — note it and grind on.
+      log(`Journal unavailable (${opened ? opened.reason : 'agent terminated'}) — continuing without it.`)
+    }
   }
 
   let landedThisRound = 0
@@ -483,11 +641,17 @@ for (let round = 1; round <= MAX_ROUNDS && !halted; round++) {
         log(`APPROVED (iter ${iter})`)
         break
       }
+      recordLesson(reviewed.lesson)
       log(`REQUEST_CHANGES (iter ${iter}): ${reviewed.findings.slice(0, 160)}`)
       if (iter === cfg.maxReviewIterations) break
 
+      // The FINAL fix round escalates to the strongest configuration the run knows —
+      // one max-strength attempt before parking.
+      const isFinalFixRound = iter === cfg.maxReviewIterations - 1
+      if (isFinalFixRound) log(`Final fix round for #${ticket.number} — escalating to reviewer-tier model/effort`)
+      const fixAgentOpts = isFinalFixRound ? escalatedOpts : coderOpts
       const fixed = await agent(fixPrompt(ticket, iter, reviewed.findings), {
-        ...coderOpts({ label: `fix-${ticket.number}-i${iter}`, phase: 'Coder' }),
+        ...fixAgentOpts({ label: `fix-${ticket.number}-i${iter}${isFinalFixRound ? '-esc' : ''}`, phase: 'Coder' }),
         schema: CODER_SCHEMA,
       })
 
@@ -549,11 +713,29 @@ for (let round = 1; round <= MAX_ROUNDS && !halted; round++) {
 
 const failed = completed.filter((r) => r.status !== 'landed' && r.status !== 'parked').length
 log(`\nDone. ${landedTotal} landed, ${parkedTotal} parked (${cfg.blockedLabel}), ${failed} failed, of ${completed.length} attempted.${haltReason ? ' Halt: ' + haltReason : ''}`)
+
+// End-of-run report — pure reporting, after all state changes; failure is logged, never fatal.
+if (journalIssue && completed.length > 0) {
+  const resultLines = completed
+    .map((r) => `#${r.ticket} | ${r.status} | ${r.status === 'landed' ? r.commit_sha : (r.reason || '').slice(0, 160)}`)
+    .join('\n')
+  const reported = await agent(reportPrompt(journalIssue, resultLines), {
+    ...mechanicalOpts({ label: 'run-report', phase: 'Land' }),
+    schema: JOURNAL_SCHEMA,
+  })
+  if (!reported || reported.status !== 'ok') {
+    log(`Run report could not be posted (${reported ? reported.reason : 'agent terminated'}) — results above are still authoritative.`)
+  } else {
+    log(`Run report posted to issue #${journalIssue}.`)
+  }
+}
+
 return {
   done: completed.length > 0 && failed === 0 && !halted,
   landed: landedTotal,
   parked: parkedTotal,
   failed,
+  journalIssue,
   reason: haltReason || (parkedTotal > 0 ? `queue drained; ${parkedTotal} ticket(s) parked for triage under label "${cfg.blockedLabel}"` : 'queue drained'),
   completed,
 }

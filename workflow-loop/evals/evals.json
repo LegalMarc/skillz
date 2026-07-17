@@ -27,6 +27,7 @@
         "Invokes the Workflow tool with the skill's workflow-loop.js script and args including repo, label 'afk', and the repo check command (asking for it if unknown).",
         "Model configuration follows the tier policy: reviewerModel left empty (inherit session frontier model) or set to the strongest available tier — with reviewerEffort 'xhigh'; coderModel either empty or a mid-tier model with coderEffort 'high'. No hardcoded legacy model names pulled from memory of old defaults.",
         "onBlocked is 'skip' (or left to default) for an overnight AFK run — the loop must not halt at the first blocked ticket.",
+        "Enables the run journal for an overnight run (reportIssue 'auto' or an issue number).",
         "Suggests or performs a dryRun first to sanity-check the queue, OR verifies prerequisites (gh auth, green baseline, clean tree) before the real run.",
         "Does not edit workflow-loop.js — all project specifics go through args."
       ]
@@ -40,7 +41,8 @@
       "expected_behavior": [
         "Refuses to start the loop as-is: identifies that issues lacking Required verification sections cannot self-verify and will cause drift.",
         "Offers to (or proceeds to) add Required verification sections with concrete commands to the deficient issues first, then run the loop.",
-        "Does not weaken the requirement (e.g., does not suggest running with verification 'to be added later')."
+        "Does not weaken the requirement (e.g., does not suggest running with verification 'to be added later').",
+        "If asked to run anyway, explains the discovery lint gate would exclude the deficient issues (comment + blocked label) rather than letting them burn coder/reviewer cycles."
       ]
     },
     {
@@ -50,9 +52,23 @@
       "query": "The overnight loop finished: 9 landed, 2 parked. What's my triage workflow this morning?",
       "files": [],
       "expected_behavior": [
+        "Points to the run-journal issue first (if reportIssue was on): the end-of-run report comment has landed SHAs and parked reasons in one place.",
         "Explains parked-ticket triage: list them via the blocked label (gh issue list --label afk-blocked), read the loop's findings comment on each issue, recover stashed work via git stash list if needed.",
         "Explains the re-run path: fix or refine the issue, remove the blocked label, invoke the loop again — discovery recomputes from GitHub state and closed issues drop out automatically.",
         "Notes that dependents of parked tickets were automatically held back and will become eligible once the parked ticket lands."
+      ]
+    },
+    {
+      "id": 5,
+      "name": "overnight-auto-restart-setup",
+      "skills": ["workflow-loop"],
+      "query": "Start the loop on acme/webhook-svc tonight and make sure it survives my usage limit — if the session dies at the 5-hour mark I want it to pick itself back up without me.",
+      "files": [],
+      "expected_behavior": [
+        "Invokes the loop with reportIssue enabled (the run journal is the liveness signal for restarts).",
+        "Creates an hourly self-canceling cron/scheduled job whose prompt is self-contained: liveness check (journal comment age + recent commits), work check (open label issues minus blocked-label), resume with the ORIGINAL args plus autoRecover: true, and delete-itself when the queue is drained.",
+        "Does NOT set autoRecover: true on the initial attended invocation — only the restart flow gets it.",
+        "Explains the recovery semantics honestly: while the account is rate-limited the cron firings no-op; the first firing after the window resets resumes; a crashed run's dirty tree is stashed as afk-crash-recovery, never discarded."
       ]
     }
   ]

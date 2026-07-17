@@ -113,6 +113,8 @@ Workflow({
     reviewerEffort: "xhigh",
     onBlocked: "skip",               // "skip" = park & grind on (AFK default); "halt" = stop at first block
     blockedLabel: "afk-blocked",     // triage label for parked tickets
+    reportIssue: "auto",             // run journal + end report: "auto" = create/reuse "AFK run log" issue; N = issue number; 0 = off
+    autoRecover: false,              // restart flows ONLY — stash a crashed run's dirty tree and proceed (see Overnight resilience)
     commitPrefix: "",                // optional subject convention
     maxTickets: 0,                   // 0 = all eligible
     maxReviewIterations: 3,
@@ -130,14 +132,21 @@ Runs in the background; watch with `/workflows`. Tip: run once with `dryRun: tru
 
 ```
 Round:
-  Discover →  sync gate (fetch; abort if behind or dirty) + eligible open `label`
-              issues (all deps CLOSED, not parked), topologically ordered
+  Discover →  sync gate (fetch; abort if behind or dirty — autoRecover stashes
+              instead) + eligible open `label` issues (all deps CLOSED, not
+              parked) + LINT GATE: issues without runnable Required-verification
+              commands are commented, labeled, excluded. Topological order.
+              First live round also opens the run journal (reportIssue).
   For each eligible issue (FRESH AGENT, no shared memory):
     Coder    →  read issue, plan, implement, run the issue's Required
-                verification + checkCommand, git diff --check, stage
+                verification + checkCommand (one bounded retry per flaky
+                command, disclosed), git diff --check, stage. Sees the RUN
+                LEDGER: ≤5 factual lessons from this run's earlier rejections.
     Review   →  independent agent re-runs verification on the staged diff
-                → APPROVE | REQUEST_CHANGES (numbered file:line findings)
-                  ↳ coder fixes, re-stages, re-review (max N rounds)
+                → APPROVE | REQUEST_CHANGES (numbered file:line findings,
+                  plus a one-line lesson for the ledger)
+                  ↳ coder fixes, re-stages, re-review (max N rounds);
+                    the FINAL fix round escalates to reviewer-tier model/effort
                   ↳ exhausted: PARK (skip mode) or stop (halt mode)
     Land     →  commit ("Refs #N" — no auto-close keywords), PUSH
                 (ff-only retry once, NEVER merge/rebase), then
@@ -146,6 +155,8 @@ Round:
                 issue comment, apply `blockedLabel`, continue to next ticket
   Re-discover if this round landed work and issues remain dep-blocked
   (a landing may have unblocked them). Else done.
+End of run → one report comment on the journal issue: landed (SHAs), parked
+             (reasons), failed. Reporting never affects outcomes.
 ```
 
 **AFK grinding (`onBlocked: "skip"`, the default):** a blocked ticket never stops the queue. Its work is stashed (recoverable via `git stash list`), the reviewer's findings land on the issue as a comment, and the `blockedLabel` marks it for morning triage. Dependents of a parked ticket stay ineligible automatically (the issue stays open). Loop-level problems still halt — behind-origin, dirty tree, push rejection, or a failed park — because continuing would contaminate every subsequent ticket.
@@ -162,6 +173,8 @@ The loop is sequential by design: one shared tree, one branch; parallel landings
 - **One loop per repo.** Never start a second concurrently.
 - **Independent review, always**; the reviewer re-runs verification itself and never edits.
 - **Parked work is stashed, never discarded**; every park leaves findings on the issue.
+- **Flaky retries are bounded and disclosed** — one re-run per failing command, ever; a retry-pass must say "passed on retry — possible flake" so nothing is silently masked (the reviewer re-runs it anyway).
+- **The run ledger stays factual and bounded** — max 5 one-line lessons distilled from actual reviewer findings; never speculation, never project lore (that belongs in `coderNote`).
 
 ## Adapting
 
@@ -172,10 +185,36 @@ Keep the four-role spine and the hygiene rules; layer project specifics through 
 - **`referenceMode` + `referenceNote`** — when per-ticket reference branches exist (e.g. from a prior implementation pass), the coder mines each ticket's branch as a guide; `referenceNote` carries what changed since (refactors, migration renumbering, already-landed schema).
 - Front-load invariants into each issue's `## Notes` — the solver reads nothing else.
 
+## Overnight resilience (auto-restart after usage-limit exhaustion)
+
+A usage window (e.g., a 5-hour limit) can kill the session mid-run: agents die, the loop halts. All loop state lives in GitHub — labels, closed issues, parked labels, stashes — so **any fresh session can resume with the same args**. To make that happen without a human:
+
+1. Invoke the loop with `reportIssue: "auto"` so the run keeps a journal (start comment, end report) on the "AFK run log" issue.
+2. Create an **hourly, self-canceling cron job** (Claude Code: `CronCreate`; or the schedule skill) whose prompt is self-contained:
+
+```text
+You are the overnight relauncher for a workflow-loop run on OWNER/REPO.
+1. LIVENESS: read the newest comments on the open "AFK run log" issue and run
+   git log --oneline --since="45 minutes ago" in <repo path>. If the latest
+   journal comment is "Run started" less than 45 minutes old OR commits are
+   still landing, exit — the run is alive.
+2. WORK CHECK: gh issue list --repo OWNER/REPO --label <label> --state open,
+   excluding issues labeled <blockedLabel>. If none remain, verify the journal
+   has an end-of-run report, then DELETE this cron job. Done.
+3. RESUME: invoke the Workflow tool with <skill path>/assets/workflow-loop.js
+   and the ORIGINAL args verbatim, plus autoRecover: true and
+   reportIssue: "auto". Do not change any other arg.
+```
+
+3. While the account is rate-limited, a cron firing simply fails or does nothing — harmless. The first firing after the window resets resumes the run, so "ASAP" means within the cron interval of the reset.
+
+**Honest caveat:** the liveness check is a heuristic (journal freshness + commit recency). Its worst cases are benign by construction — a delayed restart, or a concurrent-start attempt that the sync gate and the `autoRecover` stash absorb. `autoRecover: true` belongs **only** in these restart flows: it stashes a crashed run's leftovers (`afk-crash-recovery` stash, recoverable) instead of refusing on a dirty tree. Attended runs keep the strict gate so a human inspects crashed state.
+
 ## Failure modes & recovery
 
-- **"behind origin" / "dirty tree"** → aborts at the sync gate. Fix by hand, re-run.
-- **Parked tickets** (skip mode) → triage by label: `gh issue list --label afk-blocked`. Findings are in the issue comments; stashed work via `git stash list`. Fix or refine the issue, remove the label, re-run.
+- **"behind origin" / "dirty tree"** → aborts at the sync gate. Fix by hand, re-run (or see *Overnight resilience* for unattended flows).
+- **Parked tickets** (skip mode) → triage by label: `gh issue list --label afk-blocked`. Findings are in the issue comments; stashed work via `git stash list`; the run journal issue has the full landed/parked/failed report. Fix or refine the issue, remove the label, re-run.
+- **Lint-gate exclusions** → same label and triage path as parks; the comment says exactly which section is missing. Add the verification commands, remove the label, re-run.
 - **Coder blocked / review exhausted** (halt mode) → loop stops with the reason; work is **staged, not committed**. Inspect, fix or refine, re-run; closed issues drop out automatically.
 - **Landing failed** → always halts (loop-level). Resolve the push problem by hand.
 - **Resume** → invoke again (discovery recomputes from GitHub), or `Workflow({scriptPath, resumeFromRunId})` to reuse the prior run's cached agent results.

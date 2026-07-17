@@ -27,7 +27,11 @@ Loop (without you):
 
 **Model-agnostic:** roles are capability tiers, not model names. The reviewer runs the strongest model available at extra-high effort; the coder runs a mid tier (or inherits the session model) at high effort; mechanical steps (discover/land/park) run at medium effort. Configure via args — the script never hardcodes a vendor's model names, so it survives model generations and ports across runtimes.
 
-**Safety rails (non-negotiable):** sync gate before every pick; push must succeed before an issue closes; never merge/rebase on rejection (ff-only retry once, then halt); reviewer never edits; parked work is stashed, never discarded; sequential by design — one tree, one branch, no merge races.
+**Safety rails (non-negotiable):** sync gate before every pick; push must succeed before an issue closes; never merge/rebase on rejection (ff-only retry once, then halt); reviewer never edits; parked work is stashed, never discarded; flaky-test retries are bounded to one and always disclosed; sequential by design — one tree, one branch, no merge races.
+
+**Built-in force multipliers:** a lint gate at discovery rejects issues that can't self-verify before they burn a coder+reviewer cycle; a bounded **run ledger** feeds each fresh coder the (≤5) lessons reviewers taught earlier in the same run; the **final fix round escalates** to reviewer-tier model/effort — one max-strength attempt before parking; and an optional **run journal** issue collects a start comment and an end-of-run report (landed SHAs, parked reasons) so triage is one permalink.
+
+**Overnight resilience:** because all loop state lives in GitHub, a usage-limit death mid-run is recoverable by any fresh session. The skill ships a recipe for an hourly self-canceling cron relauncher: checks liveness via the journal + commit recency, resumes with the original args + `autoRecover: true` (which stashes a crashed run's leftovers instead of refusing), and deletes itself when the queue drains. While the account is limited, cron firings no-op harmlessly; the first one after the window resets picks the run back up.
 
 ## Configure
 
@@ -42,6 +46,8 @@ All project specifics flow through `args` — never edit the script. Key knobs:
 | `reviewerModel` / `reviewerEffort` | inherit / `xhigh` | Leave empty when the session already runs the strongest model |
 | `onBlocked` | `skip` | `skip` = park & grind on (AFK); `halt` = stop at first block (attended) |
 | `blockedLabel` | `afk-blocked` | Morning-triage filter |
+| `reportIssue` | `0` (off) | `"auto"` = create/reuse an "AFK run log" issue for the run journal + end report |
+| `autoRecover` | `false` | Restart flows only: stash a crashed run's dirty tree and proceed |
 | `maxTickets` / `maxReviewIterations` | 0 / 3 | 0 = all eligible |
 | `coderNote` | `""` | Project invariants injected into every coder prompt |
 | `referenceMode` / `referenceNote` | off | Mine per-ticket reference branches; adapt, never blind-copy |
@@ -58,10 +64,12 @@ See [SKILL.md](SKILL.md) for the full invocation, the issue template, and the fa
 ## The morning after
 
 ```bash
-gh issue list --label afk-blocked        # what got parked, findings in comments
+gh issue list --label afk-blocked        # parked + lint-rejected, findings in comments
 git stash list                            # any preserved in-progress work
 git log --oneline -20                     # what landed, each "Refs #N"
 ```
+
+With `reportIssue: "auto"`, skip all three: the "AFK run log" issue has the whole story in one comment — landed (SHAs), parked (reasons), failed — readable on your phone.
 
 Fix or refine parked issues, remove the label, re-run — discovery recomputes everything from GitHub state.
 
