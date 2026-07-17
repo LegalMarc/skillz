@@ -256,7 +256,8 @@ const FLAKY_RULE = `FLAKY-RETRY RULE: if a verification command fails, re-run TH
 
 // ─── Prompts ─────────────────────────────────────────────────────────────────
 
-const dirtyTreePolicy = cfg.autoRecover
+// dryRun must be strictly read-only: no stashing, no comments, no labels.
+const dirtyTreePolicy = cfg.autoRecover && !cfg.dryRun
   ? `   - If the tree is dirty (has non-"??" lines): this is an UNATTENDED RESTART (autoRecover on).
      Preserve the crashed run's leftovers, then proceed:
      git stash push -u -m "afk-crash-recovery"
@@ -293,10 +294,13 @@ ${dirtyTreePolicy}
    - the body has a non-empty "## Required verification" section whose entries look like
      runnable commands (reject prose placeholders like "add tests later");
    - its dependency references parse ("None" or "#N" forms).
-   For each malformed issue: post a comment naming exactly what is missing
+${cfg.dryRun
+    ? `   DRY RUN — read-only: EXCLUDE each malformed issue from the queue and report it in
+   malformed, but do NOT comment, do NOT label, do NOT change anything on GitHub.`
+    : `   For each malformed issue: post a comment naming exactly what is missing
    (gh issue comment <n> --repo ${cfg.repo} --body "..."), apply the "${cfg.blockedLabel}"
    label (create it first if needed; ignore an already-exists error), and EXCLUDE it
-   from the queue. Report it in malformed.
+   from the queue. Report it in malformed.`}
 
 4. ORDER the remaining eligible issues topologically (dependencies first). If you detect
    a dependency cycle, exclude the cycle members and mention it in reason.
@@ -546,19 +550,20 @@ for (let round = 1; round <= MAX_ROUNDS && !halted; round++) {
   }
   log(`Round ${round} eligible: ${queue.map((t) => '#' + t.number).join(', ')} (${discovery.pendingCount} still blocked on deps)`)
   if (discovery.malformed && discovery.malformed.length) {
-    log(`Lint gate excluded ${discovery.malformed.length} issue(s): ${discovery.malformed.map((m) => `#${m.number} (${m.why})`).join('; ')} — commented + labeled ${cfg.blockedLabel}`)
-    for (const m of discovery.malformed) {
-      if (!attempted.has(m.number)) {
-        attempted.add(m.number)
-        completed.push({ ticket: m.number, status: 'parked', commit_sha: '', reason: `lint gate: ${m.why}` })
-        parkedTotal++
-      }
-    }
+    log(`Lint gate excluded ${discovery.malformed.length} issue(s): ${discovery.malformed.map((m) => `#${m.number} (${m.why})`).join('; ')}${cfg.dryRun ? ' (dryRun — reported only, nothing touched)' : ` — commented + labeled ${cfg.blockedLabel}`}`)
   }
 
   if (cfg.dryRun) {
     log('dryRun — reporting queue without changing anything.')
     return { done: true, dryRun: true, eligible: queue, malformed: discovery.malformed || [], pendingCount: discovery.pendingCount, completed: [] }
+  }
+
+  for (const m of discovery.malformed || []) {
+    if (!attempted.has(m.number)) {
+      attempted.add(m.number)
+      completed.push({ ticket: m.number, status: 'parked', commit_sha: '', reason: `lint gate: ${m.why}` })
+      parkedTotal++
+    }
   }
 
   // Open the run journal once, on the first live round with work to do.

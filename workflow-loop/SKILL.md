@@ -126,7 +126,7 @@ Workflow({
 })
 ```
 
-Runs in the background; watch with `/workflows`. Tip: run once with `dryRun: true` to sanity-check the queue and dependency parsing before spending tokens. If the user set a token target ("+500k"), the loop honors it — it stops cleanly *between* tickets when the budget nears exhaustion.
+Runs in the background; watch with `/workflows`. Tip: run once with `dryRun: true` to sanity-check the queue, dependency parsing, and lint findings before spending tokens — dryRun is strictly read-only (no comments, no labels, no stashes, no journal). If the user set a token target ("+500k"), the loop honors it — it stops cleanly *between* tickets when the budget nears exhaustion.
 
 ### Shape of a run
 
