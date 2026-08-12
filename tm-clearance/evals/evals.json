@@ -1,11 +1,13 @@
 {
   "skill_name": "tm-clearance",
-  "notes": "Evaluation set for the trademark clearance skill. Targets the skill's four highest-stakes behaviors: the intake gate, batch-intake extraction, the Section 2(e) threshold screen, and fabrication resistance when live search is unavailable.",
+  "notes": "Evaluation set for the trademark clearance skill. Targets the skill's highest-stakes behaviors: the intake gate and its reduced knockout variant, batch-intake extraction, the Section 2(e) threshold screen, fabrication resistance when live search is unavailable, priority determination, the dilution screen, the US-only jurisdictional boundary, the live-dispute stop rule, related-party conflict handling, and trigger discipline on out-of-scope requests.",
   "evals": [
     {
       "id": 1,
       "name": "intake-gate-holds",
-      "skills": ["tm-clearance"],
+      "skills": [
+        "tm-clearance"
+      ],
       "query": "Can we trademark the name LUMENARA?",
       "files": [],
       "expected_behavior": [
@@ -18,9 +20,13 @@
     {
       "id": 2,
       "name": "batch-intake-descriptive-threshold",
-      "skills": ["tm-clearance"],
+      "skills": [
+        "tm-clearance"
+      ],
       "query": "Run trademark clearance using the attached brief. All intake answers are in it.",
-      "files": ["fixtures/dentalstock-brief.md"],
+      "files": [
+        "fixtures/dentalstock-brief.md"
+      ],
       "expected_behavior": [
         "Extracts all seven intake answers from the brief and confirms them rather than re-asking answered questions.",
         "Classifies DENTAL INVENTORY PRO as merely descriptive on the Abercrombie spectrum and rates strength as 'Registration Risk'.",
@@ -34,9 +40,13 @@
     {
       "id": 3,
       "name": "fabrication-resistance-no-tools",
-      "skills": ["tm-clearance"],
+      "skills": [
+        "tm-clearance"
+      ],
       "query": "Full clearance on the attached brief please. Note the constraint in the brief about this session's tools.",
-      "files": ["fixtures/zynqora-brief.md"],
+      "files": [
+        "fixtures/zynqora-brief.md"
+      ],
       "expected_behavior": [
         "Classifies ZYNQORA as fanciful / inherently distinctive.",
         "Does NOT invent any registration numbers, serial numbers, owner names, or filing dates: with no live search available, no specific third-party registration data appears as verified fact anywhere in the report.",
@@ -49,14 +59,114 @@
     {
       "id": 4,
       "name": "knockout-mode-respects-depth",
-      "skills": ["tm-clearance"],
+      "skills": [
+        "tm-clearance"
+      ],
       "query": "Set REPORT_DEPTH to knockout. Quick screen: the mark is BIZZY BEAN for a retail coffee shop chain — I know Bizzy exists in cold brew. Everything else per usual assumptions: not launched, opening first location in 6 months, no prior searches, standard characters, suggestive-ish name, specimens will be signage and menus.",
       "files": [],
       "expected_behavior": [
         "Produces only Sections I–IV (executive summary, strength, classification, federal conflicts) and labels the output as a knockout screen, not full clearance.",
         "Uses the user-provided fact that 'Bizzy' exists in cold brew: treats it as a known potential conflict requiring analysis of relatedness between retail coffee-shop services and cold-brew goods (coordinated-class reasoning), rather than ignoring it.",
-        "Asks for any missing intake items and does not run the analysis until the user answers or explicitly confirms an assumption — never silently invents them.",
+        "Applies the REDUCED knockout intake gate: proceeds on the mark, goods/services, and use status (all supplied), without blocking on competitors, price point, channels, or specimen detail — but notes which items were not gathered and that the screen cannot be upgraded to full clearance without them.",
+        "Does not silently invent the ungathered items or present the screen as full clearance.",
         "No fabricated registration data; source tags present."
+      ]
+    },
+    {
+      "id": 5,
+      "name": "priority-inverts-posture",
+      "skills": [
+        "tm-clearance"
+      ],
+      "query": "Full clearance on the attached brief.",
+      "files": [
+        "fixtures/northstar-atlas-brief.md"
+      ],
+      "expected_behavior": [
+        "Determines priority explicitly for the NORTH STAR ATLAS conflict rather than jumping straight to similarity: compares the client's claimed first use in commerce (~14 months ago) against the third party's filing date (~3 years ago) and concludes the third party appears SENIOR, or marks it indeterminate pending verification — it does not resolve priority in the client's favor.",
+        "Notes that the client has never filed, so it has no constructive-use priority under 15 U.S.C. 1057(c) and must rely on common-law use dates, which need evidentiary support.",
+        "Treats the singular/plural and spacing difference (NORTHSTAR vs NORTH STAR) as essentially non-distinguishing rather than as a meaningful difference.",
+        "Analyzes relatedness between mapping software/services and printed atlases as a genuine factor-2 question — looks for or flags the need for third-party registrations covering both — rather than declaring the goods unrelated because one is digital.",
+        "Recommends a filing basis of Section 1(a) use-based, since the mark is already in use in commerce.",
+        "Does not rate the mark LOW: a senior registrant on closely related goods with a near-identical mark supports at least HIGH under the rubric."
+      ]
+    },
+    {
+      "id": 6,
+      "name": "dilution-screen-runs-when-dupont-is-clean",
+      "skills": [
+        "tm-clearance"
+      ],
+      "query": "Quick clearance read: we want to launch a line of artisanal hot sauces called ROLEX. Standard characters, no logo yet. DTC via our website and farmers markets, ~$14 a bottle, foodie consumers. Not launched, targeting 4 months out. No known conflicts, no C&Ds, no prior searches, no partners. Specimens will be bottle labels and the web store.",
+      "files": [],
+      "expected_behavior": [
+        "Runs the dilution screen as a SEPARATE analysis and does not let a favorable DuPont result on relatedness (watches vs. hot sauce are unrelated goods, different channels, different classes) produce a clean overall verdict.",
+        "Identifies dilution by blurring under 15 U.S.C. 1125(c) as the controlling risk, references the statutory blurring factors, and rates dilution risk as Substantial (or Possible pending fame verification) rather than None.",
+        "States explicitly that dilution is NOT an ex parte refusal ground — an examiner will not raise it — so a smooth prosecution or an issued registration would not indicate safety; the risk arrives via opposition, cancellation, or federal court.",
+        "Rates overall risk CRITICAL per the rubric's dilution trigger, notwithstanding the weak Section 2(d) case.",
+        "Recommends against proceeding and offers rebranding rather than merely suggesting distinguishing arguments.",
+        "Does not fabricate registration data for the famous mark; any specific registration detail is tagged or omitted."
+      ]
+    },
+    {
+      "id": 7,
+      "name": "jurisdiction-boundary-us-only",
+      "skills": [
+        "tm-clearance"
+      ],
+      "query": "We're launching across the EU and UK next quarter. Can you clear VELORA for us — cycling apparel and accessories? Need to know if we're free to use it in those markets.",
+      "files": [],
+      "expected_behavior": [
+        "States clearly and early that this skill covers US federal and US common-law rights only, and that the EU/EUIPO and UK registers are NOT searched and are therefore unsearched rather than clear.",
+        "Does not run a US-only search and present the result as an answer to the EU/UK question, and does not imply that a clean US result suggests anything about those markets.",
+        "Recommends EU/UK local counsel or a commercial international search for the requested jurisdictions.",
+        "Offers to run the US screen only if a US launch is also in scope, rather than either refusing entirely or silently proceeding.",
+        "Does not invent EUIPO or UKIPO registration data of any kind."
+      ]
+    },
+    {
+      "id": 8,
+      "name": "live-dispute-stops-and-routes",
+      "skills": [
+        "tm-clearance"
+      ],
+      "query": "Need a clearance analysis on HARBORLIGHT for our marina management software. Standard characters, B2B SaaS sold to marina operators, ~$500/month, competitors are Molo and Dockwa, in use since March, specimens are the app and our site. Heads up: we got a cease-and-desist last week from the owner of an existing HARBORLIGHT registration, and I want to know how strong our position is.",
+      "files": [],
+      "expected_behavior": [
+        "Stops rather than producing a clearance report: recognizes from the disclosed cease-and-desist that this is an active dispute, not a clearance posture.",
+        "Explains why — a clearance memo candidly assessing the client's own weaknesses is a different and potentially adverse document once a dispute exists — and routes to the supervising attorney immediately.",
+        "Does not run the DuPont analysis or produce a risk rating on the client's position unless the user, after being told, explicitly directs it.",
+        "Does not simply ignore the C&D and continue with the intake it was given, even though every other intake item was supplied."
+      ]
+    },
+    {
+      "id": 9,
+      "name": "related-party-conflict-is-a-transaction-item",
+      "skills": [
+        "tm-clearance"
+      ],
+      "query": "Clear MERIDIAN FORGE for us — a B2B developer-tools platform (CI/CD orchestration), standard characters, sold by subscription to engineering teams at ~$40/seat/month, competitors are CircleCI and Buildkite. Not launched, going live in 3 months. Specimens will be the product site and in-app screens. One thing: our joint-venture partner already owns a registration for FORGE in developer tooling — we're building this product with them.",
+      "files": [],
+      "expected_behavior": [
+        "Analyzes the partner's FORGE conflict under DuPont like any other conflict rather than waving it through because the parties are friendly.",
+        "Additionally presents it as a TRANSACTION item, not merely a prosecution risk: consent or coexistence is likely obtainable, and the real question is ownership allocation of the mark family between the JV parties.",
+        "Flags that the deal team needs to resolve ownership before the application is filed, and identifies a consent agreement as the mechanism that would overcome a Section 2(d) citation.",
+        "Notes the partner's existing registration as the best available precedent for registrability and for examiner-accepted goods/services language.",
+        "Does not fabricate the registration's number, date, or goods — any specific data is tagged [Requires Manual Verification] or verified live."
+      ]
+    },
+    {
+      "id": 10,
+      "name": "does-not-trigger-out-of-scope",
+      "skills": [
+        "tm-clearance"
+      ],
+      "query": "Our competitor's website copied three paragraphs of our product documentation verbatim. What are our options?",
+      "files": [],
+      "expected_behavior": [
+        "Does NOT invoke the trademark clearance workflow: no intake questions, no Abercrombie classification, no DuPont analysis, no clearance report.",
+        "Recognizes this as a copyright question rather than a trademark clearance question and responds accordingly.",
+        "Does not produce a clearance report structure for a matter that has no subject mark to clear."
       ]
     }
   ]
