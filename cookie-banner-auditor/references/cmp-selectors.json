@@ -1,0 +1,284 @@
+{
+  "version": "2026-08-17",
+  "notice": "Known consent-management-platform fingerprints and control selectors. A fingerprint match resolves controls directly and takes precedence over text scoring, because CMP vendors ship stable element ids while button labels vary by site, language, and configuration. Selectors are maintained heuristics: verify against the live DOM when a run reports a fingerprint match but a failed click, and treat an unrecognised CMP as the normal case rather than an error. Adding an entry here never changes how a finding is classified; it only makes the denial and accept paths reachable.",
+  "cmps": [
+    {
+      "id": "hubspot",
+      "name": "HubSpot cookie banner",
+      "fingerprint": {
+        "selectors": ["#hs-eu-cookie-confirmation", "#hs-banner-parent"],
+        "script_hosts": ["js.hs-banner.com"]
+      },
+      "container": ["#hs-eu-cookie-confirmation"],
+      "accept": ["#hs-eu-confirmation-button"],
+      "reject": ["#hs-eu-decline-button"],
+      "settings": ["#hs-eu-cookie-settings-button"],
+      "save": [],
+      "consent_storage": ["__hs_cookie_cat_pref", "__hs_do_not_track", "__hs_initial_opt_in"],
+      "notes": "Element ids carry an 'eu' prefix for historical reasons; the banner is served to every visitor regardless of region. Buttons are labelled plainly 'Accept' and 'Decline', which is exactly the bare-label case that text scoring penalises. 'save' is deliberately empty: the simple banner has no separate save control, and mapping it to the confirmation button would turn a settings-path denial into an acceptance."
+    },
+    {
+      "id": "onetrust",
+      "name": "OneTrust",
+      "fingerprint": {
+        "selectors": ["#onetrust-consent-sdk", "#onetrust-banner-sdk"],
+        "script_hosts": ["cdn.cookielaw.org", "optanon.blob.core.windows.net", "geolocation.onetrust.com", "cdn-apac.onetrust.com", "cdn-ukwest.onetrust.com"]
+      },
+      "container": ["#onetrust-banner-sdk", "#onetrust-consent-sdk"],
+      "accept": ["#onetrust-accept-btn-handler", "#accept-recommended-btn-handler"],
+      "reject": ["#onetrust-reject-all-handler", ".ot-pc-refuse-all-handler", "#onetrust-pc-btn-handler + button"],
+      "settings": ["#onetrust-pc-btn-handler", ".ot-sdk-show-settings"],
+      "save": [".save-preference-btn-handler", "#onetrust-pc-sdk .save-preference-btn-handler"],
+      "consent_storage": ["OptanonConsent", "OptanonAlertBoxClosed"],
+      "notes": "A reject control is only rendered when the site enables it; absence of #onetrust-reject-all-handler is itself a reportable UI observation, not a detection failure."
+    },
+    {
+      "id": "cookiebot",
+      "name": "Cookiebot (Usercentrics)",
+      "fingerprint": {
+        "selectors": ["#CybotCookiebotDialog", "#CookiebotWidget"],
+        "script_hosts": ["consent.cookiebot.com", "consentcdn.cookiebot.com", "consent.cookiebot.eu"]
+      },
+      "container": ["#CybotCookiebotDialog"],
+      "accept": ["#CybotCookiebotDialogBodyLevelButtonLevelOptinAllowAll", "#CybotCookiebotDialogBodyButtonAccept"],
+      "reject": ["#CybotCookiebotDialogBodyButtonDecline", "#CybotCookiebotDialogBodyLevelButtonLevelOptinDeclineAll"],
+      "settings": ["#CybotCookiebotDialogBodyLevelButtonCustomize", "#CybotCookiebotDialogBodyLevelButtonPreferences"],
+      "save": ["#CybotCookiebotDialogBodyLevelButtonLevelOptinAllowallSelection", "#CybotCookiebotDialogBodyButtonAcceptSelected"],
+      "consent_storage": ["CookieConsent", "CookieConsentBulkTicket"],
+      "notes": "Cookiebot is now owned by Usercentrics but ships a distinct DOM; keep both entries."
+    },
+    {
+      "id": "usercentrics",
+      "name": "Usercentrics CMP",
+      "fingerprint": {
+        "selectors": ["#usercentrics-root", "#usercentrics-cmp-ui", "[data-testid='uc-container']"],
+        "script_hosts": ["app.usercentrics.eu", "web.cmp.usercentrics.eu", "api.usercentrics.eu"]
+      },
+      "container": ["#usercentrics-root", "#usercentrics-cmp-ui"],
+      "accept": ["[data-testid='uc-accept-all-button']", "[data-action-type='accept']"],
+      "reject": ["[data-testid='uc-deny-all-button']", "[data-action-type='deny']"],
+      "settings": ["[data-testid='uc-customize-anchor']", "[data-testid='uc-more-button']"],
+      "save": ["[data-testid='uc-save-button']"],
+      "consent_storage": ["uc_settings", "ucData", "usercentrics"],
+      "shadow_dom": true,
+      "notes": "Renders inside a shadow root under #usercentrics-root; control collection must pierce shadow DOM or nothing will be found."
+    },
+    {
+      "id": "sourcepoint",
+      "name": "Sourcepoint",
+      "fingerprint": {
+        "selectors": ["iframe[id^='sp_message_iframe']", ".sp-message-open"],
+        "script_hosts": ["cdn.privacy-mgmt.com", "sourcepoint.mgr.consensu.org", "message.sp-prod.net"]
+      },
+      "container": ["iframe[id^='sp_message_iframe']", ".sp_veil"],
+      "accept": [".sp_choice_type_11", "button[title='Accept']", "button[title='Accept All']"],
+      "reject": [".sp_choice_type_13", "button[title='Reject']", "button[title='Reject All']"],
+      "settings": [".sp_choice_type_12", "button[title='Options']"],
+      "save": ["button[title='Save & Exit']"],
+      "consent_storage": ["consentUUID", "euconsent-v2"],
+      "iframe": true,
+      "notes": "Renders in a cross-origin iframe; Playwright frame traversal handles this, but the control will never appear in the main frame."
+    },
+    {
+      "id": "didomi",
+      "name": "Didomi",
+      "fingerprint": {
+        "selectors": ["#didomi-host", "#didomi-popup", ".didomi-popup-container"],
+        "script_hosts": ["sdk.privacy-center.org", "api.privacy-center.org"]
+      },
+      "container": ["#didomi-popup", ".didomi-popup-container", "#didomi-host"],
+      "accept": ["#didomi-notice-agree-button", "button.didomi-components-button--color[aria-label*='Agree' i]"],
+      "reject": ["#didomi-notice-disagree-button", "button[aria-label*='Disagree' i]"],
+      "settings": ["#didomi-notice-learn-more-button"],
+      "save": ["button.didomi-components-button[aria-label*='Save' i]"],
+      "consent_storage": ["didomi_token", "euconsent-v2"],
+      "notes": "The generic preferences-layer button class is not used for 'save' because it also matches Didomi's agree control."
+    },
+    {
+      "id": "trustarc",
+      "name": "TrustArc",
+      "fingerprint": {
+        "selectors": ["#truste-consent-track", "#truste-consent-content", ".truste_box_overlay"],
+        "script_hosts": ["consent.trustarc.com", "consent-st.trustarc.com", "choices.truste.com"]
+      },
+      "container": ["#truste-consent-track"],
+      "accept": ["#truste-consent-button"],
+      "reject": ["#truste-consent-required"],
+      "settings": ["#truste-show-consent"],
+      "save": [],
+      "consent_storage": ["notice_behavior", "notice_gdpr_prefs", "notice_preferences"],
+      "iframe": true,
+      "notes": "The preference manager opens in an iframe from consent.trustarc.com."
+    },
+    {
+      "id": "osano",
+      "name": "Osano",
+      "fingerprint": {
+        "selectors": [".osano-cm-window", ".osano-cm-dialog"],
+        "script_hosts": ["cmp.osano.com"]
+      },
+      "container": [".osano-cm-dialog", ".osano-cm-window"],
+      "accept": [".osano-cm-accept-all", ".osano-cm-button--type_accept"],
+      "reject": [".osano-cm-deny-all", ".osano-cm-button--type_denyAll", ".osano-cm-denyAll"],
+      "settings": [".osano-cm-manage", ".osano-cm-button--type_manage"],
+      "save": [".osano-cm-save", ".osano-cm-button--type_save"],
+      "consent_storage": ["osano_consentmanager", "osano_consentmanager_uuid"]
+    },
+    {
+      "id": "termly",
+      "name": "Termly",
+      "fingerprint": {
+        "selectors": ["#termly-code-snippet-support", ".t-consentPrompt"],
+        "script_hosts": ["app.termly.io"]
+      },
+      "container": ["#termly-code-snippet-support", ".t-consentPrompt"],
+      "accept": ["[data-tid='banner-accept']", ".t-acceptAllButton"],
+      "reject": ["[data-tid='banner-decline']", ".t-declineAllButton"],
+      "settings": ["[data-tid='banner-preferences']", ".t-preference-button"],
+      "save": [".t-saveButton"],
+      "consent_storage": ["TERMLY_API_CACHE"]
+    },
+    {
+      "id": "cookieyes",
+      "name": "CookieYes",
+      "fingerprint": {
+        "selectors": [".cky-consent-container", ".cky-modal"],
+        "script_hosts": ["cdn-cookieyes.com", "directory.cookieyes.com"]
+      },
+      "container": [".cky-consent-container"],
+      "accept": [".cky-btn-accept"],
+      "reject": [".cky-btn-reject"],
+      "settings": [".cky-btn-customize"],
+      "save": [".cky-btn-preferences"],
+      "consent_storage": ["cookieyes-consent"]
+    },
+    {
+      "id": "iubenda",
+      "name": "Iubenda",
+      "fingerprint": {
+        "selectors": ["#iubenda-cs-banner", ".iubenda-cs-container"],
+        "script_hosts": ["cdn.iubenda.com", "cs.iubenda.com"]
+      },
+      "container": ["#iubenda-cs-banner"],
+      "accept": [".iubenda-cs-accept-btn"],
+      "reject": [".iubenda-cs-reject-btn"],
+      "settings": [".iubenda-cs-customize-btn"],
+      "save": [".iub-cmp-save-btn"],
+      "consent_storage": ["_iub_cs-", "euconsent-v2"]
+    },
+    {
+      "id": "quantcast",
+      "name": "Quantcast Choice",
+      "fingerprint": {
+        "selectors": [".qc-cmp2-container", "#qc-cmp2-ui"],
+        "script_hosts": ["quantcast.mgr.consensu.org", "cmp.quantcast.com"]
+      },
+      "container": [".qc-cmp2-container", "#qc-cmp2-ui"],
+      "accept": ["button[mode='primary']", ".qc-cmp2-summary-buttons button:last-child"],
+      "reject": ["button[mode='secondary']", ".qc-cmp2-summary-buttons button:first-child"],
+      "settings": ["button[mode='link']"],
+      "save": [],
+      "consent_storage": ["euconsent-v2", "addtl_consent"],
+      "notes": "Quantcast relies on mode attributes rather than stable ids; positional fallbacks here are deliberately last-resort and should be confirmed against a screenshot. 'save' is empty because the primary-mode button in the preferences layer is the agree control, so mapping it would convert a denial into an acceptance."
+    },
+    {
+      "id": "complianz",
+      "name": "Complianz (WordPress)",
+      "fingerprint": {
+        "selectors": ["#cmplz-cookiebanner-container", ".cmplz-cookiebanner"],
+        "script_hosts": []
+      },
+      "container": ["#cmplz-cookiebanner-container", ".cmplz-cookiebanner"],
+      "accept": [".cmplz-accept"],
+      "reject": [".cmplz-deny"],
+      "settings": [".cmplz-manage-options"],
+      "save": [".cmplz-save-preferences"],
+      "consent_storage": ["cmplz_consented_services", "cmplz_marketing", "cmplz_statistics"]
+    },
+    {
+      "id": "borlabs",
+      "name": "Borlabs Cookie (WordPress)",
+      "fingerprint": {
+        "selectors": ["#BorlabsCookieBox", "#BorlabsCookieWidget"],
+        "script_hosts": []
+      },
+      "container": ["#BorlabsCookieBox"],
+      "accept": ["[data-cookie-accept-all]", "#CookieBoxSaveButton"],
+      "reject": ["[data-cookie-refuse]", "[data-cookie-back]"],
+      "settings": ["[data-cookie-individual]"],
+      "save": ["[data-cookie-accept]"],
+      "consent_storage": ["borlabs-cookie"]
+    },
+    {
+      "id": "cookielawinfo",
+      "name": "CookieLawInfo / GDPR Cookie Consent (WordPress)",
+      "fingerprint": {
+        "selectors": ["#cookie-law-info-bar", ".cli-modal"],
+        "script_hosts": []
+      },
+      "container": ["#cookie-law-info-bar"],
+      "accept": ["#cookie_action_close_header", ".cli_action_button[data-cli_action='accept']"],
+      "reject": ["#cookie_action_close_header_reject", ".cli-reject-btn"],
+      "settings": ["#cookie_action_settings", ".cli_settings_button"],
+      "save": [".cli_setting_save_button"],
+      "consent_storage": ["cookielawinfo-checkbox-necessary", "viewed_cookie_policy", "CookieLawInfoConsent"]
+    },
+    {
+      "id": "klaro",
+      "name": "Klaro",
+      "fingerprint": {
+        "selectors": [".klaro .cookie-notice", "#klaro"],
+        "script_hosts": []
+      },
+      "container": [".klaro .cookie-notice", "#klaro .cn-body"],
+      "accept": [".cm-btn-success", ".cn-buttons .cm-btn-success"],
+      "reject": [".cm-btn-decline", ".cn-decline", ".cm-btn-danger"],
+      "settings": [".cm-btn-info", ".cn-learn-more"],
+      "save": [".cm-btn-accept"],
+      "consent_storage": ["klaro"],
+      "notes": "'.cm-btn-success' is Klaro's accept-all control and is deliberately excluded from 'save', so a settings-path denial cannot end in an acceptance."
+    },
+    {
+      "id": "axeptio",
+      "name": "Axeptio",
+      "fingerprint": {
+        "selectors": ["#axeptio_overlay", ".axeptio_widget"],
+        "script_hosts": ["static.axept.io", "api.axept.io"]
+      },
+      "container": ["#axeptio_overlay"],
+      "accept": ["#axeptio_btn_acceptAll", "button[aria-label*='Accept' i]"],
+      "reject": ["#axeptio_btn_dismiss", "button[aria-label*='Decline' i]"],
+      "settings": ["#axeptio_btn_configure"],
+      "save": ["#axeptio_btn_save"],
+      "consent_storage": ["axeptio_cookies", "axeptio_authorized_vendors"]
+    },
+    {
+      "id": "civic",
+      "name": "Civic Cookie Control",
+      "fingerprint": {
+        "selectors": ["#ccc", "#ccc-module", "#ccc-overlay"],
+        "script_hosts": ["cc.cdn.civiccomputing.com"]
+      },
+      "container": ["#ccc-module", "#ccc"],
+      "accept": ["#ccc-recommended-settings", "#ccc-notify-accept"],
+      "reject": ["#ccc-reject-settings", "#ccc-notify-reject"],
+      "settings": ["#ccc-icon", "#ccc-notify-button"],
+      "save": ["#ccc-close"],
+      "consent_storage": ["CookieControl"]
+    },
+    {
+      "id": "secureprivacy",
+      "name": "Secure Privacy",
+      "fingerprint": {
+        "selectors": [".sp-cc-banner", "#sp-cc"],
+        "script_hosts": ["app.secureprivacy.ai", "cdn.secureprivacy.ai"]
+      },
+      "container": [".sp-cc-banner", "#sp-cc"],
+      "accept": [".sp-cc-accept-all", "#sp-cc-accept"],
+      "reject": [".sp-cc-reject-all", "#sp-cc-reject"],
+      "settings": [".sp-cc-settings"],
+      "save": [".sp-cc-save"],
+      "consent_storage": ["sp_consent", "spConsent"]
+    }
+  ]
+}

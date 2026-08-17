@@ -12,6 +12,16 @@ Returns a one-line verdict, an employee-facing findings list, and a section-cite
 
 **Intended workflow:** require requesters to run this on the terms *before* submitting a legal-review ticket and to include the output in the ticket. Bad terms get caught before legal ever sees them; good ones arrive pre-digested with the key clauses located and quoted. Triage, not clearance — every verdict still routes to a human attorney.
 
+### [cookie-banner-auditor](cookie-banner-auditor/)
+
+Answers the question nobody can actually answer from DevTools: **does the Reject button do anything?** Runs isolated browser contexts for a clean baseline, a verified denial, a Global Privacy Control signal, and an accept control; exercises the page with dwell, scrolling, form-field entry, and site search so tags that fire on engagement rather than load are observed; and produces a 14-section report in Markdown, HTML, and PDF over a hashed evidence bundle of HAR, cookies, storage, and screenshots. Ships a comparison tool so a retest is a diff, not a re-litigation.
+
+Two rules make it usable as evidence. It **never reports a scenario it did not complete** — every finding declares the scenarios it depends on, each scenario records whether its interaction completed *and* whether consent state actually changed, and a finding resting on an incomplete scenario is withheld into `suppressed-findings.json` and listed in the report while the run exits non-zero. (This exists because an earlier version scored a plain `Decline` button below its click threshold, never clicked anything, and then reported "tracking continued after the denial action.") And it **never reports a script load as confirmed tracking** — every request is graded `script_loaded_only` / `beacon_observed` / `identifier_transmitted`, because a correct implementation can deliberately load a tag and gate its transmission. Google Consent Mode does exactly that, and the skill reports it as a favourable informational finding rather than a failure.
+
+Unlike the other skills here it ships executable capture code (Python + Playwright + an installed Chrome, which also renders the PDF). Includes a 19-entry CMP fingerprint table, automated scans for hardcoded analytics identifiers in served markup and for a sale/share mechanism separate from the banner, measured symmetry and WCAG contrast rather than inference from click counts, and 28 offline tests.
+
+**Intended workflow:** run `--detect-only` on any new property first (seconds, tells you whether the denial control is even reachable), then the full audit; route the PDF to counsel and the remediation table to whoever owns the tag manager. Technical evidence and issue spotting — never a compliance certification.
+
 ### [tm-clearance](tm-clearance/)
 
 A US-only trademark clearance workflow: structured seven-question intake (hard gate — no analysis until answered), live USPTO federal search covering registrations *and* pending applications with dead-mark follow-up, common-law digital-footprint sweep (web, app stores, domains, social), Abercrombie strength plus a full refusal-ground screen (§2(e)(1)–(4), §2(c), §2(a), ornamentation/failure to function), an explicit priority determination, 13-factor DuPont analysis, a separate dilution screen, and a source-tagged report built for attorney review.

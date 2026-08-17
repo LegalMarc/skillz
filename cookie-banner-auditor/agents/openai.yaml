@@ -1,0 +1,3 @@
+interface:
+  display_name: "Cookie Banner Auditor"
+  short_description: "Audit consent, GPC, trackers, and HAR evidence"
