@@ -1,0 +1,14 @@
+# Local tooling
+.venv/
+__pycache__/
+*.py[cod]
+.DS_Store
+
+# Audit output — NEVER commit. This repo is public and HAR/CSV output
+# contains unredacted cookie values, headers, and identifiers.
+*.har
+cookie-audit-*/
+*-CONTAINS-RAW-EVIDENCE.zip
+cookie-inventory.csv
+request-inventory.csv
+evidence-private/
