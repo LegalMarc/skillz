@@ -526,6 +526,39 @@ def test_validity_gating() -> None:
     ok("findings depending on an incomplete scenario are suppressed, not reported")
 
 
+def test_unknown_scenario_dependency_fails_closed() -> None:
+    """A dependency naming a scenario absent from the validity map must block, not pass through.
+
+    This is the fail-open gap: today, `name in validity` is False for an unknown
+    name, so the "not validity[name].get('valid', True)" check is never reached
+    and the finding slips out as if its dependency were satisfied. "I couldn't
+    find that scenario" is not evidence the interaction succeeded.
+    """
+    findings = [
+        {"id": "F-GHOST", "title": "Depends on a scenario that never ran", "depends_on_scenarios": ["denial@nonexistent"]},
+        {"id": "F-VALID", "title": "Depends on a scenario that ran and passed", "depends_on_scenarios": ["denial"]},
+        {"id": "F-NODEP", "title": "No dependency, reports its own capture failure", "depends_on_scenarios": []},
+    ]
+    validity = {"denial": {"valid": True}}
+
+    emitted, suppressed = partition_findings(findings, validity)
+    emitted_ids = {f["id"] for f in emitted}
+
+    assert "F-GHOST" not in emitted_ids, (
+        "a finding depending on an unknown scenario name must be withheld, not emitted"
+    )
+    assert emitted, "findings whose dependencies are all present and valid must still be emitted"
+    assert {"F-VALID", "F-NODEP"} == emitted_ids, emitted_ids
+
+    ghost = next(s for s in suppressed if s["id"] == "F-GHOST")
+    blocker = ghost["blocking_scenarios"][0]
+    assert blocker["scenario"] == "denial@nonexistent"
+    assert "not present" in blocker["reason"], (
+        f"reason must distinguish 'missing' from 'invalid': {blocker['reason']!r}"
+    )
+    ok("a finding depending on an unknown scenario name is suppressed, not silently emitted")
+
+
 def test_scenario_validity_map() -> None:
     results = {
         "denial": {"validity": {"valid": False, "invalid_reason": "click never happened"}},
@@ -839,6 +872,7 @@ def main() -> int:
     test_cmp_table_integrity()
     test_repeat_stability()
     test_validity_gating()
+    test_unknown_scenario_dependency_fails_closed()
     test_scenario_validity_map()
     test_cookie_inventory_handles_non_scenario_entries()
     test_markdown_to_html()

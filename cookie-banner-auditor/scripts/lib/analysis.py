@@ -331,11 +331,15 @@ def partition_findings(
     emitted: list[dict[str, Any]] = []
     suppressed: list[dict[str, Any]] = []
     for finding in findings:
-        blockers = [
-            {"scenario": name, "reason": validity.get(name, {}).get("invalid_reason")}
-            for name in finding.get("depends_on_scenarios") or []
-            if name in validity and not validity[name].get("valid", True)
-        ]
+        blockers = []
+        for name in finding.get("depends_on_scenarios") or []:
+            if name not in validity:
+                # Fail closed: an unrecognized dependency is not evidence the
+                # interaction succeeded. It may be a typo'd or renamed scenario
+                # key, or one the runner never created for this profile.
+                blockers.append({"scenario": name, "reason": f"scenario '{name}' was not present in this run"})
+            elif not validity[name].get("valid", True):
+                blockers.append({"scenario": name, "reason": validity[name].get("invalid_reason")})
         if blockers:
             suppressed.append({
                 **finding,
