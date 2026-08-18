@@ -25,6 +25,7 @@ from lib.analysis import analyze_and_write, build_cookie_inventory, partition_fi
 from lib.capture import (
     SCORE_THRESHOLD,
     ScenarioConfig,
+    consent_snapshot,
     execute_denial,
     exercise_forms,
     find_control,
@@ -218,6 +219,82 @@ def test_verify_choice_registered_unit() -> None:
     dismissed = {"cookies": {"a|x": "h1"}, "local_storage": {}, "cmp_api": {}, "banner_visible": False}
     assert verify_choice_registered(before, dismissed)["banner_dismissed"] is True
     ok("verify_choice_registered distinguishes real changes from no-ops")
+
+
+def test_cmp_observational_noise_ignored() -> None:
+    """dataLayer byte-count growth alone must never verify a choice, but a
+    genuine cmp_api change (e.g. oneTrustActiveGroups) still must."""
+    base_cmp = {"hasTCF": True, "hasUSP": False, "hasGPP": False, "oneTrustActiveGroups": None, "consentSignature": "sig1"}
+    before = {
+        "cookies": {}, "local_storage": {}, "cmp_api": dict(base_cmp),
+        "cmp_api_observational": {"consentStateLength": 10, "dataLayerEntryCount": 1},
+        "banner_visible": True,
+    }
+
+    noisy_after = {
+        "cookies": {}, "local_storage": {}, "cmp_api": dict(base_cmp),
+        "cmp_api_observational": {"consentStateLength": 987654, "dataLayerEntryCount": 500},
+        "banner_visible": True,
+    }
+    noisy_result = verify_choice_registered(before, noisy_after)
+    assert noisy_result["verified"] is False, noisy_result
+    assert noisy_result["cmp_api_changed"] is False, noisy_result
+
+    real_after = {
+        "cookies": {}, "local_storage": {},
+        "cmp_api": {**base_cmp, "oneTrustActiveGroups": "C0001,C0002,C0003"},
+        "cmp_api_observational": {"consentStateLength": 10, "dataLayerEntryCount": 1},
+        "banner_visible": True,
+    }
+    real_result = verify_choice_registered(before, real_after)
+    assert real_result["verified"] is True, real_result
+    assert real_result["cmp_api_changed"] is True, real_result
+
+    expected_keys = {
+        "new_cookies", "changed_cookies", "new_storage_keys", "changed_storage_keys",
+        "cmp_api_changed", "banner_dismissed", "consent_state_changed", "verified", "note",
+    }
+    assert set(noisy_result.keys()) == expected_keys, noisy_result.keys()
+    assert set(real_result.keys()) == expected_keys, real_result.keys()
+    ok("cmp_api_observational growth never verifies; a real cmp_api change still does; keys unchanged")
+
+
+def test_local_storage_same_length_rewrite_detected(page) -> None:
+    """Positive control: a localStorage value rewritten to a different value of
+    the *identical length* must still be detected as a change. `consent_snapshot`
+    previously recorded only `len(value)`, so this rewrite was invisible; it now
+    records `short_hash(value)` instead."""
+    import threading
+    from http.server import BaseHTTPRequestHandler, HTTPServer
+
+    class _Handler(BaseHTTPRequestHandler):
+        def log_message(self, *args) -> None:  # silence request logging
+            pass
+
+        def do_GET(self) -> None:
+            body = b"<!doctype html><html><body>fixture</body></html>"
+            self.send_response(200)
+            self.send_header("Content-Type", "text/html")
+            self.send_header("Content-Length", str(len(body)))
+            self.end_headers()
+            self.wfile.write(body)
+
+    with HTTPServer(("127.0.0.1", 0), _Handler) as server:
+        port = server.server_port
+        thread = threading.Thread(target=server.serve_forever, daemon=True)
+        thread.start()
+        try:
+            page.goto(f"http://127.0.0.1:{port}/")
+            page.evaluate("() => localStorage.setItem('consent_pref', 'AAAA')")
+            before = consent_snapshot(page, page.context)
+            page.evaluate("() => localStorage.setItem('consent_pref', 'ZZZZ')")
+            after = consent_snapshot(page, page.context)
+            result = verify_choice_registered(before, after)
+            assert result["changed_storage_keys"] == ["consent_pref"], result
+            assert result["verified"] is True, result
+        finally:
+            server.shutdown()
+    ok("a same-length localStorage value rewrite is detected via content hash")
 
 
 def test_settings_path_denial(page) -> None:
@@ -753,6 +830,7 @@ def main() -> int:
     print("\nOffline checks")
     test_har_sanitization()
     test_verify_choice_registered_unit()
+    test_cmp_observational_noise_ignored()
     test_transmission_classification()
     test_consent_mode_parsing()
     test_embedded_identifier_scan()
@@ -776,6 +854,7 @@ def main() -> int:
             page = context.new_page()
             test_control_detection(page)
             test_denial_flow_and_verification(page)
+            test_local_storage_same_length_rewrite_detected(page)
             test_settings_path_denial(page)
             test_form_exercise_does_not_submit(page)
         finally:

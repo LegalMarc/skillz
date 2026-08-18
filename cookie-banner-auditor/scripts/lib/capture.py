@@ -547,8 +547,19 @@ def consent_snapshot(page: Page, context: BrowserContext, cmp_entry: dict[str, A
 
     Values are hashed rather than stored, so this is safe to keep in shareable
     evidence while still detecting a change.
+
+    ``cmp_api`` is the compared signal: only fields that actually move when a
+    consent choice changes belong here. ``cmp_api_observational`` carries the
+    noisy `dataLayer` byte count for evidence purposes only — it grows with
+    every unrelated analytics event and must never feed verification.
     """
-    snapshot: dict[str, Any] = {"time": utc_now(), "cookies": {}, "local_storage": {}, "cmp_api": {}}
+    snapshot: dict[str, Any] = {
+        "time": utc_now(),
+        "cookies": {},
+        "local_storage": {},
+        "cmp_api": {},
+        "cmp_api_observational": {},
+    }
     try:
         for cookie in context.cookies():
             key = f"{cookie.get('domain', '')}|{cookie.get('name', '')}"
@@ -556,30 +567,61 @@ def consent_snapshot(page: Page, context: BrowserContext, cmp_entry: dict[str, A
     except Exception as error:
         snapshot["cookies_error"] = str(error)[:300]
     try:
-        snapshot["local_storage"] = page.evaluate(
+        raw_storage = page.evaluate(
             """() => {
               const out = {};
               try {
                 for (let i = 0; i < localStorage.length; i++) {
                   const key = localStorage.key(i);
-                  out[key] = (localStorage.getItem(key) || '').length;
+                  out[key] = localStorage.getItem(key) || '';
                 }
               } catch {}
               return out;
             }"""
         )
+        snapshot["local_storage"] = {key: short_hash(str(value)) for key, value in (raw_storage or {}).items()}
     except Exception:
         pass
     try:
-        snapshot["cmp_api"] = page.evaluate(
-            """() => ({
-              hasTCF: typeof window.__tcfapi === 'function',
-              hasUSP: typeof window.__uspapi === 'function',
-              hasGPP: typeof window.__gpp === 'function',
-              oneTrustActiveGroups: window.OneTrustActiveGroups || null,
-              consentStateLength: (() => { try { return JSON.stringify(window.dataLayer || []).length; } catch { return null; } })()
-            })"""
-        )
+        cmp_raw = page.evaluate(
+            """() => {
+              const isConsentEntry = (entry) => {
+                try {
+                  if (entry && entry[0] === 'consent') return true;
+                  if (entry && typeof entry === 'object' && ('ad_storage' in entry || 'analytics_storage' in entry)) return true;
+                } catch {}
+                return false;
+              };
+              const dataLayer = window.dataLayer || [];
+              let consentEntries = [];
+              let stringLength = null;
+              try {
+                consentEntries = dataLayer.filter(isConsentEntry);
+                stringLength = JSON.stringify(dataLayer).length;
+              } catch {}
+              return {
+                hasTCF: typeof window.__tcfapi === 'function',
+                hasUSP: typeof window.__uspapi === 'function',
+                hasGPP: typeof window.__gpp === 'function',
+                oneTrustActiveGroups: window.OneTrustActiveGroups || null,
+                consentEntries: consentEntries,
+                consentStateLength: stringLength,
+                dataLayerEntryCount: dataLayer.length,
+              };
+            }"""
+        ) or {}
+        consent_entries = cmp_raw.get("consentEntries") or []
+        snapshot["cmp_api"] = {
+            "hasTCF": cmp_raw.get("hasTCF"),
+            "hasUSP": cmp_raw.get("hasUSP"),
+            "hasGPP": cmp_raw.get("hasGPP"),
+            "oneTrustActiveGroups": cmp_raw.get("oneTrustActiveGroups"),
+            "consentSignature": short_hash(json.dumps(consent_entries, sort_keys=True, default=str)),
+        }
+        snapshot["cmp_api_observational"] = {
+            "consentStateLength": cmp_raw.get("consentStateLength"),
+            "dataLayerEntryCount": cmp_raw.get("dataLayerEntryCount"),
+        }
     except Exception:
         pass
     snapshot["banner_visible"] = banner_visible(page, cmp_entry)
@@ -593,6 +635,10 @@ def verify_choice_registered(before: dict[str, Any], after: dict[str, Any]) -> d
     storage, CMP state, and banner visibility untouched has not registered a
     choice. Treating that as a completed denial is precisely how an audit ends
     up reporting post-denial behaviour it never captured.
+
+    Only ``cmp_api`` feeds this comparison. ``cmp_api_observational`` (the
+    noisy `dataLayer` byte count) is deliberately never read here — it grows
+    with unrelated analytics events and would invent verifications.
     """
     before_cookies = before.get("cookies") or {}
     after_cookies = after.get("cookies") or {}
