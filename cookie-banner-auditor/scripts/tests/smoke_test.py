@@ -21,7 +21,7 @@ if str(SCRIPT_DIR) not in sys.path:
 from playwright.sync_api import sync_playwright
 
 from lib import checks
-from lib.analysis import analyze_and_write, partition_findings, scenario_validity_map
+from lib.analysis import analyze_and_write, build_cookie_inventory, partition_findings, scenario_validity_map
 from lib.capture import (
     SCORE_THRESHOLD,
     ScenarioConfig,
@@ -38,6 +38,7 @@ from lib.util import (
     build_zip_bundle,
     discover_browser_executable,
     markdown_to_html,
+    read_json,
     run_fingerprint,
     sanitize_har_data,
     utc_now,
@@ -571,7 +572,49 @@ def synthetic_results(denial_completed: bool = True) -> dict:
             "page_scan": {"links": [], "page_text": "", "embedded_identifiers": []},
             "consent_mode": {"signals": [], "summary": checks.summarize_consent_mode([])},
         },
+        # run_all_scenarios also puts these non-scenario entries into `results`.
+        # Every loop over results.items() that calls result.get(...) must tolerate them.
+        "baseline_repeats": [
+            {
+                "started": now, "finished": now, "gpc": False, "action": "none",
+                "action_result": {"status": "no_interaction"},
+                "checkpoints": [{**base_checkpoint, "scenario": "baseline-repeat-1"}],
+                "events": {"requests": [], "responses": [], "request_failures": [], "console": []},
+                "errors": [], "raw_har": None, "sanitized_har": None,
+                "page_scan": {"links": [], "page_text": "", "embedded_identifiers": []},
+                "consent_mode": {"signals": [], "summary": checks.summarize_consent_mode([])},
+            },
+        ],
+        "baseline_stability": {"stable": [], "unstable": [], "run_count": 1, "total_distinct": 0},
+        "persistence": {
+            "ran": True, "banner_reprompted": False, "banner_text": "",
+            "scenario_result": {
+                "started": now, "finished": now, "gpc": False, "action": "none",
+                "action_result": {"status": "no_interaction"},
+                "checkpoints": [{**base_checkpoint, "scenario": "persistence"}],
+                "events": {"requests": [], "responses": [], "request_failures": [], "console": []},
+                "errors": [], "raw_har": None, "sanitized_har": None,
+                "page_scan": {"links": [], "page_text": "", "embedded_identifiers": []},
+                "consent_mode": {"signals": [], "summary": checks.summarize_consent_mode([])},
+            },
+            "note": "The saved preference survived into a fresh context and no re-prompt was observed.",
+        },
     }
+
+
+def test_cookie_inventory_handles_non_scenario_entries() -> None:
+    """build_cookie_inventory must tolerate the non-scenario entries that
+    run_all_scenarios legitimately puts into `results`: `baseline_repeats` (a list of
+    scenario dicts), `baseline_stability` (a dict with no `checkpoints` key), and
+    `persistence` (a wrapper dict whose scenario is nested under `scenario_result`).
+    A guard that skips every entry would also pass a no-raise check, so this asserts
+    the real scenario cookies still come through.
+    """
+    patterns = read_json(SCRIPT_DIR.parent / "references" / "vendor-patterns.json")
+    rows = build_cookie_inventory(synthetic_results(), "example.test", patterns)
+    assert rows, "build_cookie_inventory must still return rows for the real scenarios"
+    assert any(row.get("scenario") == "baseline" for row in rows), "baseline scenario cookies must be present"
+    ok("build_cookie_inventory tolerates list/dict/wrapper non-scenario results entries")
 
 
 def _metadata() -> dict:
@@ -719,6 +762,7 @@ def main() -> int:
     test_repeat_stability()
     test_validity_gating()
     test_scenario_validity_map()
+    test_cookie_inventory_handles_non_scenario_entries()
     test_markdown_to_html()
     test_run_fingerprint()
 

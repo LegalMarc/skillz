@@ -128,6 +128,8 @@ def _checkpoint_index(checkpoint: str) -> int:
 def build_cookie_inventory(results: dict[str, Any], site_host: str, patterns: dict[str, Any]) -> list[dict[str, Any]]:
     rows: list[dict[str, Any]] = []
     for scenario, result in results.items():
+        if not isinstance(result, dict):
+            continue
         for checkpoint in result.get("checkpoints", []) or []:
             for cookie in checkpoint.get("cookies", []) or []:
                 classification = classify_cookie(cookie, site_host, patterns)
