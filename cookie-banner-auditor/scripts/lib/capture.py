@@ -1759,6 +1759,90 @@ def run_scenario(
     return scenario_result
 
 
+def _fatal_scenario_error(scenario_result: dict[str, Any]) -> dict[str, Any] | None:
+    """The stage=="scenario" error that aborted the whole attempt, if any."""
+    for error in scenario_result.get("errors") or []:
+        if error.get("stage") == "scenario":
+            return error
+    return None
+
+
+def _classify_scenario_result(scenario_result: dict[str, Any]) -> str:
+    """Map one attempt's result onto checks.classify_scenario_failure's inputs."""
+    fatal = _fatal_scenario_error(scenario_result)
+    validity = scenario_result.get("validity") or {}
+    return checks.classify_scenario_failure(
+        fatal_error=(fatal or {}).get("error"),
+        fatal_error_type=(fatal or {}).get("type"),
+        interaction_required=bool(validity.get("required_interaction")),
+        interaction_completed=bool(validity.get("interaction_completed", True)),
+        interaction_verified=bool(validity.get("verification_passed", True)),
+    )
+
+
+def _attempt_record(attempt: int, scenario_result: dict[str, Any], failure_class: str) -> dict[str, Any]:
+    """A lightweight summary of one attempt for the `attempts` list.
+
+    Deliberately small (not a duplicate capture): the full evidence for the
+    attempt that stands is already the rest of the scenario result. This is
+    just enough to show a reader what happened on each try.
+    """
+    fatal = _fatal_scenario_error(scenario_result)
+    validity = scenario_result.get("validity") or {}
+    return {
+        "attempt": attempt,
+        "failure_class": failure_class,
+        "error": (fatal or {}).get("error"),
+        "error_type": (fatal or {}).get("type"),
+        "valid": validity.get("valid"),
+        "invalid_reason": validity.get("invalid_reason"),
+    }
+
+
+def run_scenario_with_retry(
+    browser: Browser,
+    scenario: str,
+    config: ScenarioConfig,
+    private_dir: Path,
+    share_dir: Path,
+    action: str,
+    **kwargs: Any,
+) -> dict[str, Any]:
+    """Run a scenario, retrying once when the first attempt is a transport flake.
+
+    Retries only a navigation/timeout failure (see
+    `checks.classify_scenario_failure` / `should_retry_scenario`). A scenario
+    whose consent interaction itself failed to complete or verify is never
+    retried - that is a finding about the site, not instability in our tooling
+    (issue #12). Both attempts are recorded under `attempts` on the returned
+    result so a flaky first try stays visible even when the retry succeeds.
+    """
+    result = run_scenario(browser, scenario, config, private_dir, share_dir, action, **kwargs)
+    failure_class = _classify_scenario_result(result)
+    attempts = [_attempt_record(1, result, failure_class)]
+
+    if checks.should_retry_scenario(failure_class):
+        retry_result = run_scenario(browser, scenario, config, private_dir, share_dir, action, **kwargs)
+        retry_class = _classify_scenario_result(retry_result)
+        attempts.append(_attempt_record(2, retry_result, retry_class))
+        result = retry_result
+
+    result["attempts"] = attempts
+
+    # run_scenario already wrote both json files before we knew about a retry;
+    # patch them in place rather than duplicating its (redaction-aware) write.
+    private_path = private_dir / scenario / f"{scenario}-result.raw.json"
+    share_path = share_dir / scenario / f"{scenario}-result.json"
+    if private_path.exists():
+        write_json(private_path, result)
+    if share_path.exists():
+        share_result = read_json(share_path) or {}
+        share_result["attempts"] = attempts
+        write_json(share_path, share_result)
+
+    return result
+
+
 def _endpoint_set(scenario_result: dict[str, Any]) -> set[str]:
     """Distinct third-party host+path pairs seen in a scenario."""
     output: set[str] = set()
@@ -1788,7 +1872,7 @@ def run_persistence_check(
     """
     if not storage_state:
         return {"ran": False, "reason": "No storage state was captured from the denial scenario."}
-    result = run_scenario(
+    result = run_scenario_with_retry(
         browser, "persistence", config, private_dir, share_dir,
         action="none", gpc=False, cmp_table=cmp_table, pages=0,
         run_exercises=False, storage_state=storage_state,
@@ -1822,21 +1906,21 @@ def run_all_scenarios(
     cmp_table = load_cmp_table()
     results: dict[str, Any] = {}
 
-    results["baseline"] = run_scenario(
+    results["baseline"] = run_scenario_with_retry(
         browser, "baseline", config, private_dir, share_dir, "none",
         gpc=False, cmp_table=cmp_table, pages=0, run_exercises=False,
     )
-    results["denial"] = run_scenario(
+    results["denial"] = run_scenario_with_retry(
         browser, "denial", config, private_dir, share_dir, "deny",
         gpc=False, cmp_table=cmp_table,
     )
     if include_gpc:
-        results["gpc"] = run_scenario(
+        results["gpc"] = run_scenario_with_retry(
             browser, "gpc", config, private_dir, share_dir, "none",
             gpc=True, cmp_table=cmp_table,
         )
     if include_accept:
-        results["accept"] = run_scenario(
+        results["accept"] = run_scenario_with_retry(
             browser, "accept", config, private_dir, share_dir, "accept",
             gpc=False, cmp_table=cmp_table,
         )
@@ -1846,7 +1930,7 @@ def run_all_scenarios(
     repeat_sets = [_endpoint_set(results["baseline"])]
     repeats: list[dict[str, Any]] = []
     for index in range(1, max(0, baseline_repeats) + 1):
-        repeat = run_scenario(
+        repeat = run_scenario_with_retry(
             browser, f"baseline-repeat-{index}", config, private_dir, share_dir, "none",
             gpc=False, cmp_table=cmp_table, pages=0, run_exercises=False,
         )

@@ -680,3 +680,77 @@ def compare_repeat_runs(runs: list[set[str]]) -> dict[str, Any]:
         "unstable": sorted(union - stable),
         "total_distinct": len(union),
     }
+
+
+# --------------------------------------------------------------------------
+# Retry classification - transient transport failures vs. consent findings (#12)
+# --------------------------------------------------------------------------
+
+#: Fatal-error class names Playwright raises when a wait or navigation stalls.
+TIMEOUT_ERROR_TYPES = {"TimeoutError"}
+
+#: Substrings of a fatal error's message that indicate the browser could not
+#: reach or load the page at all - DNS, connection, or an aborted navigation.
+#: Lower-cased before matching.
+NAVIGATION_ERROR_MARKERS = (
+    "net::err_",
+    "err_connection",
+    "err_name_not_resolved",
+    "err_internet_disconnected",
+    "err_empty_response",
+    "err_aborted",
+    "navigation failed",
+    "target page, context or browser has been closed",
+    "target closed",
+)
+
+FAILURE_NONE = "none"
+FAILURE_TIMEOUT = "timeout"
+FAILURE_NAVIGATION = "navigation"
+FAILURE_CONSENT_INTERACTION = "consent_interaction_failure"
+FAILURE_UNKNOWN = "unknown"
+
+#: Only these classes represent a flake worth a second attempt. Every other
+#: class - including "unknown" - fails closed and is never retried.
+RETRYABLE_FAILURE_CLASSES = {FAILURE_TIMEOUT, FAILURE_NAVIGATION}
+
+
+def classify_scenario_failure(
+    *,
+    fatal_error: str | None = None,
+    fatal_error_type: str | None = None,
+    interaction_required: bool = False,
+    interaction_completed: bool = True,
+    interaction_verified: bool = True,
+) -> str:
+    """Classify why one scenario attempt did not produce a valid result.
+
+    This is the single place that decides whether an attempt is a transport
+    flake (worth a retry) or a real finding about the site (never retried).
+    A denial or accept control that never resolved - or a click that changed
+    nothing - is a finding, not a flake; retrying it would launder a real
+    result as instability, so that case is classified as
+    `FAILURE_CONSENT_INTERACTION` explicitly rather than inferred from the
+    absence of a fatal error.
+
+    An unrecognized fatal error is `FAILURE_UNKNOWN` and is never retried:
+    fail closed rather than guess that an unfamiliar failure is transient.
+    """
+    if fatal_error or fatal_error_type:
+        type_name = fatal_error_type or ""
+        text = (fatal_error or "").lower()
+        if type_name in TIMEOUT_ERROR_TYPES or "timeout" in text:
+            return FAILURE_TIMEOUT
+        if any(marker in text for marker in NAVIGATION_ERROR_MARKERS):
+            return FAILURE_NAVIGATION
+        return FAILURE_UNKNOWN
+
+    if interaction_required and not (interaction_completed and interaction_verified):
+        return FAILURE_CONSENT_INTERACTION
+
+    return FAILURE_NONE
+
+
+def should_retry_scenario(failure_class: str) -> bool:
+    """Pure retry predicate: only a transport-class failure earns a retry."""
+    return failure_class in RETRYABLE_FAILURE_CLASSES

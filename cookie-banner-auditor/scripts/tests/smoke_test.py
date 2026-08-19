@@ -996,6 +996,151 @@ def test_compare_runs() -> None:
     ok("compare_runs diffs findings and endpoints and warns on mismatched conditions")
 
 
+# ---------------------------------------------------------------------------
+# Retry classification - transient transport failures vs. consent findings (#12)
+# ---------------------------------------------------------------------------
+
+def test_scenario_failure_classification() -> None:
+    timeout = checks.classify_scenario_failure(fatal_error="Timeout 30000ms exceeded.", fatal_error_type="TimeoutError")
+    assert timeout == checks.FAILURE_TIMEOUT and checks.should_retry_scenario(timeout)
+
+    navigation = checks.classify_scenario_failure(
+        fatal_error="Page.goto: net::ERR_NAME_NOT_RESOLVED at https://example.test/", fatal_error_type="Error",
+    )
+    assert navigation == checks.FAILURE_NAVIGATION and checks.should_retry_scenario(navigation)
+
+    incomplete = checks.classify_scenario_failure(interaction_required=True, interaction_completed=False)
+    assert incomplete == checks.FAILURE_CONSENT_INTERACTION and not checks.should_retry_scenario(incomplete)
+
+    unverified = checks.classify_scenario_failure(
+        interaction_required=True, interaction_completed=True, interaction_verified=False,
+    )
+    assert unverified == checks.FAILURE_CONSENT_INTERACTION and not checks.should_retry_scenario(unverified)
+
+    unknown = checks.classify_scenario_failure(fatal_error="Something exploded", fatal_error_type="RuntimeError")
+    assert unknown == checks.FAILURE_UNKNOWN and not checks.should_retry_scenario(unknown), (
+        "an unrecognized fatal error must fail closed and never retry"
+    )
+
+    success = checks.classify_scenario_failure()
+    assert success == checks.FAILURE_NONE and not checks.should_retry_scenario(success)
+    ok("scenario failures classify into timeout/navigation/consent/unknown, unknown failing closed")
+
+
+def test_retry_recovers_from_transient_navigation_failure() -> None:
+    """A navigation flake on attempt 1 that succeeds on attempt 2 ends valid."""
+    from lib import capture
+
+    calls: list[int] = []
+
+    def fake_run_scenario(browser, scenario, config, private_dir, share_dir, action, **kwargs):
+        calls.append(1)
+        if len(calls) == 1:
+            return {
+                "scenario": scenario,
+                "errors": [{"stage": "scenario", "error": "net::ERR_CONNECTION_RESET at https://example.test/", "type": "Error"}],
+                "validity": {"valid": False, "invalid_reason": "aborted", "required_interaction": None},
+            }
+        return {
+            "scenario": scenario,
+            "errors": [],
+            "validity": {"valid": True, "invalid_reason": None, "required_interaction": None},
+        }
+
+    original = capture.run_scenario
+    capture.run_scenario = fake_run_scenario
+    try:
+        with tempfile.TemporaryDirectory(prefix="cookie-auditor-retry-") as temp:
+            tmp_path = Path(temp)
+            result = capture.run_scenario_with_retry(
+                browser=None, scenario="baseline", config=None,
+                private_dir=tmp_path / "private", share_dir=tmp_path / "share", action="none",
+            )
+    finally:
+        capture.run_scenario = original
+
+    assert len(calls) == 2, "a navigation flake must be retried exactly once"
+    assert result["validity"]["valid"] is True
+    assert len(result["attempts"]) == 2
+    assert result["attempts"][0]["failure_class"] == "navigation"
+    assert "ERR_CONNECTION_RESET" in result["attempts"][0]["error"], "the first attempt's error must be preserved"
+    assert result["attempts"][1]["failure_class"] == "none"
+    ok("a navigation flake on attempt 1 that succeeds on attempt 2 ends valid with both attempts recorded")
+
+
+def test_retry_gives_up_after_second_transient_failure() -> None:
+    """Two transport failures in a row stay invalid and are never retried a third time."""
+    from lib import capture
+
+    calls: list[int] = []
+
+    def fake_run_scenario(browser, scenario, config, private_dir, share_dir, action, **kwargs):
+        calls.append(1)
+        return {
+            "scenario": scenario,
+            "errors": [{"stage": "scenario", "error": "Timeout 30000ms exceeded.", "type": "TimeoutError"}],
+            "validity": {"valid": False, "invalid_reason": "aborted", "required_interaction": None},
+        }
+
+    original = capture.run_scenario
+    capture.run_scenario = fake_run_scenario
+    try:
+        with tempfile.TemporaryDirectory(prefix="cookie-auditor-retry-") as temp:
+            tmp_path = Path(temp)
+            result = capture.run_scenario_with_retry(
+                browser=None, scenario="baseline", config=None,
+                private_dir=tmp_path / "private", share_dir=tmp_path / "share", action="none",
+            )
+    finally:
+        capture.run_scenario = original
+
+    assert len(calls) == 2, "a scenario is retried at most once, never chased a third time"
+    assert result["validity"]["valid"] is False
+    assert len(result["attempts"]) == 2
+    assert all(a["failure_class"] == "timeout" for a in result["attempts"])
+    ok("a scenario that fails twice on a transport error stays invalid, with both attempts recorded")
+
+
+def test_retry_never_fires_for_a_failed_consent_interaction() -> None:
+    """A denial click that never resolved is a finding, not a flake - exactly one attempt."""
+    from lib import capture
+
+    calls: list[int] = []
+
+    def fake_run_scenario(browser, scenario, config, private_dir, share_dir, action, **kwargs):
+        calls.append(1)
+        return {
+            "scenario": scenario,
+            "action_result": {"status": "manual_required"},
+            "errors": [],
+            "validity": {
+                "valid": False,
+                "invalid_reason": "The required denial click did not complete (status: manual_required).",
+                "required_interaction": "denial click",
+                "interaction_completed": False,
+                "verification_passed": False,
+            },
+        }
+
+    original = capture.run_scenario
+    capture.run_scenario = fake_run_scenario
+    try:
+        with tempfile.TemporaryDirectory(prefix="cookie-auditor-retry-") as temp:
+            tmp_path = Path(temp)
+            result = capture.run_scenario_with_retry(
+                browser=None, scenario="denial", config=None,
+                private_dir=tmp_path / "private", share_dir=tmp_path / "share", action="deny",
+            )
+    finally:
+        capture.run_scenario = original
+
+    assert len(calls) == 1, "a failed consent interaction is a finding, not a flake, and must not be retried"
+    assert result["validity"]["valid"] is False
+    assert len(result["attempts"]) == 1
+    assert result["attempts"][0]["failure_class"] == "consent_interaction_failure"
+    ok("a scenario whose consent interaction failed to verify is never retried")
+
+
 def main() -> int:
     print("\nOffline checks")
     test_har_sanitization()
@@ -1016,6 +1161,10 @@ def main() -> int:
     test_cookie_inventory_handles_non_scenario_entries()
     test_markdown_to_html()
     test_run_fingerprint()
+    test_scenario_failure_classification()
+    test_retry_recovers_from_transient_navigation_failure()
+    test_retry_gives_up_after_second_transient_failure()
+    test_retry_never_fires_for_a_failed_consent_interaction()
 
     print("\nBrowser-backed checks")
     executable = discover_browser_executable(None)
