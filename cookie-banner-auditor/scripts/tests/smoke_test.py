@@ -21,7 +21,13 @@ if str(SCRIPT_DIR) not in sys.path:
 from playwright.sync_api import sync_playwright
 
 from lib import checks
-from lib.analysis import analyze_and_write, build_cookie_inventory, partition_findings, scenario_validity_map
+from lib.analysis import (
+    analyze_and_write,
+    build_cookie_inventory,
+    partition_findings,
+    render_markdown_report,
+    scenario_validity_map,
+)
 from lib.capture import (
     SCORE_THRESHOLD,
     ScenarioConfig,
@@ -519,6 +525,78 @@ def test_symmetry_measurement() -> None:
     ok("symmetry and WCAG contrast measured from rendered styles")
 
 
+def test_issue_matrix_generation() -> None:
+    """`build_issue_matrix` must build Section 9 from the findings actually
+    emitted, not a static block. This is the whole defect from issue #9, so
+    both directions are asserted against two different synthetic finding sets:
+    a run with a GPC finding must produce a GPC-implicating row citing its id,
+    and a run with no GPC finding must produce no such row.
+    """
+    with_gpc = checks.build_issue_matrix([
+        {"id": "F-GPC-NOT-HONORED", "check_type": "gpc-not-honored"},
+        {"id": "F-EMBEDDED-IDENTIFIER", "check_type": "embedded-identifier"},
+    ])
+    assert with_gpc, "a GPC finding must produce at least one row"
+    gpc_rows = [r for r in with_gpc if "F-GPC-NOT-HONORED" in r["evidence"]]
+    assert gpc_rows, with_gpc
+    assert any("Global Privacy Control" in r["requirement"] for r in gpc_rows), with_gpc
+    assert any("F-EMBEDDED-IDENTIFIER" in r["evidence"] for r in with_gpc), with_gpc
+
+    without_gpc = checks.build_issue_matrix([
+        {"id": "F-EMBEDDED-IDENTIFIER", "check_type": "embedded-identifier"},
+    ])
+    assert without_gpc, "a non-GPC finding can still produce a row (California disclosure theory)"
+    assert not any("Global Privacy" in str(r) or "opt-out preference" in str(r).lower() for r in without_gpc), without_gpc
+    assert all("F-EMBEDDED-IDENTIFIER" in r["evidence"] for r in without_gpc), without_gpc
+
+    assert checks.build_issue_matrix([]) == []
+
+    # Findings that explicitly disclaim any legal inference must not produce a
+    # row even though they are known, mapped check_type values.
+    no_inference = checks.build_issue_matrix([
+        {"id": "F-CAPTURE-ERRORS-BASELINE", "check_type": "capture-errors"},
+        {"id": "F-DENIAL-CONTROL-UNRESOLVED", "check_type": "denial-control-unresolved"},
+        {"id": "F-UNSTABLE-TAG-BEHAVIOUR", "check_type": "unstable-tag-behaviour"},
+        {"id": "F-INSECURE-AUTH-COOKIE", "check_type": "insecure-auth-cookie"},
+        {"id": "F-UNRESOLVED-PURPOSES", "check_type": "unresolved-purposes"},
+    ])
+    assert no_inference == [], no_inference
+
+    # An unrecognised check_type - including a not-yet-landed one - must not raise.
+    unmapped = checks.build_issue_matrix([
+        {"id": "F-DENIAL-AUTOSAVE-UNCONFIRMED", "check_type": "denial-autosave-unconfirmed"},
+        {"id": "F-SOME-FUTURE-CHECK", "check_type": "not-a-real-check-type"},
+    ])
+    assert unmapped == [], unmapped
+    ok("build_issue_matrix generates Section 9 rows from evidence in both directions and tolerates unmapped check_types")
+
+
+def test_issue_matrix_renders_in_report() -> None:
+    """The rendered report must reflect `build_issue_matrix`, not the old static
+    block: no finding must ever produce a row without a real finding id, the
+    literal fallback text must be gone, and a zero-finding run still renders a
+    well-formed section rather than a broken or truncated table.
+    """
+    root = Path(tempfile.gettempdir())
+    metadata = _metadata()
+
+    gpc_finding = {"id": "F-GPC-NOT-HONORED", "check_type": "gpc-not-honored", "severity": "critical", "certainty": "high"}
+    with_findings = render_markdown_report(root, "https://example.test/", metadata, [gpc_finding], [], [], {})
+    assert "## 9. Legal issue-spotting matrix" in with_findings
+    assert "See findings above" not in with_findings
+    section = with_findings.split("## 9. Legal issue-spotting matrix", 1)[1].split("## 10.", 1)[0]
+    assert "F-GPC-NOT-HONORED" in section, section
+    assert "Authority | Requirement or theory | Observed evidence | Missing applicability facts" in section
+
+    empty = render_markdown_report(root, "https://example.test/", metadata, [], [], [], {})
+    assert "## 9. Legal issue-spotting matrix" in empty
+    assert "See findings above" not in empty
+    empty_section = empty.split("## 9. Legal issue-spotting matrix", 1)[1].split("## 10.", 1)[0]
+    assert "_None observed._" in empty_section, empty_section
+    assert "prompt for counsel, not a conclusion" in empty_section
+    ok("Section 9 renders real evidence when present and the None-observed convention when it is not")
+
+
 def test_cmp_table_integrity() -> None:
     """A 'save' selector that also accepts would turn a denial into an acceptance.
 
@@ -928,6 +1006,8 @@ def main() -> int:
     test_embedded_identifier_scan()
     test_rights_mechanism_scan()
     test_symmetry_measurement()
+    test_issue_matrix_generation()
+    test_issue_matrix_renders_in_report()
     test_cmp_table_integrity()
     test_repeat_stability()
     test_validity_gating()

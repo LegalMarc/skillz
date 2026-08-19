@@ -473,6 +473,194 @@ def measure_symmetry(accept: dict[str, Any] | None, reject: dict[str, Any] | Non
 
 
 # --------------------------------------------------------------------------
+# Section 9 - legal issue-spotting matrix, generated from actual findings
+# --------------------------------------------------------------------------
+# Each entry maps a bundle of `check_type` values onto one authority and the
+# theory/missing-facts language that applies when at least one of them fired.
+# Splitting an authority into topics (rather than one fixed paragraph) means a
+# row only ever mentions the theory its own evidence supports - a report with
+# only an embedded-identifier finding must not claim a GPC issue just because
+# California is mentioned for other reasons. Phrasing reuses the vocabulary and
+# "law-specific anchors" of `references/legal-baseline.md`; that file remains
+# the source of authority text and is not duplicated here beyond short labels.
+#
+# Deliberately unmapped: `denial-control-unresolved`, `capture-errors`,
+# `unstable-tag-behaviour`, `insecure-auth-cookie`, and `unresolved-purposes`.
+# Each of those findings says explicitly that no legal inference should be
+# drawn from it (tooling gaps, security hygiene, or an unresolved research
+# item), so they contribute no row here even when present. An unrecognised
+# `check_type` - including a future `denial-autosave-unconfirmed` - behaves
+# the same way: it matches no topic and is silently skipped rather than
+# raising or producing a bogus authority row.
+ISSUE_MATRIX_AUTHORITIES: list[dict[str, Any]] = [
+    {
+        "authority": "FTC Act s5 (deception)",
+        "topics": [
+            {
+                "check_types": {
+                    "denial-not-registered",
+                    "post-denial-tracking",
+                    "post-denial-cookies",
+                    "banner-reprompt",
+                    "persistence-across-session",
+                },
+                "requirement": (
+                    "A consent interface's representation that a choice was recorded and honored "
+                    "must match actual behavior; a click with no effect, tracking that continues "
+                    "after denial, or a preference that resets is a classic deception fact pattern."
+                ),
+                "missing_facts": (
+                    "The exact banner and policy language promised to the consumer; whether a "
+                    "reasonable consumer would be misled; whether the discrepancy is intermittent "
+                    "or systemic."
+                ),
+            },
+            {
+                "check_types": {"asymmetric-choice"},
+                "requirement": (
+                    "Steering a consumer toward acceptance by making the more protective choice "
+                    "harder to reach can support an FTC dark-pattern theory."
+                ),
+                "missing_facts": (
+                    "Whether the design difference is intentional; consumer-perception evidence."
+                ),
+            },
+        ],
+    },
+    {
+        "authority": "California CCPA/CPRA",
+        "topics": [
+            {
+                "check_types": {"gpc-not-honored"},
+                "requirement": (
+                    "A business that sells or shares personal information must process a "
+                    "recognized opt-out preference signal, including Global Privacy Control, "
+                    "before the affected transmission."
+                ),
+                "missing_facts": (
+                    "Coverage thresholds; sale/share determination; whether the recipient is a "
+                    "service provider or contractor under a compliant contract."
+                ),
+            },
+            {
+                "check_types": {"measured-asymmetry", "measured-symmetry-satisfied"},
+                "requirement": (
+                    "Consent and CCPA-request interfaces must offer symmetrical choices - "
+                    "comparable size, contrast, color, and click count - and must not visually "
+                    "favor acceptance."
+                ),
+                "missing_facts": (
+                    "Whether the interface is seeking CCPA consent or processing a CCPA request; "
+                    "the rendered design outside the captured viewport."
+                ),
+            },
+            {
+                "check_types": {"rights-mechanism-absent"},
+                "requirement": (
+                    "A cookie banner alone is not an acceptable sale/share opt-out method; a "
+                    "separate, effective mechanism is required where the business sells or shares."
+                ),
+                "missing_facts": (
+                    "Whether the operator sells or shares personal information as defined, or "
+                    "processes it for targeted advertising; applicable coverage thresholds."
+                ),
+            },
+            {
+                "check_types": {"embedded-identifier"},
+                "requirement": (
+                    "A durable identifier baked into markup and served to every visitor bears on "
+                    "disclosure and profile-linkage analysis even absent a distinct opt-out signal "
+                    "finding."
+                ),
+                "missing_facts": (
+                    "Whether the identifier ties to a known consumer; the recipient's contractual "
+                    "role; retention and downstream use."
+                ),
+            },
+        ],
+    },
+    {
+        "authority": "Colorado / Connecticut / Oregon",
+        "topics": [
+            {
+                "check_types": {"gpc-not-honored"},
+                "requirement": (
+                    "Covered controllers must honor recognized universal opt-out mechanisms, "
+                    "including GPC, for sale and targeted advertising."
+                ),
+                "missing_facts": "Coverage; targeted-advertising determination; consumer residency.",
+            },
+        ],
+    },
+    {
+        "authority": "Consumer health and sensitive data",
+        "topics": [
+            {
+                "check_types": {"pre-consent-tracking", "post-denial-tracking", "post-denial-cookies"},
+                "requirement": (
+                    "Sensitive and health-related processing generally requires opt-in consent "
+                    "before collection or sharing, subject to narrow statutory exceptions."
+                ),
+                "missing_facts": (
+                    "Whether the observed flows meet statutory definitions of sensitive or health "
+                    "data; whether an applicable exception applies."
+                ),
+            },
+        ],
+    },
+]
+
+
+def build_issue_matrix(findings: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Build Section 9's rows from the findings a run actually emitted.
+
+    Returns one row per authority that has at least one supporting finding,
+    each citing the finding id(s) that support it. An authority with no
+    matching finding produces no row at all - this is what stops the report
+    from citing "GPC and symmetry findings" on a run that has neither.
+    """
+    by_check_type: dict[str, list[str]] = {}
+    for finding in findings or []:
+        if not isinstance(finding, dict):
+            continue
+        check_type = finding.get("check_type")
+        finding_id = finding.get("id")
+        if not check_type or not finding_id:
+            continue
+        by_check_type.setdefault(str(check_type), []).append(str(finding_id))
+
+    rows: list[dict[str, Any]] = []
+    for authority in ISSUE_MATRIX_AUTHORITIES:
+        requirement_parts: list[str] = []
+        missing_parts: list[str] = []
+        evidence_ids: list[str] = []
+        for topic in authority["topics"]:
+            matched_ids = [
+                finding_id
+                for check_type in topic["check_types"]
+                for finding_id in by_check_type.get(check_type, [])
+            ]
+            if not matched_ids:
+                continue
+            requirement_parts.append(topic["requirement"])
+            missing_parts.append(topic["missing_facts"])
+            for finding_id in matched_ids:
+                if finding_id not in evidence_ids:
+                    evidence_ids.append(finding_id)
+        if not evidence_ids:
+            # No topic under this authority is supported by this run's
+            # findings - do not emit a row that cites nothing.
+            continue
+        rows.append({
+            "authority": authority["authority"],
+            "requirement": " ".join(dict.fromkeys(requirement_parts)),
+            "evidence": ", ".join(evidence_ids),
+            "missing_facts": " ".join(dict.fromkeys(missing_parts)),
+        })
+    return rows
+
+
+# --------------------------------------------------------------------------
 # D4 - stability across repeated baseline runs
 # --------------------------------------------------------------------------
 

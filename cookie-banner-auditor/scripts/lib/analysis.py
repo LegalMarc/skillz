@@ -1078,12 +1078,10 @@ def render_markdown_report(
         "",
         "## 9. Legal issue-spotting matrix",
         "",
-        "| Authority | Requirement or theory | Observed evidence | Missing applicability facts |",
-        "|---|---|---|---|",
-        "| FTC Act s5 (deception) | Representations about the effect of a choice | See findings above | Policy language; payload contents; consumer understanding |",
-        "| California CCPA/CPRA | Opt-out preference signal; symmetry; separate sale/share mechanism | GPC and symmetry findings | Coverage thresholds; sale/share determination; service-provider contracts |",
-        "| Colorado / Connecticut / Oregon | Universal opt-out mechanisms | GPC finding | Coverage; targeted-advertising determination |",
-        "| Consumer health and sensitive data | Consent before collection or sharing | Session-replay and category findings | Whether observed flows meet statutory definitions |",
+        _markdown_table(checks.build_issue_matrix(findings), [
+            ("authority", "Authority"), ("requirement", "Requirement or theory"),
+            ("evidence", "Observed evidence"), ("missing_facts", "Missing applicability facts"),
+        ]),
         "",
         "Include only authorities relevant to the operator, audience, data, and observed conduct. This table is "
         "a prompt for counsel, not a conclusion.",
