@@ -20,11 +20,13 @@ if str(SCRIPT_DIR) not in sys.path:
 
 from playwright.sync_api import sync_playwright
 
+import audit_site
 from lib import checks
 from lib.analysis import (
     analyze_and_write,
     build_cookie_inventory,
     partition_findings,
+    preconsent_tracking_assertion_hits,
     render_markdown_report,
     scenario_validity_map,
 )
@@ -931,6 +933,210 @@ def test_incomplete_run_suppresses_and_flags() -> None:
         ok("an incomplete run is flagged INCOMPLETE and withholds dependent findings")
 
 
+def test_preconsent_tracking_assertion_positive_control() -> None:
+    """--assert-no-preconsent-tracking's detector must be shown able to fire.
+
+    A "no tracking found" pass proves nothing unless the same detector can also
+    go red on a dirty baseline (see acceptance criteria). The synthetic baseline
+    here already POSTs to a Google Analytics collect endpoint with a `cid`
+    param, which `checks.classify_request` scores as identifier_transmitted -
+    confirmed transmission, not a bare script load.
+    """
+    with tempfile.TemporaryDirectory(prefix="cookie-auditor-assert-dirty-") as temp:
+        root = Path(temp)
+        patterns = SCRIPT_DIR.parent / "references" / "vendor-patterns.json"
+        analysis = analyze_and_write(root, "https://example.test/", synthetic_results(True), _metadata(), patterns)
+
+        ids = {f["id"] for f in analysis["findings"]}
+        assert "F-PRE-CONSENT-TRACKING" in ids, ids
+
+        hits = preconsent_tracking_assertion_hits(analysis["findings"])
+        assert hits, "a baseline that produces the pre-consent-tracking finding must also trip the CI assertion"
+        assert all(h.get("evidence_strength") in {checks.STRENGTH_BEACON, checks.STRENGTH_IDENTIFIER} for h in hits), hits
+        ok("--assert-no-preconsent-tracking detector fires on a dirty baseline (positive control)")
+
+
+def test_preconsent_tracking_assertion_clean_baseline() -> None:
+    """The same detector must clear when the baseline has no tracking requests."""
+    with tempfile.TemporaryDirectory(prefix="cookie-auditor-assert-clean-") as temp:
+        root = Path(temp)
+        patterns = SCRIPT_DIR.parent / "references" / "vendor-patterns.json"
+        results = synthetic_results(True)
+        results["baseline"]["events"] = {"requests": [], "responses": [], "request_failures": [], "console": []}
+        analysis = analyze_and_write(root, "https://example.test/", results, _metadata(), patterns)
+
+        ids = {f["id"] for f in analysis["findings"]}
+        assert "F-PRE-CONSENT-TRACKING" not in ids, ids
+        assert preconsent_tracking_assertion_hits(analysis["findings"]) == []
+        ok("--assert-no-preconsent-tracking clears on a clean baseline")
+
+
+def test_preconsent_tracking_assertion_ignores_script_load_only() -> None:
+    """Invariant: script_loaded_only evidence alone must never trip the gate.
+
+    A tag load without a beacon is what a correct Google-Consent-Mode-style
+    implementation looks like; the report treats it as informational, and a
+    CI gate that failed on it would fail correct implementations and get
+    disabled within a week.
+    """
+    with tempfile.TemporaryDirectory(prefix="cookie-auditor-assert-scriptonly-") as temp:
+        root = Path(temp)
+        patterns = SCRIPT_DIR.parent / "references" / "vendor-patterns.json"
+        results = synthetic_results(True)
+        now = utc_now()
+        results["baseline"]["events"] = {
+            "requests": [{
+                "time": now, "phase": "initial_navigation",
+                "url": "https://connect.facebook.net/en_US/fbevents.js",
+                "method": "GET", "resource_type": "script", "is_navigation_request": False,
+            }],
+            "responses": [], "request_failures": [], "console": [],
+        }
+        analysis = analyze_and_write(root, "https://example.test/", results, _metadata(), patterns)
+
+        ids = {f["id"] for f in analysis["findings"]}
+        assert "F-PRE-CONSENT-TRACKING" in ids, "a script load in a tracking category still produces the report finding"
+
+        hits = preconsent_tracking_assertion_hits(analysis["findings"])
+        assert hits == [], "script_loaded_only evidence alone must not trip the CI assertion"
+        ok("--assert-no-preconsent-tracking ignores script_loaded_only evidence alone")
+
+
+def test_preconsent_tracking_assertion_beyond_truncation_cutoff() -> None:
+    """Regression: a confirmed row past the report's evidence[:20] display cutoff
+    must still trip --assert-no-preconsent-tracking.
+
+    `generate_findings` truncates the pre-consent-tracking finding's `evidence`
+    list to the first 20 rows for display (analysis.py). 21+ distinct tracking
+    endpoint patterns with loaders ahead of beacons is the normal shape of a
+    commercial site, so a confirmed beacon/identifier-transmission row easily
+    lands past that cutoff. If the CI gate read the truncated `evidence` list
+    instead of the full row set, this case would silently pass with exit 0.
+
+    Builds a baseline with 20 distinct script-only tracking loads (distinct
+    fbevents-N.js paths) followed by one confirmed-transmission POST, and
+    asserts the gate still fires.
+    """
+    with tempfile.TemporaryDirectory(prefix="cookie-auditor-assert-truncation-") as temp:
+        root = Path(temp)
+        patterns = SCRIPT_DIR.parent / "references" / "vendor-patterns.json"
+        results = synthetic_results(True)
+        now = utc_now()
+        script_only_requests = [
+            {
+                "time": now, "phase": "initial_navigation",
+                "url": f"https://connect.facebook.net/en_US/fbevents-{i}.js",
+                "method": "GET", "resource_type": "script", "is_navigation_request": False,
+            }
+            for i in range(20)
+        ]
+        confirmed_request = {
+            "time": now, "phase": "initial_navigation",
+            "url": "https://www.google-analytics.com/g/collect?v=2&cid=secret",
+            "method": "POST", "resource_type": "fetch", "is_navigation_request": False,
+        }
+        results["baseline"]["events"] = {
+            "requests": script_only_requests + [confirmed_request],
+            "responses": [], "request_failures": [], "console": [],
+        }
+        analysis = analyze_and_write(root, "https://example.test/", results, _metadata(), patterns)
+
+        finding = next(f for f in analysis["findings"] if f["id"] == "F-PRE-CONSENT-TRACKING")
+        assert len(finding["evidence"]) == 20, "sanity check: the display evidence list is still truncated to 20"
+        assert not any(
+            row.get("evidence_strength") in {checks.STRENGTH_BEACON, checks.STRENGTH_IDENTIFIER}
+            for row in finding["evidence"]
+        ), "the confirmed-transmission row must land past the display truncation for this to be a real regression test"
+
+        hits = preconsent_tracking_assertion_hits(analysis["findings"])
+        assert hits, "a confirmed-transmission row beyond the 20-row display cutoff must still trip the CI assertion"
+        assert any(
+            h.get("host") == "www.google-analytics.com" and h.get("path") == "/g/collect" for h in hits
+        ), hits
+        ok("--assert-no-preconsent-tracking catches a confirmed row past the evidence display cutoff")
+
+
+def test_assertion_hits_for_is_opt_in_and_defaults_off() -> None:
+    """Acceptance criterion: without the flag, a dirty baseline still exits 0.
+
+    Exercises the actual flag-to-hits wiring (audit_site.assertion_hits_for),
+    not just the pure exit_code() function, using the SAME dirty synthetic
+    baseline as test_preconsent_tracking_assertion_positive_control. Proves
+    both polarities: disabled always yields [] (and exit 0) no matter how
+    dirty the findings are, while enabled surfaces the hits (and exit 5).
+    Also confirms parse_args() defaults the flag to False, so a bare
+    invocation never opts in by accident.
+    """
+    with tempfile.TemporaryDirectory(prefix="cookie-auditor-assert-optin-") as temp:
+        root = Path(temp)
+        patterns = SCRIPT_DIR.parent / "references" / "vendor-patterns.json"
+        analysis = analyze_and_write(root, "https://example.test/", synthetic_results(True), _metadata(), patterns)
+        findings = analysis["findings"]
+
+        disabled_hits = audit_site.assertion_hits_for(False, findings)
+        assert disabled_hits == [], "the flag must be opt-in: disabled must yield no hits even on a dirty baseline"
+        assert audit_site.exit_code(disabled_hits, {}) == 0, "without the flag, a dirty baseline must still exit 0"
+
+        enabled_hits = audit_site.assertion_hits_for(True, findings)
+        assert enabled_hits, "enabled must surface hits on the same dirty baseline"
+        assert audit_site.exit_code(enabled_hits, {}) == 5, "enabled must exit 5 on the same dirty baseline"
+
+        old_argv = sys.argv
+        try:
+            sys.argv = ["audit_site.py", "--url", "https://example.test/"]
+            args = audit_site.parse_args()
+        finally:
+            sys.argv = old_argv
+        assert args.assert_no_preconsent_tracking is False, "the flag must default to False (opt-in)"
+
+        ok("assertion_hits_for is opt-in and defaults to off, matching default exit behaviour")
+
+
+def test_exit_code_precedence_and_values() -> None:
+    """Pure exit-code decision (audit_site.exit_code), wired into main().
+
+    Covers the acceptance values (assertion-hit-only -> 5; invalid-only -> 4;
+    neither -> 0) and the precedence rule: an invalid/incomplete run must
+    never report the definitive "confirmed pre-consent tracking" verdict (5),
+    even when the assertion also finds a hit, because findings depending on
+    the incomplete scenario may have been withheld and the audit itself is
+    bannered INCOMPLETE.
+    """
+    hit = {
+        "host": "www.google-analytics.com", "path": "/g/collect",
+        "vendor": "Google Analytics", "evidence_strength": checks.STRENGTH_IDENTIFIER,
+    }
+    invalid = {"denial": {"invalid_reason": "The required denial click did not complete."}}
+
+    assert audit_site.exit_code([], {}) == 0, "no assertion hits and a complete run must exit 0"
+    assert audit_site.exit_code([hit], {}) == 5, "an assertion hit on a complete run must exit 5"
+    assert audit_site.exit_code([], invalid) == 4, "an incomplete run with no assertion hits must exit 4"
+    assert audit_site.exit_code([hit], invalid) == 4, "incompleteness must win over an assertion hit"
+    ok("exit_code returns 5 / 4 / 0 correctly, and incompleteness takes precedence over an assertion hit")
+
+
+def test_format_assertion_hit_lines_names_offending_endpoints() -> None:
+    """Acceptance criterion: the offending endpoints must be named on stderr."""
+    hits = [
+        {
+            "host": "www.google-analytics.com", "path": "/g/collect",
+            "vendor": "Google Analytics", "evidence_strength": checks.STRENGTH_IDENTIFIER,
+        },
+        {
+            "host": "connect.facebook.net", "path": "/en_US/fbevents.js",
+            "vendor": "Meta", "evidence_strength": checks.STRENGTH_BEACON,
+        },
+    ]
+    lines = audit_site.format_assertion_hit_lines(hits)
+    assert len(lines) == 2
+    assert "www.google-analytics.com/g/collect" in lines[0]
+    assert "vendor=Google Analytics" in lines[0]
+    assert f"evidence={checks.STRENGTH_IDENTIFIER}" in lines[0]
+    assert "connect.facebook.net/en_US/fbevents.js" in lines[1]
+    assert "vendor=Meta" in lines[1]
+    ok("format_assertion_hit_lines names host+path, vendor, and evidence strength for each offending endpoint")
+
+
 def test_zip_bundle() -> None:
     with tempfile.TemporaryDirectory(prefix="cookie-auditor-zip-") as temp:
         root = Path(temp)
@@ -1186,6 +1392,13 @@ def main() -> int:
     print("\nReporting and packaging")
     test_analysis_outputs()
     test_incomplete_run_suppresses_and_flags()
+    test_preconsent_tracking_assertion_positive_control()
+    test_preconsent_tracking_assertion_clean_baseline()
+    test_preconsent_tracking_assertion_ignores_script_load_only()
+    test_preconsent_tracking_assertion_beyond_truncation_cutoff()
+    test_assertion_hits_for_is_opt_in_and_defaults_off()
+    test_exit_code_precedence_and_values()
+    test_format_assertion_hit_lines_names_offending_endpoints()
     test_zip_bundle()
     test_compare_runs()
 

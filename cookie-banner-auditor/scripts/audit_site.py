@@ -22,7 +22,7 @@ except ImportError:
     )
     raise SystemExit(2)
 
-from lib.analysis import analyze_and_write
+from lib.analysis import analyze_and_write, preconsent_tracking_assertion_hits
 from lib.capture import (
     ScenarioConfig,
     fingerprint_cmp,
@@ -89,6 +89,21 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--zip-shareable-only", action="store_true", help="Build the archive without evidence-private/ (redacted evidence only)")
     parser.add_argument("--no-zip", action="store_true", help="Skip building the archive")
     parser.add_argument("--no-pdf", action="store_true", help="Skip PDF rendering")
+    parser.add_argument(
+        "--assert-no-preconsent-tracking",
+        action="store_true",
+        help=(
+            "CI guardrail: exit with code 5 if the baseline scenario contains advertising, analytics, "
+            "session-replay, social, or possible-tracking requests with confirmed transmission "
+            "(beacon_observed or identifier_transmitted evidence) before any consent choice - the same "
+            "categorisation used for the report's 'pre-consent-tracking' finding. A bare script load "
+            "(script_loaded_only evidence) does not trip this, since a compliant consent-mode "
+            "implementation can load a tag while gating its transmission. Off by default: without this "
+            "flag, exit codes are unchanged. Incompleteness takes precedence: if any scenario did not "
+            "complete (exit code 4), that code is returned even when this assertion also finds confirmed "
+            "tracking, since an INCOMPLETE run must never be reported as a definitive verdict."
+        ),
+    )
     parser.add_argument("--version", action="version", version=VERSION)
     return parser.parse_args()
 
@@ -181,6 +196,44 @@ def launch_browser(playwright: object, executable: str | None, headless: bool):
             "`python -m playwright install chromium`, then retry or pass --browser /path/to/browser. "
             f"Original error: {first_error}"
         ) from first_error
+
+
+def format_assertion_hit_lines(assertion_hits: list[dict]) -> list[str]:
+    """Render one stderr line per confirmed preconsent-tracking endpoint."""
+    return [
+        f"  - {row.get('host', '')}{row.get('path', '')} "
+        f"(vendor={row.get('vendor', 'Unknown')}, evidence={row.get('evidence_strength')})"
+        for row in assertion_hits
+    ]
+
+
+def assertion_hits_for(enabled: bool, findings: list[dict]) -> list[dict]:
+    """Compute the preconsent-tracking assertion hits for the given findings.
+
+    This is the entire flag-to-hits wiring extracted into a pure, testable
+    function: when `enabled` is False (the default - the flag is opt-in),
+    it always returns an empty list regardless of what `findings` contains,
+    so a dirty baseline cannot change default exit behaviour. Only when
+    `enabled` is True does it delegate to `preconsent_tracking_assertion_hits`.
+    """
+    return preconsent_tracking_assertion_hits(findings) if enabled else []
+
+
+def exit_code(assertion_hits: list[dict], invalid: dict) -> int:
+    """Decide the process exit code from the two independent gate signals.
+
+    Incompleteness always wins over a tracking-assertion hit: if `invalid` is
+    non-empty, the run itself is INCOMPLETE (a scenario did not finish, and
+    findings depending on it were withheld rather than reported), so the
+    process must not report the definitive-sounding "confirmed pre-consent
+    tracking" verdict (5) - it returns 4 regardless of `assertion_hits`. Only
+    a fully-valid run reports 5 for a tracking-assertion hit, and 0 otherwise.
+    """
+    if invalid:
+        return 4
+    if assertion_hits:
+        return 5
+    return 0
 
 
 def main() -> int:
@@ -380,6 +433,7 @@ def main() -> int:
 
     invalid = analysis.get("invalid_scenarios") or {}
     suppressed = analysis.get("suppressed_findings") or []
+    assertion_hits = assertion_hits_for(args.assert_no_preconsent_tracking, analysis["findings"])
 
     print("\nCookie banner audit complete.")
     print(f"Overall result: {analysis['overall_status']}")
@@ -394,6 +448,17 @@ def main() -> int:
         print(f"Archive: {zip_result['path']} ({zip_result['files']} files, {raw_note})")
     print(f"Output directory: {root}")
 
+    if assertion_hits:
+        print("\n" + "=" * 72, file=sys.stderr)
+        print(
+            "--assert-no-preconsent-tracking FAILED: confirmed tracking transmission observed "
+            "in the baseline scenario before any consent choice.",
+            file=sys.stderr,
+        )
+        for line in format_assertion_hit_lines(assertion_hits):
+            print(line, file=sys.stderr)
+        print("=" * 72, file=sys.stderr)
+
     if invalid:
         print("\n" + "=" * 72, file=sys.stderr)
         print("RUN INCOMPLETE - this audit does not support a verdict on every question.", file=sys.stderr)
@@ -407,8 +472,8 @@ def main() -> int:
             file=sys.stderr,
         )
         print("=" * 72, file=sys.stderr)
-        return 4
-    return 0
+
+    return exit_code(assertion_hits, invalid)
 
 
 if __name__ == "__main__":

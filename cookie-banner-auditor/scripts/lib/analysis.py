@@ -271,6 +271,7 @@ def _finding(
     depends_on_scenarios: list[str] | None = None,
     evidence_strength: str | None = None,
     id_parts: tuple[str, ...] = (),
+    all_evidence: list[dict[str, Any]] | None = None,
 ) -> dict[str, Any]:
     """Build one finding.
 
@@ -278,6 +279,10 @@ def _finding(
     naming a scenario that did not complete is suppressed rather than reported.
     `evidence_strength` records whether the underlying requests merely loaded a
     script or actually transmitted, which the report is required to state.
+    `evidence` may be truncated for display; `all_evidence` carries the
+    complete, untruncated row set for callers - such as a CI assertion gate -
+    that must not silently miss rows past the display cutoff. It defaults to
+    `evidence` when the caller has nothing longer to offer.
     """
     return {
         "id": _stable_id(check_type, *id_parts),
@@ -290,6 +295,7 @@ def _finding(
         "potential_legal_relevance": legal_relevance,
         "applicability_needed": applicability_needed,
         "evidence": evidence,
+        "all_evidence": all_evidence if all_evidence is not None else evidence,
         "recommendation": recommendation,
         "depends_on_scenarios": depends_on_scenarios or [],
         "evidence_strength": evidence_strength,
@@ -375,6 +381,7 @@ def generate_findings(results: dict[str, Any], cookie_rows: list[dict[str, Any]]
             certainty="high",
             depends_on_scenarios=["baseline"],
             evidence_strength=strength,
+            all_evidence=baseline_tracking,
         ))
 
     post_denial_tracking = [r for r in unique_requests if r.get("post_denial") and r.get("category") in TRACKING_CATEGORIES]
@@ -737,6 +744,47 @@ def generate_findings(results: dict[str, Any], cookie_rows: list[dict[str, Any]]
     severity_order = {"critical": 0, "high": 1, "medium": 2, "low": 3, "informational": 4}
     findings.sort(key=lambda f: (severity_order.get(str(f.get("severity")), 9), str(f.get("id"))))
     return findings
+
+
+# Evidence strong enough to gate a build on. `script_loaded_only` is deliberately
+# excluded: a tag can load and still have its transmission gated (Google Consent
+# Mode does exactly this), which the report treats as a favourable informational
+# finding, not a failure. Gating CI on script loads alone would fail correct
+# implementations and get disabled within a week.
+CONFIRMED_TRANSMISSION_STRENGTHS = {checks.STRENGTH_BEACON, checks.STRENGTH_IDENTIFIER}
+
+
+def preconsent_tracking_assertion_hits(findings: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Evidence rows that should trip `--assert-no-preconsent-tracking`.
+
+    This reads directly off the `pre-consent-tracking` finding produced by
+    `generate_findings` - the same category set (`TRACKING_CATEGORIES`), the
+    same baseline-scenario scoping, and the same validity gating (a finding
+    that was suppressed because the baseline scenario did not complete never
+    reaches here). That is deliberate: the CI gate and the report finding must
+    use one categorisation, not two that can quietly drift apart.
+
+    It reads `all_evidence` rather than `evidence`: the finding's `evidence`
+    list is truncated to the first 20 rows for display, and a confirmed
+    transmission past that cutoff must still trip the gate. `all_evidence`
+    carries the complete, untruncated row set (falling back to `evidence` if a
+    finding has nothing longer to offer).
+
+    The one condition this adds on top of the finding is the evidence_strength
+    threshold: only `beacon_observed` or `identifier_transmitted` rows count.
+    See `CONFIRMED_TRANSMISSION_STRENGTHS`.
+    """
+    hits: list[dict[str, Any]] = []
+    for finding in findings:
+        if finding.get("check_type") != "pre-consent-tracking":
+            continue
+        rows = finding.get("all_evidence")
+        if rows is None:
+            rows = finding.get("evidence") or []
+        for row in rows:
+            if row.get("evidence_strength") in CONFIRMED_TRANSMISSION_STRENGTHS:
+                hits.append(row)
+    return hits
 
 
 def _summary_status(findings: list[dict[str, Any]], invalid_scenarios: dict[str, Any] | None = None) -> str:
