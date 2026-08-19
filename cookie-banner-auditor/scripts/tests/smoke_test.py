@@ -99,6 +99,65 @@ def test_har_sanitization() -> None:
 
 
 # ---------------------------------------------------------------------------
+# Test infrastructure
+# ---------------------------------------------------------------------------
+
+def serve_fixture(page, holder: dict, url: str = "https://fixture.test/") -> dict:
+    """Register a route handler that serves `holder["html"]` at a real https
+    origin, with no network, server or socket involved.
+
+    `page.set_content(...)` cannot express a reload test: reloading a
+    set_content page navigates to about:blank and the fixture vanishes, and
+    cookies/localStorage are unavailable or useless there. This intercepts
+    every request for `page` before the network layer and fulfils it from
+    `holder["html"]`, so `page.goto(url)` and `page.reload()` land on a real
+    origin where cookies and localStorage behave normally. Mutating
+    `holder["html"]` between loads changes what the next load serves.
+    `holder["loads"]` is incremented on every intercepted request.
+    """
+    holder.setdefault("loads", 0)
+
+    def handler(route) -> None:
+        holder["loads"] += 1
+        route.fulfill(status=200, content_type="text/html", body=holder["html"])
+
+    page.route("**/*", handler)
+    return holder
+
+
+def test_serve_fixture_seam(page) -> None:
+    holder = {"html": "<!doctype html><html><body>fixture-v1</body></html>"}
+    serve_fixture(page, holder)
+
+    page.goto("https://fixture.test/")
+    assert "https://fixture.test/" in page.url, page.url
+    page.evaluate("() => { document.cookie = 'seen=1; path=/'; localStorage.setItem('k', 'v'); }")
+    assert page.evaluate("() => document.cookie") == "seen=1", "cookies must work on a real https origin"
+    assert page.evaluate("() => localStorage.getItem('k')") == "v", "localStorage must work on a real https origin"
+    ok("serve_fixture serves a real https:// origin where cookies and localStorage work")
+
+    # Swap the content and prove a reload re-fetches rather than restoring a
+    # cached DOM: assert on a marker present only in the new HTML, read back
+    # from the live document rather than from holder["html"] itself.
+    holder["html"] = "<!doctype html><html><body>fixture-v2-marker</body></html>"
+    page.reload()
+    body_text = page.evaluate("() => document.body.innerText")
+    assert "fixture-v2-marker" in body_text, body_text
+    assert "fixture-v1" not in body_text, body_text
+    ok("page.reload() re-serves the swapped holder['html'], proving a real re-fetch")
+
+    # Positive control: a handler that silently stopped intercepting would
+    # fall through to the real network (and fail, since fixture.test does not
+    # resolve) rather than quietly passing.
+    assert holder["loads"] >= 2, holder["loads"]
+    ok(f"holder['loads'] reached {holder['loads']} across goto + reload with no real network")
+
+    # Unroute so later tests sharing this `page` (e.g. the real local-HTTP-server
+    # test) are not silently intercepted by this fixture's handler.
+    page.unroute("**/*")
+
+
+# ---------------------------------------------------------------------------
 # A - control detection
 # ---------------------------------------------------------------------------
 
@@ -886,6 +945,7 @@ def main() -> int:
         try:
             context = browser.new_context(viewport={"width": 1280, "height": 900})
             page = context.new_page()
+            test_serve_fixture_seam(page)
             test_control_detection(page)
             test_denial_flow_and_verification(page)
             test_local_storage_same_length_rewrite_detected(page)
