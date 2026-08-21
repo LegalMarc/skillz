@@ -15,7 +15,7 @@ The AFK part is the point. A long queue will always contain a ticket that's ambi
 ## How it works
 
 ```
-Decompose (with you) ──▶ self-contained issues, dependency-ordered, labeled `afk`
+Decompose (with you) ──▶ self-contained issues, dependency-ordered, AFK-laddered, labeled `afk`
 Loop (without you):
   Discover  sync gate + eligible issues (deps closed, not parked)
   Coder     fresh context: implement, run the issue's verification, stage
@@ -25,13 +25,15 @@ Loop (without you):
   ↺         re-discover: landings unblock dependents mid-run
 ```
 
+**The AFK ladder (decomposition):** a ticket the loop cannot grind is a place the queue stalls waiting on you, so "attended" is a last resort the decomposition has to argue for. Every ticket climbs four rungs: already unattended → blocked only on a **missing input** (asked back as one batched multiple-choice round, then it is AFK) → blocked only because nobody looked for a **programmatic path** (CLI → HTTP API → browser automation → computer control, in that order, actually tried) → genuinely irreducible human act. Only the last rung produces an attended ticket, it must state why, and the human's part is reduced to **one approval click or one fully-substituted copy-paste block** — never a procedure.
+
 **Model-agnostic:** roles are capability tiers, not model names. The reviewer runs the strongest model available at extra-high effort; the coder runs a mid tier (or inherits the session model) at high effort; mechanical steps (discover/land/park) run at medium effort. Configure via args — the script never hardcodes a vendor's model names, so it survives model generations and ports across runtimes.
 
 **Safety rails (non-negotiable):** sync gate before every pick; push must succeed before an issue closes; never merge/rebase on rejection (ff-only retry once, then halt); reviewer never edits; parked work is stashed, never discarded; flaky-test retries are bounded to one and always disclosed; sequential by design — one tree, one branch, no merge races.
 
 **Built-in force multipliers:** a lint gate at discovery rejects issues that can't self-verify before they burn a coder+reviewer cycle; a bounded **run ledger** feeds each fresh coder the (≤5) lessons reviewers taught earlier in the same run; the **final fix round escalates** to reviewer-tier model/effort — one max-strength attempt before parking; and an optional **run journal** issue collects a start comment and an end-of-run report (landed SHAs, parked reasons) so triage is one permalink.
 
-**Overnight resilience:** because all loop state lives in GitHub, a usage-limit death mid-run is recoverable by any fresh session. The skill ships a recipe for an hourly self-canceling cron relauncher: checks liveness via the journal + commit recency, resumes with the original args + `autoRecover: true` (which stashes a crashed run's leftovers instead of refusing), and deletes itself when the queue drains. While the account is limited, cron firings no-op harmlessly; the first one after the window resets picks the run back up.
+**Overnight resilience:** because all loop state lives in GitHub, a usage-limit death mid-run is recoverable by any fresh session — the question is only how anything finds out. The primary mechanism is a durable marker: the run journal posts a "Started/Landed/Parked" line per ticket plus an end-of-run "🔴 Run ended" or "⏸ HALTED" comment, even when nothing landed — a plain GitHub comment that outlives the session that wrote it. An optional hourly self-canceling scheduled-task relauncher (checks the marker, resumes with the original args + `autoRecover: true`, deletes itself when the queue drains) is a convenience on top of that, not a substitute: it only fires while its session stays alive, so a cron alone does not survive a multi-day gap — the marker on the journal issue is what a human or a longer-lived scheduler actually resumes from.
 
 ## Configure
 
@@ -57,7 +59,7 @@ See [SKILL.md](SKILL.md) for the full invocation, the issue template, and the fa
 
 ## Requirements
 
-- A runtime with a `Workflow`-style orchestration tool that can run `assets/workflow-loop.js` (Claude Code's Workflow tool).
+- A runtime with a `Workflow`-style orchestration tool that can run a scripted multi-agent loop from a file (here, `assets/workflow-loop.js`).
 - `gh` CLI authenticated for the target repo.
 - A green baseline and a clean tree on the target branch.
 
@@ -75,4 +77,6 @@ Fix or refine parked issues, remove the label, re-run — discovery recomputes e
 
 ## Testing
 
-Hermetic evals in [`evals/`](evals/) cover the four behaviors that decide loop quality: PRD → self-contained vertical slices (with integration-level verification where unit suites are blind), model-agnostic invocation (tiers not names, `skip` for AFK), refusal to run issues that can't self-verify, and the parked-ticket triage story. No live repo needed — see `evals/evals.json`.
+Hermetic evals in [`evals/`](evals/) cover the five behaviors that decide loop quality: PRD → self-contained vertical slices (with integration-level verification where unit suites are blind), model-agnostic invocation (tiers not names, `skip` for AFK), refusal to run issues that can't self-verify, the parked-ticket triage story, and overnight-resume setup (journal-backed liveness marker plus a self-canceling relauncher, `autoRecover` only on the restart flow). No live repo needed — see `evals/evals.json`.
+
+If you edit `assets/workflow-loop.js`, `node --check` exiting 0 is not proof it loads: the file is plain `.js` with a top-level `return` and `export`, each invalid under one of Node's two module goals, and it only resolves inside the Workflow tool's own wrapper. Validate by running it (or the evals), not by syntax-checking it standalone.
