@@ -452,6 +452,52 @@ def measure_symmetry(accept: dict[str, Any] | None, reject: dict[str, Any] | Non
     # Treat up to a 10% area difference as visually equivalent.
     area_equivalent = area_ratio is not None and 0.9 <= area_ratio <= 1.1
 
+    # Real Tab-order position (see capture.measure_tab_order), distinct from
+    # the DOM `tabIndex` attribute above: a control can be first in markup and
+    # still be reached last, or never, once tabindex and focusability quirks
+    # are accounted for. `None` means the control was never reached within the
+    # traversal's bounded budget - reported as unreachable, not as position 0.
+    accept_tab_position = accept.get("tab_position")
+    reject_tab_position = reject.get("tab_position")
+
+    # Tab-order measurement only ever runs when both controls resolved (see
+    # execute_denial); when either fell below the resolution threshold,
+    # neither candidate dict carries these keys at all. Falling back to
+    # `bool(None or None)` would silently assert "measured, cap not hit" for
+    # a pair that was never measured - distinguish unmeasured from measured.
+    tab_order_measured = "tab_order_cap_hit" in accept or "tab_order_cap_hit" in reject
+    tab_order_cap_hit = (
+        bool(accept.get("tab_order_cap_hit") or reject.get("tab_order_cap_hit"))
+        if tab_order_measured
+        else None
+    )
+
+    def _tab_reachable(control: dict[str, Any]) -> bool | None:
+        # Interpretation of capture.measure_tab_order's raw traversal facts -
+        # kept here, not in capture.py, so it stays on the pure/Playwright-free
+        # side of the split and is covered by the fast checks.py tests. A
+        # position was found: definitely reachable. No position and this
+        # control's traversal never ran (fell below the resolution threshold,
+        # so it carries no `tab_order_cap_hit` key at all): unmeasured. No
+        # position and the cap was hit (budget exhausted or the traversal
+        # aborted before completing a lap): the answer is unknown rather than
+        # a false "not reachable". No position and the cap was *not* hit: the
+        # traversal completed a full lap of the page's focus order without
+        # ever seeing this control, which proves it is genuinely unreachable.
+        if "tab_order_cap_hit" not in control:
+            return None
+        if control.get("tab_position") is not None:
+            return True
+        if control.get("tab_order_cap_hit"):
+            return None
+        return False
+
+    accept_tab_reachable = _tab_reachable(accept)
+    reject_tab_reachable = _tab_reachable(reject)
+    accept_precedes_reject = None
+    if accept_tab_reachable and reject_tab_reachable:
+        accept_precedes_reject = accept_tab_position < reject_tab_position
+
     return {
         "comparable": True,
         "same_layer": same_frame,
@@ -466,6 +512,14 @@ def measure_symmetry(accept: dict[str, Any] | None, reject: dict[str, Any] | Non
         "reject_keyboard_focusable": reject.get("keyboardFocusable"),
         "accept_tab_index": accept.get("tabIndex"),
         "reject_tab_index": reject.get("tabIndex"),
+        "accept_tab_position": accept_tab_position,
+        "reject_tab_position": reject_tab_position,
+        "accept_tab_reachable": accept_tab_reachable,
+        "reject_tab_reachable": reject_tab_reachable,
+        "tab_order_cap_hit": tab_order_cap_hit,
+        "accept_precedes_reject": accept_precedes_reject,
+        "accept_focus_visible": accept.get("focus_visible"),
+        "reject_focus_visible": reject.get("focus_visible"),
         "symmetric": bool(
             same_frame and area_equivalent and same_background and same_font_size and same_font_weight
         ),

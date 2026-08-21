@@ -508,6 +508,219 @@ def click_control(control: dict[str, Any], action_log: list[dict[str, Any]], kin
     return bool(record["success"])
 
 
+#: Upper bound on Tab presses when walking real keyboard focus order, so a
+#: page with hundreds of focusable elements cannot hang the scenario.
+MAX_TAB_PRESSES = 60
+
+_TAB_PROBE_ATTR = "data-cba-tab-probe"
+
+# Reads the currently-focused element's probe label (if any) and a stable
+# per-element identity used to detect when Tab traversal has wrapped back
+# around to an element it already visited - the signal that a full pass over
+# the page's focus order was observed, as distinct from merely running out
+# of Tab-press budget. The identity is kept in a JS-side WeakMap rather than
+# a DOM attribute so it never touches the page's markup or styling.
+#
+# When focus is inside a child frame, *this* frame's own `document.activeElement`
+# is the `<iframe>`/`<frame>` element itself, not the control that actually has
+# focus - the real focus stop lives in the child frame's own document. Reporting
+# the frame owner as a focus stop here would wrongly resolve iframe-hosted
+# controls (Sourcepoint, TrustArc, and similar CMPs render into an iframe) as
+# some other, untagged element, and would derive cycle identity from the
+# stable iframe element rather than from whatever is actually focused inside
+# it. So a frame owner is flagged and never treated as a real stop; the caller
+# keeps scanning the remaining frames for the child frame that reports a real,
+# non-frame-owner `activeElement` - deriving both `tag` and `cycleId` from that
+# innermost focused element instead.
+_ACTIVE_ELEMENT_PROBE_JS = f"""
+() => {{
+  const el = document.activeElement;
+  if (!el || el === document.body) {{
+    return {{ tag: null, cycleId: null, isFrameOwner: false }};
+  }}
+  const ownerTag = el.tagName ? el.tagName.toLowerCase() : '';
+  if (ownerTag === 'iframe' || ownerTag === 'frame') {{
+    return {{ tag: null, cycleId: null, isFrameOwner: true }};
+  }}
+  if (!window.__cbaTabCycleMap) {{
+    window.__cbaTabCycleMap = new WeakMap();
+    window.__cbaTabCycleCounter = 0;
+  }}
+  let id = window.__cbaTabCycleMap.get(el);
+  if (id === undefined) {{
+    id = ++window.__cbaTabCycleCounter;
+    window.__cbaTabCycleMap.set(el, id);
+  }}
+  return {{ tag: el.getAttribute('{_TAB_PROBE_ATTR}'), cycleId: String(id), isFrameOwner: false }};
+}}
+"""
+
+_FOCUS_STYLE_JS = r"""
+(el) => {
+  const cs = getComputedStyle(el);
+  return {
+    outlineWidth: cs.outlineWidth,
+    outlineStyle: cs.outlineStyle,
+    outlineColor: cs.outlineColor,
+    boxShadow: cs.boxShadow,
+    borderWidth: cs.borderWidth,
+    borderStyle: cs.borderStyle,
+    borderColor: cs.borderColor,
+  };
+}
+"""
+
+
+def measure_tab_order(
+    page: Page,
+    labeled_locators: dict[str, Locator],
+    max_presses: int = MAX_TAB_PRESSES,
+) -> dict[str, Any]:
+    """Walk the page's real keyboard focus order and record the Tab-press
+    index at which each labeled control first receives focus.
+
+    This measures the browser's actual focus order - by pressing `Tab` and
+    reading `document.activeElement` back out, across every frame - rather
+    than inferring it from DOM order or `tabindex` values. A control that
+    appears first in markup can still be reached last, or never, depending on
+    tabindex and focusability quirks.
+
+    Bounded to `max_presses` so a page with hundreds of focusable elements
+    cannot hang the scenario. A missing control is ambiguous on its own: it
+    either does not appear anywhere in the page's focus order, or it simply
+    sits past the budget. This is resolved by watching for the traversal
+    wrapping back around to an element it already visited - proof that a
+    full pass over the page's real focus order was observed. When that
+    wrap is seen before the budget runs out, any control still missing is
+    genuinely absent from the focus order (`cap_hit` is False - the budget
+    was never the limiting factor). When the budget is exhausted first, or the
+    traversal aborts (a `Tab` press itself raises) before completing a lap,
+    `cap_hit` is True and a missing control's reachability is unknown, not
+    false "not reachable".
+    """
+    positions: dict[str, int | None] = {name: None for name in labeled_locators}
+    tagged: list[Locator] = []
+    budget_exhausted = False
+    cycle_observed = False
+    aborted = False
+    try:
+        for name, locator in labeled_locators.items():
+            try:
+                locator.evaluate(f"(el, name) => el.setAttribute('{_TAB_PROBE_ATTR}', name)", name)
+                tagged.append(locator)
+            except Exception:
+                continue
+
+        for frame in page.frames:
+            try:
+                frame.evaluate(
+                    "() => { const el = document.activeElement; if (el && el !== document.body) el.blur(); }"
+                )
+            except Exception:
+                pass
+
+        # A DOM mutation immediately followed by a Tab press can race the
+        # browser's own tabindex-order computation, producing DOM order
+        # rather than tabindex order for one keystroke. A short settle avoids
+        # measuring that transient state as if it were the page's real order.
+        try:
+            page.wait_for_timeout(50)
+        except Exception:
+            pass
+
+        first_cycle_id: str | None = None
+        for press in range(1, max_presses + 1):
+            try:
+                page.keyboard.press("Tab")
+            except Exception:
+                # The traversal could not even complete this press - it did
+                # not measure a full lap, so treat it the same as running out
+                # of budget rather than as proof the remaining controls are
+                # unreachable.
+                aborted = True
+                break
+            found_name = None
+            current_cycle_id = None
+            for frame_index, frame in enumerate(page.frames):
+                try:
+                    probe = frame.evaluate(_ACTIVE_ELEMENT_PROBE_JS)
+                except Exception:
+                    continue
+                if not probe or probe.get("isFrameOwner"):
+                    # Focus is inside a child frame (this frame's own
+                    # activeElement is the iframe/frame element itself, not a
+                    # real focus stop) - keep scanning the remaining frames
+                    # for the innermost frame that actually holds focus.
+                    continue
+                if probe.get("cycleId") is not None:
+                    current_cycle_id = f"{frame_index}:{probe['cycleId']}"
+                    found_name = probe.get("tag")
+                    break
+            if found_name and positions.get(found_name) is None:
+                positions[found_name] = press
+            if all(value is not None for value in positions.values()):
+                break
+            if current_cycle_id is not None:
+                if first_cycle_id is None:
+                    first_cycle_id = current_cycle_id
+                elif current_cycle_id == first_cycle_id:
+                    # The traversal has returned to the first element it
+                    # focused this pass: a full lap of the page's real focus
+                    # order has been observed without exhausting the budget.
+                    cycle_observed = True
+                    break
+        else:
+            budget_exhausted = True
+    finally:
+        for locator in tagged:
+            try:
+                locator.evaluate(f"(el) => el.removeAttribute('{_TAB_PROBE_ATTR}')")
+            except Exception:
+                pass
+
+    all_found = all(value is not None for value in positions.values())
+    cap_hit = (budget_exhausted or aborted) and not all_found and not cycle_observed
+    return {"positions": positions, "cap_hit": cap_hit, "max_presses": max_presses}
+
+
+def measure_focus_visibility(locator: Locator) -> dict[str, Any]:
+    """Focus a control and compare its computed outline/box-shadow/border
+    against the unfocused state.
+
+    A visible indicator is any measurable change across those properties; a
+    control that renders identically focused and unfocused has no focus
+    indicator regardless of what its CSS claims to declare.
+    """
+    try:
+        unfocused = locator.evaluate(_FOCUS_STYLE_JS)
+    except Exception:
+        return {"measured": False, "visible": None, "reason": "could not read unfocused style"}
+
+    try:
+        locator.focus(timeout=2000)
+    except Exception:
+        return {"measured": False, "visible": None, "reason": "control could not be focused"}
+
+    try:
+        focused = locator.evaluate(_FOCUS_STYLE_JS)
+    except Exception:
+        return {"measured": False, "visible": None, "reason": "could not read focused style"}
+    finally:
+        try:
+            locator.evaluate("(el) => el.blur()")
+        except Exception:
+            pass
+
+    changed = sorted(key for key in unfocused if unfocused.get(key) != focused.get(key))
+    return {
+        "measured": True,
+        "visible": bool(changed),
+        "changed_properties": changed,
+        "unfocused_style": unfocused,
+        "focused_style": focused,
+    }
+
+
 COMMON_BANNER_SELECTORS = [
     "[id*='cookie' i][class*='banner' i]",
     "[id*='consent' i]",
@@ -1020,6 +1233,40 @@ def execute_denial(
     before = consent_snapshot(page, context, cmp_entry)
     accept_control, accept_candidates, accept_resolution = find_control(page, "accept", cmp_entry)
     reject_control, reject_candidates, reject_resolution = find_control(page, "reject", cmp_entry)
+
+    # E3 - measure real tab order and focus visibility while both controls are
+    # still resolved and before either is clicked (a click may dismiss the
+    # banner entirely). Only meaningful when both resolved to an actual
+    # element; accept_candidates[0]/reject_candidates[0] are the exact public
+    # form of accept_control/reject_control (see find_control), so mutating
+    # them in place is what carries these fields through to measure_symmetry.
+    # Only the raw traversal facts (position reached, whether the budget/cap
+    # was hit) are recorded here; turning those into a reachable/unknown/
+    # unreachable verdict is interpretation, which belongs in checks.py
+    # (checks.measure_symmetry) alongside the rest of the pure, Playwright-free
+    # logic - not here in the browser-driving half of the split.
+    if accept_control and reject_control:
+        tab_order = measure_tab_order(
+            page, {"accept": accept_control["locator"], "reject": reject_control["locator"]}
+        )
+        accept_focus = measure_focus_visibility(accept_control["locator"])
+        reject_focus = measure_focus_visibility(reject_control["locator"])
+        accept_position = tab_order["positions"].get("accept")
+        reject_position = tab_order["positions"].get("reject")
+
+        accept_candidates[0].update(
+            tab_position=accept_position,
+            tab_order_cap_hit=tab_order["cap_hit"],
+            focus_visible=accept_focus.get("visible"),
+            focus_visibility=accept_focus,
+        )
+        reject_candidates[0].update(
+            tab_position=reject_position,
+            tab_order_cap_hit=tab_order["cap_hit"],
+            focus_visible=reject_focus.get("visible"),
+            focus_visibility=reject_focus,
+        )
+
     result: dict[str, Any] = {
         "status": "not_started",
         "click_count": 0,

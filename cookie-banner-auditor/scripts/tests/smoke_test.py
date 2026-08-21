@@ -41,6 +41,8 @@ from lib.capture import (
     inspect_banner,
     load_cmp_table,
     load_transmission_patterns,
+    measure_focus_visibility,
+    measure_tab_order,
     verify_choice_registered,
 )
 from lib.util import (
@@ -391,6 +393,219 @@ def test_settings_path_denial(page) -> None:
     ok("settings-layer denial disables optional toggles and saves")
 
 
+def _fresh_content(page, html: str) -> None:
+    """Load `html` on a genuinely fresh document.
+
+    A `set_content()` immediately after a prior `set_content()` on the same
+    `page` can leave Chromium's tabindex-ordered focus chain reflecting the
+    previous document's structure rather than the new one - reproducible even
+    though the DOM itself is fully replaced. An explicit navigation to
+    about:blank in between forces a real frame reset, which the tab-order
+    tests below depend on for a trustworthy reading."""
+    page.goto("about:blank")
+    page.set_content(html)
+
+
+def _cookie_banner_html(accept_tabindex: int, reject_tag: str, reject_tabindex: int | str) -> str:
+    return f"""
+        <!doctype html><html><body>
+        <div style="position:fixed;bottom:0;padding:20px">
+          <p>We use cookies for analytics and advertising on this site.</p>
+          <button id="accept" tabindex="{accept_tabindex}">Accept All</button>
+          <{reject_tag} id="reject" href="#" tabindex="{reject_tabindex}">Reject All</{reject_tag}>
+        </div>
+        </body></html>
+    """
+
+
+def test_tab_order_direction(page) -> None:
+    """A fixture where Decline is reachable before Accept and one where it is
+    reachable after must produce different `accept_precedes_reject` results -
+    a single-direction test would pass against an implementation that always
+    returned the same answer."""
+    _fresh_content(page, _cookie_banner_html(accept_tabindex=1, reject_tag="button", reject_tabindex=2))
+    forward = execute_denial(page, page.context, wait_ms=20, manual=False, share_scenario_dir=Path(tempfile.mkdtemp()))
+    forward_symmetry = checks.measure_symmetry(forward["accept_candidates"][0], forward["reject_candidates"][0])
+    assert forward_symmetry["accept_tab_position"] == 1, forward_symmetry
+    assert forward_symmetry["reject_tab_position"] == 2, forward_symmetry
+    assert forward_symmetry["accept_precedes_reject"] is True, forward_symmetry
+
+    _fresh_content(page, _cookie_banner_html(accept_tabindex=2, reject_tag="button", reject_tabindex=1))
+    reversed_result = execute_denial(page, page.context, wait_ms=20, manual=False, share_scenario_dir=Path(tempfile.mkdtemp()))
+    reversed_symmetry = checks.measure_symmetry(reversed_result["accept_candidates"][0], reversed_result["reject_candidates"][0])
+    assert reversed_symmetry["accept_tab_position"] == 2, reversed_symmetry
+    assert reversed_symmetry["reject_tab_position"] == 1, reversed_symmetry
+    assert reversed_symmetry["accept_precedes_reject"] is False, reversed_symmetry
+    ok("real tab order distinguishes Decline-before-Accept from Accept-before-Decline")
+
+
+def test_tab_order_unreachable_control(page) -> None:
+    """A control that is not keyboard reachable at all (tabindex=-1, skipped
+    by sequential Tab navigation) must not crash the traversal and must be
+    recorded as unreachable - not silently as tab position 0 or as preceding
+    the other control."""
+    _fresh_content(page, _cookie_banner_html(accept_tabindex=1, reject_tag="a", reject_tabindex=-1))
+    result = execute_denial(page, page.context, wait_ms=20, manual=False, share_scenario_dir=Path(tempfile.mkdtemp()))
+    symmetry = checks.measure_symmetry(result["accept_candidates"][0], result["reject_candidates"][0])
+    assert symmetry["comparable"] is True, symmetry
+    assert symmetry["accept_tab_reachable"] is True, symmetry
+    assert symmetry["accept_tab_position"] == 1, symmetry
+    assert symmetry["reject_tab_reachable"] is False, symmetry
+    assert symmetry["reject_tab_position"] is None, symmetry
+    # The traversal completed a full lap of the page's real focus order (it
+    # cycled back to Accept, the only reachable control) without exhausting
+    # its press budget, so the cap was never the limiting factor here - the
+    # unreachability is proven, not merely unmeasured. Contrast with
+    # test_measure_tab_order_bounded, where the budget genuinely runs out.
+    assert symmetry["tab_order_cap_hit"] is False, symmetry
+    assert symmetry["accept_precedes_reject"] is None, "must not guess precedence when one control is unreachable"
+    ok("a tab-unreachable control is recorded as unreachable, not as position 0 or as preceding")
+
+
+def test_tab_order_reaches_iframe_hosted_controls(page) -> None:
+    """Iframe-hosted CMPs (Sourcepoint, TrustArc, and similar) render the
+    accept/reject controls inside a child frame, not the main document. When
+    focus is inside that child frame, the *main* frame's own
+    `document.activeElement` is the `<iframe>` element itself - not null, not
+    body - so a traversal that accepts the first frame reporting a non-body
+    `activeElement` would stop there and never see the real control. This
+    must instead descend into the frame that actually holds focus and report
+    both controls as genuinely reachable, in the right relative order."""
+    inner_html = _cookie_banner_html(accept_tabindex=1, reject_tag="button", reject_tabindex=2)
+    escaped_srcdoc = inner_html.replace('"', "&quot;")
+    _fresh_content(page, f"""
+        <!doctype html><html><body>
+        <iframe id="cmp" srcdoc="{escaped_srcdoc}" style="width:400px;height:200px;border:0"></iframe>
+        </body></html>
+    """)
+    result = execute_denial(page, page.context, wait_ms=20, manual=False, share_scenario_dir=Path(tempfile.mkdtemp()))
+    symmetry = checks.measure_symmetry(result["accept_candidates"][0], result["reject_candidates"][0])
+    assert symmetry["comparable"] is True, symmetry
+    assert isinstance(symmetry["accept_tab_position"], int), symmetry
+    assert isinstance(symmetry["reject_tab_position"], int), symmetry
+    assert symmetry["accept_tab_position"] < symmetry["reject_tab_position"], symmetry
+    assert symmetry["accept_precedes_reject"] is True, symmetry
+    assert symmetry["accept_tab_reachable"] is True, symmetry
+    assert symmetry["reject_tab_reachable"] is True, symmetry
+    ok("tab-order traversal descends into an iframe-hosted CMP and reaches both controls")
+
+
+def test_symmetry_early_exit_survives_new_fields(page) -> None:
+    """measure_symmetry's early-exit contract (comparable: False when either
+    control is missing) must still hold once tab-order and focus-visibility
+    fields are folded in."""
+    _fresh_content(page, _cookie_banner_html(accept_tabindex=1, reject_tag="button", reject_tabindex=2))
+    result = execute_denial(page, page.context, wait_ms=20, manual=False, share_scenario_dir=Path(tempfile.mkdtemp()))
+    accept_only = checks.measure_symmetry(result["accept_candidates"][0], None)
+    assert accept_only == {"comparable": False, "reason": "reject control not found"}, accept_only
+    reject_only = checks.measure_symmetry(None, result["reject_candidates"][0])
+    assert reject_only == {"comparable": False, "reason": "accept control not found"}, reject_only
+    ok("measure_symmetry's comparable:False early exit is unaffected by the new measured fields")
+
+
+def test_focus_visibility_detection(page) -> None:
+    """Positive control required: the detector must be shown able to report
+    both a visible focus indicator and the absence of one."""
+    _fresh_content(page, """
+        <!doctype html><html><head><style>
+          #ring:focus { outline: 3px solid blue; }
+          #noring:focus { outline: none; box-shadow: none; }
+        </style></head><body>
+          <button id="ring" style="border:1px solid #ccc">Has Ring</button>
+          <button id="noring" style="border:1px solid #ccc">No Ring</button>
+        </body></html>
+    """)
+    visible = measure_focus_visibility(page.locator("#ring"))
+    assert visible["measured"] is True, visible
+    assert visible["visible"] is True, visible
+    assert "outlineStyle" in visible["changed_properties"], visible
+
+    hidden = measure_focus_visibility(page.locator("#noring"))
+    assert hidden["measured"] is True, hidden
+    assert hidden["visible"] is False, hidden
+    assert hidden["changed_properties"] == [], hidden
+    ok("focus-visibility detector reports both a visible ring and a suppressed one")
+
+
+def test_measure_tab_order_distinguishes_cap_from_unreachable(page) -> None:
+    """A control missing from `positions` can mean two different things: it
+    does not appear anywhere in the page's real focus order, or it merely
+    sits past the Tab-press budget. A `cap_hit` derived only from `position
+    is None` cannot tell these apart - this asserts they resolve to
+    different, correct values."""
+    _fresh_content(page, """
+        <!doctype html><html><body>
+          <button id="a">A</button>
+          <button id="b">B</button>
+          <button id="unreachable" tabindex="-1">Unreachable</button>
+        </body></html>
+    """)
+    unreachable_result = measure_tab_order(
+        page, {"unreachable": page.locator("#unreachable")}, max_presses=10
+    )
+    assert unreachable_result["positions"]["unreachable"] is None, unreachable_result
+    assert unreachable_result["cap_hit"] is False, (
+        "a control excluded from the focus order entirely must be provable "
+        f"within budget, not reported as a cap hit: {unreachable_result}"
+    )
+
+    many_buttons = "".join(f'<button id="btn{i}">{i}</button>' for i in range(120))
+    _fresh_content(page, f"<!doctype html><html><body>{many_buttons}</body></html>")
+    capped_result = measure_tab_order(page, {"far": page.locator("#btn119")}, max_presses=20)
+    assert capped_result["positions"]["far"] is None, capped_result
+    assert capped_result["cap_hit"] is True, (
+        f"a reachable control sitting past the budget must report cap_hit: {capped_result}"
+    )
+
+    assert unreachable_result["cap_hit"] != capped_result["cap_hit"], (
+        "a genuinely unreachable control and a reachable-but-past-budget "
+        f"control must not be indistinguishable: {unreachable_result} vs {capped_result}"
+    )
+    ok("cap_hit distinguishes a genuinely unreachable control from one merely past the Tab-press budget")
+
+
+def test_execute_denial_measures_focus_visibility_per_control(page) -> None:
+    """Acceptance criterion: measure_symmetry must carry a focus-visibility
+    result for each control. This exercises the real execute_denial ->
+    accept_candidates[0]/reject_candidates[0] -> measure_symmetry wiring,
+    not measure_focus_visibility in isolation, so a regression that drops
+    the `focus_visible=` fields at the execute_denial call site is caught."""
+    _fresh_content(page, """
+        <!doctype html><html><head><style>
+          #accept:focus { outline: 3px solid blue; }
+          #reject:focus { outline: none; box-shadow: none; }
+        </style></head><body>
+        <div style="position:fixed;bottom:0;padding:20px">
+          <p>We use cookies for analytics and advertising on this site.</p>
+          <button id="accept" style="border:1px solid #ccc" tabindex="1">Accept All</button>
+          <button id="reject" style="border:1px solid #ccc" tabindex="2">Reject All</button>
+        </div>
+        </body></html>
+    """)
+    result = execute_denial(page, page.context, wait_ms=20, manual=False, share_scenario_dir=Path(tempfile.mkdtemp()))
+    symmetry = checks.measure_symmetry(result["accept_candidates"][0], result["reject_candidates"][0])
+    assert symmetry["accept_focus_visible"] is True, symmetry
+    assert symmetry["reject_focus_visible"] is False, symmetry
+    ok("execute_denial wires a per-control focus-visibility result through to measure_symmetry")
+
+
+def test_measure_tab_order_bounded(page) -> None:
+    """A control past the traversal's Tab budget must be reported as capped,
+    not falsely reachable - and the traversal itself must not hang."""
+    _fresh_content(page, """
+        <!doctype html><html><body>
+          <button id="a">A</button>
+          <button id="b">B</button>
+          <button id="c">C</button>
+        </body></html>
+    """)
+    result = measure_tab_order(page, {"c": page.locator("#c")}, max_presses=1)
+    assert result["positions"]["c"] is None, result
+    assert result["cap_hit"] is True, result
+    assert result["max_presses"] == 1
+    ok("measure_tab_order bounds its Tab-press budget and reports the cap being hit")
+
+
 def test_form_exercise_does_not_submit(page) -> None:
     page.set_content("""
         <!doctype html><html><body>
@@ -514,6 +729,11 @@ def test_symmetry_measurement() -> None:
     symmetric = checks.measure_symmetry(button, dict(button))
     assert symmetric["symmetric"] is True
     assert symmetric["accept_contrast_ratio"] and symmetric["accept_contrast_ratio"] > 4.5
+    # Neither control dict carries any tab-order fields here (measure_tab_order
+    # never ran, e.g. because a resolved control still fell below the score
+    # threshold). That must read as "not measured", not as the false
+    # affirmative "measured, and the cap was not hit".
+    assert symmetric["tab_order_cap_hit"] is None, symmetric
 
     smaller = {**button, "box": {"width": 60, "height": 20},
                "style": {**button["style"], "backgroundColor": "rgb(240, 240, 240)"}}
@@ -1385,6 +1605,14 @@ def main() -> int:
             test_denial_flow_and_verification(page)
             test_local_storage_same_length_rewrite_detected(page)
             test_settings_path_denial(page)
+            test_tab_order_direction(page)
+            test_tab_order_unreachable_control(page)
+            test_tab_order_reaches_iframe_hosted_controls(page)
+            test_symmetry_early_exit_survives_new_fields(page)
+            test_focus_visibility_detection(page)
+            test_measure_tab_order_distinguishes_cap_from_unreachable(page)
+            test_execute_denial_measures_focus_visibility_per_control(page)
+            test_measure_tab_order_bounded(page)
             test_form_exercise_does_not_submit(page)
         finally:
             browser.close()
