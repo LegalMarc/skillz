@@ -10,7 +10,12 @@ from typing import Any
 from urllib.parse import urlsplit
 
 from . import checks
-from .capture import ACCEPT_PATTERNS, COMPLETED_DENIAL_STATUSES, REJECT_PATTERNS
+from .capture import (
+    ACCEPT_PATTERNS,
+    COMPLETED_DENIAL_STATUSES,
+    REJECT_PATTERNS,
+    UNSAVED_PREFERENCE_STATUS,
+)
 from .util import (
     escape_markdown_cell,
     markdown_to_html,
@@ -429,7 +434,43 @@ def generate_findings(results: dict[str, Any], cookie_rows: list[dict[str, Any]]
     action = denial_result.get("action_result", {}) or {}
     status = str(action.get("status", ""))
     resolution = action.get("resolution") or {}
-    if status == "manual_required":
+    if status == UNSAVED_PREFERENCE_STATUS:
+        toggle_result = action.get("toggle_result") or {}
+        disabled = toggle_result.get("disabled") or []
+        save_resolution = resolution.get("save") or {}
+        findings.append(_finding(
+            "denial-not-committed",
+            "Optional categories were switched off but no save control could be operated",
+            "high",
+            (
+                f"The scanner opened the preferences layer and switched {len(disabled)} "
+                "optional-category toggle(s) off, but no save control could be resolved "
+                + (
+                    f"(candidates were visible but none reached the confidence threshold; "
+                    f"best score {save_resolution.get('best_score')} against a threshold of "
+                    f"{save_resolution.get('threshold')})."
+                    if action.get("save_candidates") else
+                    "and no candidate save control was found in any frame."
+                )
+                + " The preference was therefore never committed."
+            ),
+            "Cannot be assessed. No denial was recorded, so nothing about post-denial behaviour is evidenced by this run.",
+            (
+                "No legal inference should be drawn about how denial is honoured. The interface "
+                "observation is separately relevant: a preferences layer that can be changed but "
+                "not saved would not record a choice for a real user either, though that must be "
+                "confirmed by hand before being treated as a UI defect rather than a scanner gap."
+            ),
+            (action.get("save_candidates", [])[:10] + disabled[:10]),
+            (
+                "Confirm by hand whether a save control exists in this CMP's preferences layer. If it "
+                "does, add its selector to references/cmp-selectors.json - taking care that the selector "
+                "is the save control and not the accept control, which would convert a denial into an "
+                "acceptance. If it does not, that is a UI finding to raise with the site owner."
+            ),
+            certainty="high",
+        ))
+    elif status == "manual_required":
         reject_resolution = resolution.get("reject") or {}
         best_score = reject_resolution.get("best_score")
         candidates_exist = bool(action.get("reject_candidates"))

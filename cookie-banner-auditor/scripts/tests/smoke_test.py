@@ -25,14 +25,18 @@ from lib import checks
 from lib.analysis import (
     analyze_and_write,
     build_cookie_inventory,
+    generate_findings,
     partition_findings,
     preconsent_tracking_assertion_hits,
     render_markdown_report,
     scenario_validity_map,
 )
 from lib.capture import (
+    COMPLETED_DENIAL_STATUSES,
     SCORE_THRESHOLD,
+    UNSAVED_PREFERENCE_STATUS,
     ScenarioConfig,
+    _scenario_validity,
     consent_snapshot,
     execute_denial,
     exercise_forms,
@@ -391,6 +395,81 @@ def test_settings_path_denial(page) -> None:
     assert len(disabled) >= 2, result
     assert all(item.get("state_after") in {False, None} for item in disabled)
     ok("settings-layer denial disables optional toggles and saves")
+
+
+def test_settings_path_denial_without_save_control(page) -> None:
+    """A preferences layer whose toggles can be switched off but which offers no
+    resolvable save control must not report "No denial control was operated" -
+    the toggles *were* operated and page state was mutated.
+
+    Reachable in the real world whenever a CMP's `save` selector list is
+    intentionally empty (HubSpot, TrustArc, Quantcast Choice), so the fixture
+    reproduces that shape: an open panel with optional toggles and no save
+    button at all."""
+    page.set_content("""
+        <!doctype html><html><body>
+        <div id="cookie-consent" role="dialog" style="position:fixed;bottom:0;left:0;right:0;padding:24px;background:white">
+          <p>Choose cookie preferences for analytics and advertising.</p>
+          <button id="accept">Accept All</button>
+          <button id="settings">Cookie Preferences</button>
+        </div>
+        <div id="panel" role="dialog" hidden>
+          <label><input id="necessary" type="checkbox" checked disabled> Strictly necessary</label>
+          <label><input id="analytics" type="checkbox" checked> Analytics</label>
+          <label><input id="ads" type="checkbox" checked> Advertising</label>
+        </div>
+        <script>
+          settings.addEventListener('click', () => { document.querySelector('#cookie-consent').hidden=true; panel.hidden=false; });
+        </script></body></html>
+    """)
+    result = execute_denial(page, page.context, wait_ms=20, manual=False, share_scenario_dir=Path(tempfile.mkdtemp()))
+
+    assert result["status"] == UNSAVED_PREFERENCE_STATUS, result
+    disabled = result.get("toggle_result", {}).get("disabled", [])
+    assert len(disabled) >= 2, result
+
+    note = (result.get("verification") or {}).get("note", "")
+    assert "No denial control was operated" not in note, (
+        f"the toggles were operated, so this note is false: {note!r}"
+    )
+    assert "never committed" in note, note
+
+    # The decision this status encodes: an unsaved preference panel is not a
+    # recorded choice, so the scenario stays invalid and cannot support
+    # findings about post-denial behaviour.
+    assert UNSAVED_PREFERENCE_STATUS not in COMPLETED_DENIAL_STATUSES
+    validity = _scenario_validity("deny", result, [])
+    assert validity["interaction_completed"] is False, validity
+    assert validity["valid"] is False, validity
+    ok("toggles disabled with no save control is reported accurately and stays invalid")
+
+
+def test_settings_path_no_toggles_still_reports_manual_required(page) -> None:
+    """The accurate-note fix must not swallow the genuine case. When the
+    preferences layer opens but nothing is actually operated - no optional
+    toggle was on to begin with - "No denial control was operated" is true and
+    must still be what the run reports."""
+    page.set_content("""
+        <!doctype html><html><body>
+        <div id="cookie-consent" role="dialog" style="position:fixed;bottom:0;left:0;right:0;padding:24px;background:white">
+          <p>Choose cookie preferences for analytics and advertising.</p>
+          <button id="accept">Accept All</button>
+          <button id="settings">Cookie Preferences</button>
+        </div>
+        <div id="panel" role="dialog" hidden>
+          <label><input id="necessary" type="checkbox" checked disabled> Strictly necessary</label>
+          <label><input id="analytics" type="checkbox"> Analytics</label>
+          <label><input id="ads" type="checkbox"> Advertising</label>
+        </div>
+        <script>
+          settings.addEventListener('click', () => { document.querySelector('#cookie-consent').hidden=true; panel.hidden=false; });
+        </script></body></html>
+    """)
+    result = execute_denial(page, page.context, wait_ms=20, manual=False, share_scenario_dir=Path(tempfile.mkdtemp()))
+    assert result["status"] == "manual_required", result
+    assert not (result.get("toggle_result", {}).get("disabled") or []), result
+    assert "No denial control was operated" in (result.get("verification") or {}).get("note", "")
+    ok("a preferences layer where nothing was operated still reports manual_required")
 
 
 def _fresh_content(page, html: str) -> None:
@@ -863,6 +942,44 @@ def test_repeat_stability() -> None:
 # ---------------------------------------------------------------------------
 # B - validity gating
 # ---------------------------------------------------------------------------
+
+def test_denial_not_committed_finding() -> None:
+    """The unsaved-preference status must produce its own finding rather than
+    the `manual_required` one, and must describe the resolution accurately in
+    both shapes: no save candidate found at all, versus candidates visible but
+    below the confidence threshold."""
+    def findings_for(action_result):
+        results = {"denial": {"action_result": action_result}}
+        return generate_findings(results, [], [])
+
+    no_candidates = findings_for({
+        "status": UNSAVED_PREFERENCE_STATUS,
+        "toggle_result": {"disabled": [{"label": "Analytics"}, {"label": "Advertising"}]},
+        "resolution": {"save": {}},
+        "save_candidates": [],
+    })
+    matched = [f for f in no_candidates if f["check_type"] == "denial-not-committed"]
+    assert len(matched) == 1, [f["check_type"] for f in no_candidates]
+    assert "no candidate save control was found" in matched[0]["observation"], matched[0]
+    assert "switched 2 optional-category toggle(s) off" in matched[0]["observation"], matched[0]
+    # It must not also emit the "could not operate a denial choice" finding,
+    # whose observation asserts that nothing was operated.
+    assert not [f for f in no_candidates if f["check_type"] == "denial-control-unresolved"], no_candidates
+
+    below_threshold = findings_for({
+        "status": UNSAVED_PREFERENCE_STATUS,
+        "toggle_result": {"disabled": [{"label": "Analytics"}]},
+        "resolution": {"save": {"best_score": 45, "threshold": 70}},
+        "save_candidates": [{"ownText": "Accept All", "score": 45}],
+    })
+    matched = [f for f in below_threshold if f["check_type"] == "denial-not-committed"]
+    assert len(matched) == 1, [f["check_type"] for f in below_threshold]
+    assert "best score 45 against a threshold of 70" in matched[0]["observation"], matched[0]
+    # The remediation must warn about the accept-as-save trap that caused these
+    # CMPs' save lists to be emptied in the first place.
+    assert "not the accept control" in matched[0]["recommendation"], matched[0]
+    ok("an unsaved preference panel produces its own accurate finding, not the unresolved-control one")
+
 
 def test_validity_gating() -> None:
     findings = [
@@ -1581,6 +1698,7 @@ def main() -> int:
     test_issue_matrix_renders_in_report()
     test_cmp_table_integrity()
     test_repeat_stability()
+    test_denial_not_committed_finding()
     test_validity_gating()
     test_unknown_scenario_dependency_fails_closed()
     test_scenario_validity_map()
@@ -1605,6 +1723,8 @@ def main() -> int:
             test_denial_flow_and_verification(page)
             test_local_storage_same_length_rewrite_detected(page)
             test_settings_path_denial(page)
+            test_settings_path_denial_without_save_control(page)
+            test_settings_path_no_toggles_still_reports_manual_required(page)
             test_tab_order_direction(page)
             test_tab_order_unreachable_control(page)
             test_tab_order_reaches_iframe_hosted_controls(page)

@@ -1220,6 +1220,23 @@ COMPLETED_DENIAL_STATUSES = {
     "manual_denial_completed",
 }
 
+#: The settings path switched the optional-category toggles off, but no save
+#: control could be resolved, so the preference was never committed.
+#:
+#: Deliberately absent from COMPLETED_DENIAL_STATUSES: an unsaved preference
+#: panel is not a recorded choice, so this scenario stays invalid and cannot
+#: support findings about post-denial behaviour. It is nonetheless a distinct
+#: status rather than `manual_required`, because page state *was* mutated -
+#: reporting it as "no denial control was operated" would describe an
+#: interaction that did not happen as described, which is the exact defect
+#: this scenario gating exists to prevent.
+#:
+#: Reachable whenever a CMP's `save` selector list is intentionally empty
+#: (HubSpot, TrustArc, Quantcast Choice - emptied because their save selector
+#: was the *accept* control, which would have converted a denial into an
+#: acceptance).
+UNSAVED_PREFERENCE_STATUS = "toggles_disabled_no_save_control"
+
 
 def execute_denial(
     page: Page,
@@ -1314,6 +1331,30 @@ def execute_denial(
         result["resolution"]["save"] = save_resolution
         if save_control and click_control(save_control, action_log, "save"):
             return finish("preferences_disabled_and_saved", result["click_count"] + 1 + len(toggle_result.get("disabled", [])))
+
+        disabled = toggle_result.get("disabled") or []
+        if disabled:
+            # Toggles were switched off but no save control resolved. Falling
+            # through to `manual_required` here would attach the note "No denial
+            # control was operated, so there is nothing to verify" - false, since
+            # the toggles above mutated page state. Record what actually
+            # happened. Still not a completed denial (see
+            # UNSAVED_PREFERENCE_STATUS), so the scenario remains invalid and
+            # dependent findings stay suppressed.
+            unsaved = finish(UNSAVED_PREFERENCE_STATUS, result["click_count"] + len(disabled))
+            verification = dict(unsaved.get("verification") or {})
+            # verify_choice_registered may legitimately report a state change
+            # here - some CMPs write provisional state on toggle. Keep that
+            # measurement, but replace its note: a change observed without a
+            # committed save is not evidence of a recorded choice.
+            verification["state_change_note"] = verification.get("note")
+            verification["note"] = (
+                f"{len(disabled)} optional-category toggle(s) were switched off, but no save "
+                "control could be resolved, so the preference was never committed. Any state "
+                "change observed here is provisional and is not a recorded denial."
+            )
+            unsaved["verification"] = verification
+            return unsaved
 
     if manual:
         result["manual_used"] = True
