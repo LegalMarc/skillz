@@ -1122,6 +1122,88 @@ def test_cookiebot_shape_settings_never_resolves_to_the_category_checkbox(page) 
     ok("a Cookiebot-shaped banner (verified live, 3 deployments) keeps settings off the category-toggle checkbox")
 
 
+def test_termly_shape_settings_resolves_via_the_real_attribute(page) -> None:
+    """First fixture for termly (19 table entries existed, most with zero
+    coverage). Verified 2026-08-22 against three live deployments
+    (termly.io, Alamy, Queen Mary University of London), all on the same
+    current runtime.
+
+    The table's settings selector was `[data-tid='banner-preferences']`,
+    which was never observed live - the real attribute is
+    `data-focus-id='preferences-button'`. Also confirmed live: reject is
+    second-layer-only (a Decline All button that appears only inside the
+    preferences modal, injected dynamically rather than merely hidden), and
+    that modal has no save control at all in any of the three captures -
+    `save: []` is a fact about this runtime, not a placeholder for a gap."""
+    _serve_cmp_fixture(page, """
+        <!doctype html><html><body>
+        <div id="termly-code-snippet-support" class="termly-ready">
+          <div aria-label="Cookie Consent Prompt" data-termly-part="consent-banner"
+               role="alertdialog" class="t-consentPrompt">
+            <p>We use cookies to improve your experience.</p>
+            <button aria-haspopup="dialog" data-focus-id="preferences-button" class="t-preference-button">
+              Preferences
+            </button>
+            <button data-tid="banner-accept" class="t-acceptAllButton">Accept</button>
+          </div>
+        </div>
+        <script>
+          document.querySelector('.t-preference-button').addEventListener('click', () => {
+            document.querySelector('.t-consentPrompt').remove();
+            const modal = document.createElement('div');
+            modal.setAttribute('role', 'dialog');
+            modal.innerHTML = `
+              <button class="t-declineAllButton">Decline All</button>
+              <button class="t-allowAllButton">Allow All</button>
+            `;
+            document.getElementById('termly-code-snippet-support').appendChild(modal);
+            modal.querySelector('.t-declineAllButton').addEventListener('click', () => {
+              modal.remove();
+              document.cookie = 'TERMLY_API_CACHE=denied; path=/';
+            });
+          });
+        </script></body></html>
+    """)
+    match = fingerprint_cmp(page, load_cmp_table())
+    assert match and match["id"] == "termly", match
+    entry = match["entry"]
+
+    settings_control, _, settings_resolution = find_control(page, "settings", entry)
+    assert settings_control is not None, settings_resolution
+
+    # Pin the specific fix rather than relying on `.t-preference-button` (kept
+    # in the table and also present in this fixture) to carry the match by
+    # list order: the removed `data-tid` selector must never resolve via the
+    # CMP table itself against real markup (generic text-scoring still finds
+    # the button by its label - that fallback existing is fine; the table
+    # entry being wrong is the thing being checked here), and the added
+    # `data-focus-id` selector must resolve through the table alone.
+    old_entry = dict(entry, settings=["[data-tid='banner-preferences']"])
+    _, _, old_resolution = find_control(page, "settings", old_entry)
+    assert old_resolution["cmp_table_miss"] is True, old_resolution
+    assert old_resolution["path"] != "cmp_selector_table", old_resolution
+
+    new_entry = dict(entry, settings=["[data-focus-id='preferences-button']"])
+    new_control, _, new_resolution = find_control(page, "settings", new_entry)
+    assert new_control is not None, new_resolution
+    assert new_resolution["path"] == "cmp_selector_table", new_resolution
+
+    # Reject does not exist until the preferences modal is created - this is
+    # the second-layer-only shape confirmed on all three live deployments.
+    top_level, _, top_resolution = find_control(page, "reject", entry)
+    assert top_level is None, "this fixture's Decline All does not exist until Preferences is opened"
+    assert top_resolution["cmp_table_miss"] is True, top_resolution
+
+    # save: [] is correct for the current runtime, not an oversight.
+    assert entry["save"] == [], entry["save"]
+
+    result = _denial_for(page, entry)
+    assert result["status"] == "second_layer_reject_clicked", result
+    assert result["resolution"]["second_layer_reject"]["path"] == "cmp_selector_table", result["resolution"]
+    assert (result.get("verification") or {}).get("verified") is True, result
+    ok("a Termly-shaped banner (verified live, 3 deployments) resolves settings via the real data-focus-id attribute")
+
+
 def test_safe_internal_links_refuses_dangerous_and_offsite(page) -> None:
     """This decides what the auditor navigates to on a live site the user owns.
     The skill promises no logout, no account change, no purchase and no
@@ -3196,6 +3278,7 @@ def main() -> int:
             test_sourcepoint_shape_resolves_inside_an_iframe(page)
             test_didomi_shape_resolves_and_save_stays_specific_to_settings(page)
             test_cookiebot_shape_settings_never_resolves_to_the_category_checkbox(page)
+            test_termly_shape_settings_resolves_via_the_real_attribute(page)
             test_safe_internal_links_refuses_dangerous_and_offsite(page)
             test_annotate_controls_marks_resolved_controls(page)
             test_annotation_labels_are_painted_above_every_outline(page)
