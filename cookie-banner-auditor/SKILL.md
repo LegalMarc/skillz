@@ -268,7 +268,7 @@ Fetches happen in a context of their own, so nothing here touches any scenario's
 python scripts/tests/smoke_test.py
 ```
 
-Covers control detection (including the bare-label regression that once caused a false critical finding), click verification, validity gating and suppression, transmission classification, Consent Mode parsing, the embedded-identifier and rights-mechanism scans, symmetry measurement including real tab order and focus visibility, the unsaved-preference status, scenario retry, the pre-consent assertion gate and its exit codes, CMP table integrity, report rendering, packaging, and run comparison.
+Covers control detection (including the bare-label regression that once caused a false critical finding), click verification, validity gating and suppression, transmission classification, Consent Mode parsing, the embedded-identifier and rights-mechanism scans, symmetry measurement including real tab order and focus visibility, the unsaved-preference status, scenario retry, the pre-consent assertion gate and its exit codes, CMP table integrity, report rendering, packaging, and run comparison. Nine of the table's CMP shapes (HubSpot, OneTrust, Usercentrics, Sourcepoint, Didomi, Cookiebot, Termly, Osano, CookieYes) have fixtures built from live-captured markup rather than documentation, so a selector regression there fails a test instead of surfacing only on a live run.
 
 Most checks are offline; the browser-backed ones drive a headless Chromium against in-memory fixtures and still need no network.
 
@@ -279,4 +279,4 @@ python -m pip install coverage
 python -m coverage run --branch --source=lib,. --omit="*/tests/*" tests/smoke_test.py && python -m coverage report -m --sort=cover
 ```
 
-Coverage sits around 67%, concentrated where it matters: the pure logic in `checks.py` is the best-covered module and the browser-driving half of `capture.py` the least, which is the intended shape. When adding a check, put the decision in `checks.py` and the driving in `capture.py` — that is what keeps the decision testable. Treat a new uncovered branch in `checks.py` or `analysis.py` as a gap; an uncovered Playwright call path in `capture.py` usually is not. A live site is required only to validate real CMP behaviour and network conditions.
+Coverage sits around 76%, concentrated where it matters: the pure logic in `checks.py` and `util.py` is the best-covered (87%), and the CLI/orchestration layer in `audit_site.py` (57%) and the browser-driving half of `capture.py` (71%) are the least, which is the intended shape. When adding a check, put the decision in `checks.py` and the driving in `capture.py` — that is what keeps the decision testable. Treat a new uncovered branch in `checks.py` or `analysis.py` as a gap; an uncovered Playwright call path in `capture.py` usually is not. A live site is required only to validate real CMP behaviour and network conditions.
