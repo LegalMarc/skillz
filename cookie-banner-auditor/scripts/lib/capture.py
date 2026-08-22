@@ -6,7 +6,7 @@ import re
 import time
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any
+from typing import Any, Callable
 from urllib.parse import urljoin, urlsplit
 from urllib.request import urlopen
 from urllib.robotparser import RobotFileParser
@@ -1872,12 +1872,44 @@ def _robots_allows(url: str, cache: dict[str, Any], timeout_s: float = 8.0) -> t
         return True, "robots.txt could not be evaluated"
 
 
+def _browser_policy_fetcher(browser: Browser, timeout_ms: int) -> tuple[Callable[[str], dict[str, Any]], BrowserContext]:
+    """The real fetcher: one browser context/page, reused across every policy
+    URL in a run and never the browser context of any scenario, so nothing
+    here can touch a scenario's consent state.
+
+    Returns the fetcher and the context that owns it, so the caller can close
+    the context once every URL has been tried.
+    """
+    context = browser.new_context(accept_downloads=False)
+    page = context.new_page()
+    page.set_default_timeout(timeout_ms)
+
+    def fetch(url: str) -> dict[str, Any]:
+        response = page.goto(url, wait_until="domcontentloaded", timeout=timeout_ms)
+        status = response.status if response else None
+        ok = bool(response is not None and response.ok)
+        content_type = ((response.header_value("content-type") or "") if response else "").lower()
+        text = ""
+        if ok and (not content_type or "html" in content_type or "text/plain" in content_type):
+            text = (page.inner_text("body") or "").strip()
+        return {
+            "status": status,
+            "ok": ok,
+            "content_type": content_type or None,
+            "text": text,
+            "final_url": page.url,
+        }
+
+    return fetch, context
+
+
 def capture_policy_texts(
-    browser: Browser,
+    browser: Browser | None,
     links: list[dict[str, Any]],
     share_dir: Path,
     timeout_ms: int = 30000,
     limit: int = 6,
+    fetch_url: Callable[[str], dict[str, Any]] | None = None,
 ) -> dict[str, Any]:
     """Archive the text of the site's linked policies (E6).
 
@@ -1891,8 +1923,13 @@ def capture_policy_texts(
     network log showing another is a question for a reader, not a finding this
     tool is entitled to assert.
 
-    Fetched in a context of its own, so nothing here touches the consent state
-    of any scenario. Anything behind a login is recorded as skipped rather than
+    Fetching goes through the `fetch_url` seam: a callable taking a URL and
+    returning `{"status", "ok", "content_type", "text", "final_url"}`, or
+    raising to signal a fetch failure. Leave it unset in production - a real
+    fetcher is then built from `browser`, in a context of its own so nothing
+    here touches the consent state of any scenario. Tests supply a fake
+    fetcher instead, so the real fetcher (and the network) is never exercised
+    by the suite. Anything behind a login is recorded as skipped rather than
     archived: a login page saved under the name of a privacy policy is worse
     than no file at all.
     """
@@ -1903,9 +1940,8 @@ def capture_policy_texts(
 
     context = None
     try:
-        context = browser.new_context(accept_downloads=False)
-        page = context.new_page()
-        page.set_default_timeout(timeout_ms)
+        if fetch_url is None:
+            fetch_url, context = _browser_policy_fetcher(browser, timeout_ms)
         for index, selection in enumerate(selections, start=1):
             record = {
                 "kind": selection["kind"],
@@ -1923,12 +1959,12 @@ def capture_policy_texts(
                 records.append(record)
                 continue
             try:
-                response = page.goto(selection["url"], wait_until="domcontentloaded", timeout=timeout_ms)
-                record["http_status"] = response.status if response else None
-                content_type = ((response.header_value("content-type") or "") if response else "").lower()
+                fetched = fetch_url(selection["url"])
+                record["http_status"] = fetched.get("status")
+                content_type = (fetched.get("content_type") or "").lower()
                 record["content_type"] = content_type or None
-                if response is not None and not response.ok:
-                    record["skipped_reason"] = f"fetch returned HTTP {response.status}"
+                if not fetched.get("ok"):
+                    record["skipped_reason"] = f"fetch returned HTTP {fetched.get('status')}"
                     records.append(record)
                     continue
                 if content_type and "html" not in content_type and "text/plain" not in content_type:
@@ -1938,7 +1974,7 @@ def capture_policy_texts(
                     record["skipped_reason"] = f"not extractable as text ({content_type})"
                     records.append(record)
                     continue
-                text = (page.inner_text("body") or "").strip()
+                text = (fetched.get("text") or "").strip()
                 record["chars"] = len(text)
                 if _AUTH_WALL.search(text[:2000]) and len(text) < 2500:
                     record["skipped_reason"] = "the fetched page looks like a login wall, not a public policy"
@@ -1948,12 +1984,12 @@ def capture_policy_texts(
                     record["skipped_reason"] = f"fetched page held too little text to be a policy ({len(text)} chars)"
                     records.append(record)
                     continue
-                record["final_url"] = page.url
+                record["final_url"] = fetched.get("final_url") or selection["url"]
                 record["sha256"] = hashlib.sha256(text.encode("utf-8")).hexdigest()
                 filename = f"{index:02d}-{selection['kind']}-{slugify(selection['host'])}.txt"
                 header = (
                     f"Source URL: {selection['url']}\n"
-                    f"Final URL after redirects: {page.url}\n"
+                    f"Final URL after redirects: {record['final_url']}\n"
                     f"Retrieved at: {record['retrieved_at']}\n"
                     f"Link label on the audited page: {selection['label']}\n"
                     f"SHA-256 of the text below: {record['sha256']}\n"

@@ -515,6 +515,7 @@ def main() -> int:
             "gpc_included": not args.no_gpc,
             "accept_control_included": args.accept_control,
             "persistence_check_included": not args.no_persistence,
+            "policy_capture_included": not args.no_policy_capture,
             "forms_exercised": thorough and not args.no_forms,
             "forms_submitted": bool(args.submit_forms),
             "search_exercised": thorough and not args.no_search,

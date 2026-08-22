@@ -1859,98 +1859,152 @@ def test_run_scenario_end_to_end(browser) -> None:
     ok("run_scenario wires checkpoints, exercises, event capture, and validity gating end to end")
 
 
-def test_capture_policy_texts_archives_and_skips_for_real_reasons(browser) -> None:
+def test_capture_policy_texts_archives_and_skips_for_real_reasons() -> None:
     """capture_policy_texts (E6) had never actually run in a test - only ever
     stubbed out entirely (see test_time_budget_skips_only_corroborating_work).
     Its skip-reason branches are exactly the kind of thing that broke live
     twice already (see the handoff: a decorated link archived four times, and
     a GA client id transmitted to the policy host by fetching the decorated
     URL) - this exercises every skip reason plus the successful archive path
-    against a real local server, not stubs."""
-    import threading
-    from http.server import BaseHTTPRequestHandler, HTTPServer
-
+    through the injected `fetch_url` seam, so the real fetcher - and the
+    network, even loopback - is never exercised by this suite. The
+    tracking-param regression itself is covered directly by
+    test_policy_link_selection, against strip_tracking_params."""
     from lib import capture
 
     policy_text = "This Privacy Policy describes how we collect, use, and share information. " * 10
     assert len(policy_text) >= 200
+    origin = "https://policies.example.test"
 
     routes = {
-        "/robots.txt": (200, "text/plain", b"User-agent: *\nDisallow: /blocked-privacy\n"),
-        "/privacy": (200, "text/html", f"<html><body>{policy_text}</body></html>".encode()),
-        "/cookie-policy-login": (200, "text/html", b"<html><body>Please sign in to continue.</body></html>"),
-        "/privacy-short": (200, "text/html", b"<html><body>We use cookies.</body></html>"),
-        "/privacy-data": (200, "application/json", b'{"policy": "see attached document"}'),
-        "/blocked-privacy": (200, "text/html", f"<html><body>{policy_text}</body></html>".encode()),
+        f"{origin}/privacy": {
+            "status": 200, "ok": True, "content_type": "text/html",
+            "text": policy_text, "final_url": f"{origin}/privacy",
+        },
+        f"{origin}/cookie-policy-login": {
+            "status": 200, "ok": True, "content_type": "text/html",
+            "text": "Please sign in to continue.", "final_url": f"{origin}/cookie-policy-login",
+        },
+        f"{origin}/privacy-short": {
+            "status": 200, "ok": True, "content_type": "text/html",
+            "text": "We use cookies.", "final_url": f"{origin}/privacy-short",
+        },
+        f"{origin}/privacy-data": {
+            "status": 200, "ok": True, "content_type": "application/json",
+            "text": "", "final_url": f"{origin}/privacy-data",
+        },
+        f"{origin}/blocked-privacy": {
+            "status": 200, "ok": True, "content_type": "text/html",
+            "text": policy_text, "final_url": f"{origin}/blocked-privacy",
+        },
+        f"{origin}/privacy-not-found": {
+            "status": 404, "ok": False, "content_type": "text/html",
+            "text": "", "final_url": f"{origin}/privacy-not-found",
+        },
     }
+    fetch_calls: list[str] = []
 
-    class _Handler(BaseHTTPRequestHandler):
-        def log_message(self, *args) -> None:
-            pass
+    def fake_fetch(url: str) -> dict:
+        fetch_calls.append(url)
+        if url == f"{origin}/privacy-timeout":
+            raise TimeoutError("navigation timeout")
+        return dict(routes[url])
 
-        def do_GET(self) -> None:
-            status, content_type, body = routes.get(self.path, (404, "text/plain", b"not found"))
-            self.send_response(status)
-            self.send_header("Content-Type", content_type)
-            self.send_header("Content-Length", str(len(body)))
-            self.end_headers()
-            self.wfile.write(body)
+    robots_bodies = {f"{origin}/robots.txt": "User-agent: *\nDisallow: /blocked-privacy\n"}
 
-    with HTTPServer(("127.0.0.1", 0), _Handler) as server:
-        port = server.server_port
-        thread = threading.Thread(target=server.serve_forever, daemon=True)
-        thread.start()
-        try:
-            origin = f"http://127.0.0.1:{port}"
-            links = [
-                {"text": "Privacy Policy", "href": f"{origin}/privacy"},
-                {"text": "Cookie Policy", "href": f"{origin}/cookie-policy-login"},
-                {"text": "Privacy Notice (short)", "href": f"{origin}/privacy-short"},
-                {"text": "Privacy Data", "href": f"{origin}/privacy-data"},
-                {"text": "Blocked Privacy Policy", "href": f"{origin}/blocked-privacy"},
-            ]
-            with tempfile.TemporaryDirectory(prefix="cookie-auditor-policies-") as temp:
-                share_dir = Path(temp)
-                result = capture.capture_policy_texts(browser, links, share_dir, timeout_ms=8000)
+    class _FakeRobotsResponse:
+        def __init__(self, body: str) -> None:
+            self._body = body.encode("utf-8")
 
-                assert result["attempted"] == 5, result
-                assert result["archived"] == 1, result
-                by_url = {r["url"]: r for r in result["records"]}
+        def read(self) -> bytes:
+            return self._body
 
-                archived = by_url[f"{origin}/privacy"]
-                assert archived["archived"] is True, archived
-                archived_path = Path(archived["path"])
-                assert archived_path.exists()
-                archived_text = archived_path.read_text(encoding="utf-8")
-                assert archived_text.startswith(f"Source URL: {origin}/privacy\n"), archived_text
-                assert "This Privacy Policy describes" in archived_text, archived_text
-                # The recorded hash must match what was actually written, not a
-                # hand-computed expectation - the browser's innerText extraction
-                # normalizes whitespace, so it will not byte-match the raw HTML.
-                body_text = archived_text.split("-" * 72 + "\n\n", 1)[1]
-                assert archived["sha256"] == hashlib.sha256(body_text.encode("utf-8")).hexdigest(), archived
+        def __enter__(self):
+            return self
 
-                login = by_url[f"{origin}/cookie-policy-login"]
-                assert login["archived"] is False and "login wall" in login["skipped_reason"], login
+        def __exit__(self, *args) -> bool:
+            return False
 
-                short = by_url[f"{origin}/privacy-short"]
-                assert short["archived"] is False and "too little text" in short["skipped_reason"], short
+    def fake_urlopen(url, timeout=8.0):
+        if url not in robots_bodies:
+            raise OSError("no robots.txt at this origin")
+        return _FakeRobotsResponse(robots_bodies[url])
 
-                not_text = by_url[f"{origin}/privacy-data"]
-                assert not_text["archived"] is False and "not extractable as text" in not_text["skipped_reason"], not_text
+    links = [
+        {"text": "Privacy Policy", "href": f"{origin}/privacy"},
+        {"text": "Cookie Policy", "href": f"{origin}/cookie-policy-login"},
+        {"text": "Privacy Notice (short)", "href": f"{origin}/privacy-short"},
+        {"text": "Privacy Data", "href": f"{origin}/privacy-data"},
+        {"text": "Blocked Privacy Policy", "href": f"{origin}/blocked-privacy"},
+        {"text": "Privacy Policy (missing)", "href": f"{origin}/privacy-not-found"},
+        {"text": "Privacy Policy (timeout)", "href": f"{origin}/privacy-timeout"},
+    ]
 
-                blocked = by_url[f"{origin}/blocked-privacy"]
-                assert blocked["archived"] is False, blocked
-                assert "robots.txt disallows" in blocked["skipped_reason"], blocked
-                assert blocked["robots_note"] == "robots.txt consulted", blocked
+    original_urlopen = capture.urlopen
+    capture.urlopen = fake_urlopen
+    try:
+        with tempfile.TemporaryDirectory(prefix="cookie-auditor-policies-") as temp:
+            share_dir = Path(temp)
+            result = capture.capture_policy_texts(
+                None, links, share_dir, timeout_ms=8000, limit=7, fetch_url=fake_fetch,
+            )
 
-                # Only the one real archive exists on disk - a skip must never
-                # leave a stray file behind under any of its reasons.
-                archived_files = list((share_dir / "policies").glob("*.txt"))
-                assert len(archived_files) == 1, archived_files
-        finally:
-            server.shutdown()
-    ok("capture_policy_texts archives one real policy and records the four distinct real skip reasons")
+            assert "error" not in result, result
+            assert result["attempted"] == 7, result
+            assert result["archived"] == 1, result
+            by_url = {r["url"]: r for r in result["records"]}
+
+            archived = by_url[f"{origin}/privacy"]
+            assert archived["archived"] is True, archived
+            archived_path = Path(archived["path"])
+            assert archived_path.exists()
+            archived_text = archived_path.read_text(encoding="utf-8")
+            assert archived_text.startswith(f"Source URL: {origin}/privacy\n"), archived_text
+            assert "This Privacy Policy describes" in archived_text, archived_text
+            assert archived["retrieved_at"], archived
+            assert f"Retrieved at: {archived['retrieved_at']}\n" in archived_text, archived_text
+            # The recorded hash must match what was actually written, not a
+            # hand-computed expectation.
+            body_text = archived_text.split("-" * 72 + "\n\n", 1)[1]
+            assert archived["sha256"] == hashlib.sha256(body_text.encode("utf-8")).hexdigest(), archived
+
+            login = by_url[f"{origin}/cookie-policy-login"]
+            assert login["archived"] is False and "login wall" in login["skipped_reason"], login
+
+            short = by_url[f"{origin}/privacy-short"]
+            assert short["archived"] is False and "too little text" in short["skipped_reason"], short
+
+            not_text = by_url[f"{origin}/privacy-data"]
+            assert not_text["archived"] is False and "not extractable as text" in not_text["skipped_reason"], not_text
+
+            blocked = by_url[f"{origin}/blocked-privacy"]
+            assert blocked["archived"] is False, blocked
+            assert "robots.txt disallows" in blocked["skipped_reason"], blocked
+            assert blocked["robots_note"] == "robots.txt consulted", blocked
+            # robots.txt is checked before the fetch seam is ever invoked - a
+            # disallowed URL must never reach the fetcher, real or fake.
+            assert f"{origin}/blocked-privacy" not in fetch_calls, fetch_calls
+
+            # A non-200 response is recorded as a skip, not a raised error -
+            # the run must not fail just because one link 404s.
+            not_found = by_url[f"{origin}/privacy-not-found"]
+            assert not_found["archived"] is False, not_found
+            assert not_found["skipped_reason"] == "fetch returned HTTP 404", not_found
+
+            # A raising fetcher (timeout, DNS failure, etc.) is likewise
+            # recorded as a skip rather than propagating out of the scenario.
+            timed_out = by_url[f"{origin}/privacy-timeout"]
+            assert timed_out["archived"] is False, timed_out
+            assert timed_out["skipped_reason"].startswith("fetch failed:"), timed_out
+            assert "navigation timeout" in timed_out["skipped_reason"], timed_out
+
+            # Only the one real archive exists on disk - a skip must never
+            # leave a stray file behind under any of its reasons.
+            archived_files = list((share_dir / "policies").glob("*.txt"))
+            assert len(archived_files) == 1, archived_files
+    finally:
+        capture.urlopen = original_urlopen
+    ok("capture_policy_texts archives one real policy and records the six distinct real skip reasons, entirely through an injected fake fetcher")
 
 
 def test_run_detect_only_reports_and_annotates_a_real_control() -> None:
@@ -4179,6 +4233,7 @@ def main() -> int:
     test_retry_gives_up_after_second_transient_failure()
     test_retry_never_fires_for_a_failed_consent_interaction()
     test_robots_allows_respects_disallow()
+    test_capture_policy_texts_archives_and_skips_for_real_reasons()
     test_collect_consent_mode_extracts_signals_from_request_log()
     test_scenario_key_and_parsing()
     test_plan_scenarios_desktop_only_matches_today()
@@ -4230,7 +4285,6 @@ def main() -> int:
             test_exercise_search_no_input_present(page)
             test_assert_clean_context_detects_dirty_state(page)
             test_run_scenario_end_to_end(browser)
-            test_capture_policy_texts_archives_and_skips_for_real_reasons(browser)
         finally:
             browser.close()
 
