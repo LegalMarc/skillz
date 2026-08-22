@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import os
 import sys
 import tempfile
 import zipfile
@@ -2033,6 +2034,102 @@ def test_issue_matrix_renders_in_report() -> None:
     ok("Section 9 renders real evidence when present and the None-observed convention when it is not")
 
 
+def test_choose_headless_platform_rules() -> None:
+    """choose_headless decides whether the whole capture runs visibly or not,
+    and had no direct test - only ever exercised incidentally through whatever
+    platform happened to run the suite."""
+    import argparse
+
+    def args(headless=False, headed=False):
+        return argparse.Namespace(headless=headless, headed=headed)
+
+    assert audit_site.choose_headless(args(headless=True, headed=True)) is True, (
+        "--headless must win even if --headed was also somehow set"
+    )
+    assert audit_site.choose_headless(args(headed=True)) is False
+
+    original_platform = sys.platform
+    original_display = os.environ.pop("DISPLAY", None)
+    original_wayland = os.environ.pop("WAYLAND_DISPLAY", None)
+    try:
+        sys.platform = "linux"
+        assert audit_site.choose_headless(args()) is True, (
+            "linux with no DISPLAY/WAYLAND_DISPLAY and neither flag set must default headless"
+        )
+        os.environ["DISPLAY"] = ":0"
+        assert audit_site.choose_headless(args()) is False, "a DISPLAY means a visible X session is available"
+
+        sys.platform = "darwin"
+        os.environ.pop("DISPLAY", None)
+        assert audit_site.choose_headless(args()) is False, "non-linux platforms default to visible"
+    finally:
+        sys.platform = original_platform
+        if original_display is not None:
+            os.environ["DISPLAY"] = original_display
+        else:
+            os.environ.pop("DISPLAY", None)
+        if original_wayland is not None:
+            os.environ["WAYLAND_DISPLAY"] = original_wayland
+    ok("choose_headless defaults headless only on a DISPLAY-less Linux session, and lets explicit flags win")
+
+
+def test_launch_browser_sandbox_args_and_error_message() -> None:
+    """launch_browser adds the no-sandbox flags only when running as root (a
+    common container/CI shape that otherwise refuses to launch Chromium at
+    all), and turns a launch failure into an actionable message rather than a
+    raw Playwright traceback - neither path had a test."""
+    calls: list[dict] = []
+
+    class _RaisingChromium:
+        def launch(self, **kwargs):
+            calls.append(kwargs)
+            raise RuntimeError("no usable browser found")
+
+    class _StubPlaywrightModule:
+        chromium = _RaisingChromium()
+
+    original_geteuid = getattr(os, "geteuid", None)
+    try:
+        os.geteuid = lambda: 0
+        try:
+            audit_site.launch_browser(_StubPlaywrightModule(), executable=None, headless=True)
+            assert False, "the stub always raises; launch_browser must propagate a failure"
+        except RuntimeError as error:
+            assert "No launchable Chrome" in str(error), error
+            assert "no usable browser found" in str(error), "the original error must be chained in, not swallowed"
+        assert calls[-1].get("chromium_sandbox") is False, calls
+        assert calls[-1].get("args") == ["--no-sandbox"], calls
+
+        os.geteuid = lambda: 1000
+        calls.clear()
+        try:
+            audit_site.launch_browser(_StubPlaywrightModule(), executable=None, headless=True)
+        except RuntimeError:
+            pass
+        assert "chromium_sandbox" not in calls[-1], (
+            f"sandbox must only be disabled for root, not a regular user: {calls[-1]}"
+        )
+
+        # With an explicit executable, a launch failure must propagate the
+        # original error unchanged rather than being rewritten into the
+        # generic "no browser found" message - the user already told us
+        # exactly which browser to use.
+        calls.clear()
+        try:
+            audit_site.launch_browser(_StubPlaywrightModule(), executable="/opt/custom/chrome", headless=True)
+            assert False
+        except RuntimeError as error:
+            assert str(error) == "no usable browser found", (
+                f"an explicit --browser failure must not be rewritten: {error}"
+            )
+    finally:
+        if original_geteuid is not None:
+            os.geteuid = original_geteuid
+        else:
+            del os.geteuid
+    ok("launch_browser scopes --no-sandbox to root and chains the real error into an actionable message")
+
+
 def test_cmp_table_integrity() -> None:
     """A 'save' selector that also accepts would turn a denial into an acceptance.
 
@@ -3396,6 +3493,8 @@ def main() -> int:
     test_symmetry_measurement()
     test_issue_matrix_generation()
     test_issue_matrix_renders_in_report()
+    test_choose_headless_platform_rules()
+    test_launch_browser_sandbox_args_and_error_message()
     test_cmp_table_integrity()
     test_repeat_stability()
     test_main_orchestrates_bundles_gates_and_exit_codes()
