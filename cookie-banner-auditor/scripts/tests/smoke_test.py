@@ -1786,6 +1786,66 @@ def test_run_scenario_end_to_end(browser) -> None:
     ok("run_scenario wires checkpoints, exercises, event capture, and validity gating end to end")
 
 
+def test_run_detect_only_reports_and_annotates_a_real_control() -> None:
+    """run_detect_only is the documented first step ("Always run the pre-flight
+    first" in SKILL.md) and had zero test coverage before this: the CMP
+    fingerprint print, the per-kind resolved-control loop, and the annotated-
+    screenshot path (which re-draws and re-verifies immediately before the
+    shutter, per its own docstring) were only ever checked by hand against a
+    live site."""
+    import contextlib
+    import io
+    import threading
+    from http.server import BaseHTTPRequestHandler, HTTPServer
+
+    class _Handler(BaseHTTPRequestHandler):
+        def log_message(self, *args) -> None:
+            pass
+
+        def do_GET(self) -> None:
+            body = HUBSPOT_BANNER.encode("utf-8")
+            self.send_response(200)
+            self.send_header("Content-Type", "text/html")
+            self.send_header("Content-Length", str(len(body)))
+            self.end_headers()
+            self.wfile.write(body)
+
+    with HTTPServer(("127.0.0.1", 0), _Handler) as server:
+        port = server.server_port
+        thread = threading.Thread(target=server.serve_forever, daemon=True)
+        thread.start()
+        try:
+            executable = discover_browser_executable(None)
+            with tempfile.TemporaryDirectory(prefix="cookie-auditor-detect-") as temp:
+                screenshot_path = Path(temp) / "detect.png"
+                buffer = io.StringIO()
+                with contextlib.redirect_stdout(buffer):
+                    code = audit_site.run_detect_only(
+                        target_url=f"http://127.0.0.1:{port}/",
+                        executable=executable,
+                        headless=True,
+                        timeout_ms=8000,
+                        viewport_label="desktop",
+                        screenshot_path=screenshot_path,
+                    )
+                output = buffer.getvalue()
+
+                assert code == 0, output
+                assert "Consent platform detected: HubSpot cookie banner" in output, output
+                assert "[reject] resolved via: cmp_selector_table" in output, output
+                assert "WOULD CLICK: 'Decline'" in output, output
+                assert "No audit was performed" in output, output
+
+                assert screenshot_path.exists() and screenshot_path.stat().st_size > 0, screenshot_path
+                # The happy path: the overlay survived to the shutter, so the
+                # image is captioned as annotated and no fallback note fires.
+                assert "Annotated screenshot:" in output, output
+                assert "NOTE:" not in output, output
+        finally:
+            server.shutdown()
+    ok("run_detect_only fingerprints a real CMP, resolves every control kind, and writes an annotated screenshot")
+
+
 # ---------------------------------------------------------------------------
 # C - transmission classification and consent mode
 # ---------------------------------------------------------------------------
@@ -3410,6 +3470,12 @@ def main() -> int:
             test_run_scenario_end_to_end(browser)
         finally:
             browser.close()
+
+    # run_detect_only launches its own sync_playwright() context internally,
+    # which cannot nest inside the one used for the browser-backed checks
+    # above - Playwright's sync API raises "using Playwright Sync API inside
+    # the asyncio loop" if attempted from within an already-active one.
+    test_run_detect_only_reports_and_annotates_a_real_control()
 
     print("\nReporting and packaging")
     test_analysis_outputs()
