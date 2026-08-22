@@ -1265,6 +1265,59 @@ def test_osano_shape_completes_via_settings_toggles_and_save(page) -> None:
     ok("an Osano-shaped US banner (verified live, 3 deployments) completes via settings, toggles, and the corrected save selector")
 
 
+def test_cookieyes_shape_scopes_to_the_visible_layer(page) -> None:
+    """Last of the five CMPs from the 2026-08-22 live-capture research pass.
+    Verified against cookieyes.com and Ahrefs; unlike the other four, no
+    correction was needed here - all five table selectors matched real
+    markup exactly. Fixtured anyway to close out the set and pin a real quirk
+    the research flagged: the standard template's preference-center Accept
+    All button shares its class with the first-layer one and both can exist
+    in the DOM at once, so resolution must be scoped to whichever is actually
+    visible rather than assuming only one instance exists."""
+    _serve_cmp_fixture(page, """
+        <!doctype html><html><body>
+        <div class="cky-consent-container cky-banner-bottom" role="region" aria-label="We value your privacy" tabindex="-1">
+          <button class="cky-btn cky-btn-customize" aria-label="Customise" data-cky-tag="settings-button">Customise</button>
+          <button class="cky-btn cky-btn-reject" aria-label="Reject All" data-cky-tag="reject-button">Reject All</button>
+          <button class="cky-btn cky-btn-accept" aria-label="Accept All" data-cky-tag="accept-button">Accept All</button>
+        </div>
+        <div class="cky-modal" hidden>
+          <div class="cky-preference-center" id="ckyPreferenceCenter">
+            <button class="cky-btn cky-btn-accept" aria-label="Accept All" data-cky-tag="accept-button">Accept All</button>
+            <button class="cky-btn cky-btn-preferences" aria-label="Save My Preferences" data-cky-tag="detail-save-button">
+              Save My Preferences
+            </button>
+          </div>
+        </div>
+        <script>
+          document.querySelector('.cky-btn-reject').addEventListener('click', () => {
+            document.querySelector('.cky-consent-container').remove();
+            document.cookie = 'cookieyes-consent=no,no,no; path=/';
+          });
+        </script></body></html>
+    """)
+    match = fingerprint_cmp(page, load_cmp_table())
+    assert match and match["id"] == "cookieyes", match
+    entry = match["entry"]
+
+    # Two elements match the accept selector at once (first layer + hidden
+    # modal copy); resolution must land on the visible one, not merely "a"
+    # match.
+    accept_control, _, accept_resolution = find_control(page, "accept", entry)
+    assert accept_control is not None, accept_resolution
+    assert accept_control["frame_url"] == page.main_frame.url
+    box = accept_control.get("box") or {}
+    assert box.get("width", 0) > 0 and box.get("height", 0) > 0, (
+        f"the resolved accept control must be the visible first-layer one, not the hidden modal copy: {accept_control}"
+    )
+
+    result = _denial_for(page, entry)
+    assert result["status"] == "direct_reject_clicked", result
+    assert result["resolution"]["reject"]["path"] == "cmp_selector_table", result["resolution"]
+    assert (result.get("verification") or {}).get("verified") is True, result
+    ok("a CookieYes-shaped banner (verified live) scopes accept to the visible layer despite a duplicate hidden copy")
+
+
 def test_safe_internal_links_refuses_dangerous_and_offsite(page) -> None:
     """This decides what the auditor navigates to on a live site the user owns.
     The skill promises no logout, no account change, no purchase and no
@@ -3341,6 +3394,7 @@ def main() -> int:
             test_cookiebot_shape_settings_never_resolves_to_the_category_checkbox(page)
             test_termly_shape_settings_resolves_via_the_real_attribute(page)
             test_osano_shape_completes_via_settings_toggles_and_save(page)
+            test_cookieyes_shape_scopes_to_the_visible_layer(page)
             test_safe_internal_links_refuses_dangerous_and_offsite(page)
             test_annotate_controls_marks_resolved_controls(page)
             test_annotation_labels_are_painted_above_every_outline(page)
