@@ -1112,6 +1112,56 @@ def test_repeat_stability() -> None:
 # B - validity gating
 # ---------------------------------------------------------------------------
 
+def test_time_budget_skips_only_corroborating_work() -> None:
+    """The wall-clock ceiling must never drop baseline or denial - the findings
+    rest on them - and must record every drop rather than truncating silently."""
+    from lib import capture
+
+    calls: list[str] = []
+
+    def fake_run_scenario_with_retry(browser, scenario, config, private_dir, share_dir, action, **kwargs):
+        calls.append(scenario)
+        return {"scenario": scenario, "checkpoints": [], "events": {"requests": []},
+                "page_scan": {"links": []}, "validity": {"valid": True}}
+
+    originals = (capture.run_scenario_with_retry, capture.run_persistence_check, capture.capture_policy_texts)
+    capture.run_scenario_with_retry = fake_run_scenario_with_retry
+    capture.run_persistence_check = lambda *a, **k: calls.append("persistence") or {}
+    capture.capture_policy_texts = lambda *a, **k: calls.append("policies") or {}
+    try:
+        # A budget of zero is already spent when the first check runs, so every
+        # droppable step is dropped and only the mandatory pair survives.
+        results = capture.run_all_scenarios(
+            browser=None, config=ScenarioConfig(url="https://example.test"),
+            private_dir=Path(tempfile.mkdtemp()), share_dir=Path(tempfile.mkdtemp()),
+            include_gpc=True, include_accept=True, baseline_repeats=2,
+            include_persistence=True, include_policies=True, time_budget_s=0,
+        )
+        assert calls == ["baseline", "denial"], f"only the mandatory scenarios may survive: {calls}"
+        budget = results["time_budget"]
+        assert budget["exceeded"] is True, budget
+        dropped = {step["step"] for step in budget["skipped_steps"]}
+        assert dropped == {
+            "gpc scenario", "accept-control scenario", "baseline repeat 1",
+            "policy text capture", "persistence check",
+        }, f"every drop must be recorded, not silently truncated: {dropped}"
+
+        # No budget: nothing is dropped, and behaviour is exactly as before.
+        calls.clear()
+        results = capture.run_all_scenarios(
+            browser=None, config=ScenarioConfig(url="https://example.test"),
+            private_dir=Path(tempfile.mkdtemp()), share_dir=Path(tempfile.mkdtemp()),
+            include_gpc=True, include_accept=True, baseline_repeats=1,
+            include_persistence=True, include_policies=True, time_budget_s=None,
+        )
+        assert calls == ["baseline", "denial", "gpc", "accept", "baseline-repeat-1", "policies", "persistence"], calls
+        assert results["time_budget"]["exceeded"] is False, results["time_budget"]
+        assert results["time_budget"]["skipped_steps"] == []
+    finally:
+        capture.run_scenario_with_retry, capture.run_persistence_check, capture.capture_policy_texts = originals
+    ok("the time budget drops only corroborating work, never baseline or denial, and records every drop")
+
+
 def test_policy_link_selection() -> None:
     """E6 selects which policy documents to archive. It must file each link
     under its most specific kind, treat a fragment as the same document, and
@@ -2110,6 +2160,7 @@ def main() -> int:
     test_issue_matrix_renders_in_report()
     test_cmp_table_integrity()
     test_repeat_stability()
+    test_time_budget_skips_only_corroborating_work()
     test_policy_link_selection()
     test_meta_ldu_signal_parsing()
     test_endpoint_key_is_shared_and_strict()

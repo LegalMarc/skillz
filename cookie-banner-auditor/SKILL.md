@@ -56,6 +56,8 @@ Treat the two as independent observations rather than one result with a footnote
 
 One quirk worth knowing before reading a mobile bundle: a page that declares no `<meta name="viewport">` is laid out near the legacy 980px width even under mobile emulation. That is genuinely what a phone does with such a page, not a measurement artefact.
 
+`--time-budget-min N` caps wall-clock time per device profile. It never drops the baseline or denial scenarios — those are what the findings rest on — only the corroborating work: GPC, the accept control, baseline repeats, policy capture, and the persistence check. Everything dropped is printed to stderr and recorded in the bundle, so a budgeted run can never be mistaken for a thorough one.
+
 Add `--headed` to watch it work. `--manual` requires an interactive terminal and now fails immediately if stdin is not a TTY, instead of silently skipping the pause. Use `--location-label` or `--proxy` when geography matters; the runner also resolves and records the actual egress region unless `--no-geo` is passed.
 
 ### Scenarios

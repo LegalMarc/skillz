@@ -2537,9 +2537,32 @@ def run_all_scenarios(
     baseline_repeats: int = 2,
     include_persistence: bool = True,
     include_policies: bool = True,
+    time_budget_s: float | None = None,
 ) -> dict[str, Any]:
     cmp_table = load_cmp_table()
     results: dict[str, Any] = {}
+
+    # D5 - an optional wall-clock ceiling. Baseline and denial are never
+    # skipped: they are what the findings rest on, and a run without them is
+    # incomplete anyway, so cutting them to save time would trade the answer
+    # for the schedule. Only the corroborating work is droppable, and every
+    # drop is recorded - a budget that silently truncated coverage would make a
+    # thin run read exactly like a thorough one.
+    started = time.monotonic()
+    skipped: list[dict[str, Any]] = []
+
+    def over_budget() -> bool:
+        return time_budget_s is not None and (time.monotonic() - started) >= time_budget_s
+
+    def skip(name: str) -> bool:
+        if not over_budget():
+            return False
+        skipped.append({
+            "step": name,
+            "elapsed_s": round(time.monotonic() - started, 1),
+            "budget_s": time_budget_s,
+        })
+        return True
 
     results["baseline"] = run_scenario_with_retry(
         browser, "baseline", config, private_dir, share_dir, "none",
@@ -2549,12 +2572,12 @@ def run_all_scenarios(
         browser, "denial", config, private_dir, share_dir, "deny",
         gpc=False, cmp_table=cmp_table,
     )
-    if include_gpc:
+    if include_gpc and not skip("gpc scenario"):
         results["gpc"] = run_scenario_with_retry(
             browser, "gpc", config, private_dir, share_dir, "none",
             gpc=True, cmp_table=cmp_table,
         )
-    if include_accept:
+    if include_accept and not skip("accept-control scenario"):
         results["accept"] = run_scenario_with_retry(
             browser, "accept", config, private_dir, share_dir, "accept",
             gpc=False, cmp_table=cmp_table,
@@ -2565,6 +2588,8 @@ def run_all_scenarios(
     repeat_sets = [_endpoint_set(results["baseline"])]
     repeats: list[dict[str, Any]] = []
     for index in range(1, max(0, baseline_repeats) + 1):
+        if skip(f"baseline repeat {index}"):
+            break
         repeat = run_scenario_with_retry(
             browser, f"baseline-repeat-{index}", config, private_dir, share_dir, "none",
             gpc=False, cmp_table=cmp_table, pages=0, run_exercises=False,
@@ -2578,7 +2603,7 @@ def run_all_scenarios(
     # E6 - archive the linked policy documents. Uses the baseline scenario's
     # links, collected before any consent choice, so the policies captured are
     # the ones every visitor is offered.
-    if include_policies:
+    if include_policies and not skip("policy text capture"):
         results["policies"] = capture_policy_texts(
             browser,
             (results["baseline"].get("page_scan") or {}).get("links") or [],
@@ -2586,12 +2611,18 @@ def run_all_scenarios(
             timeout_ms=config.timeout_ms,
         )
 
-    if include_persistence:
+    if include_persistence and not skip("persistence check"):
         results["persistence"] = run_persistence_check(
             browser, config, results["denial"].get("final_storage_state"),
             private_dir, share_dir, cmp_table,
         )
 
+    results["time_budget"] = {
+        "limit_s": time_budget_s,
+        "elapsed_s": round(time.monotonic() - started, 1),
+        "exceeded": bool(skipped),
+        "skipped_steps": skipped,
+    }
     return results
 
 

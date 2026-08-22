@@ -91,6 +91,13 @@ def parse_args() -> argparse.Namespace:
     thoroughness.add_argument("--thorough", action="store_true", help="Default. Dwell, scroll, form-fill, on-site search, and baseline repeats (~15 min)")
     parser.add_argument("--dwell-ms", type=int, default=15000, help="Dwell time per page in the thorough profile (default: 15000)")
     parser.add_argument("--repeat-baseline", type=int, default=2, help="Extra baseline runs used to detect unstable tags (default: 2; 0 disables)")
+    parser.add_argument("--time-budget-min", type=float, default=None,
+                        help=(
+                            "Soft wall-clock ceiling in minutes, per device profile. The baseline and denial "
+                            "scenarios always run - they are what the findings rest on - but corroborating work "
+                            "(GPC, accept control, baseline repeats, policy capture, persistence) is dropped once "
+                            "the budget is spent. Everything dropped is recorded and printed, never silently."
+                        ))
     parser.add_argument("--submit-forms", action="store_true",
                         help="Actually SUBMIT a form after filling it. Creates real records in the site's CRM and may trigger notification workflows. Off by default.")
     parser.add_argument("--no-forms", action="store_true", help="Skip the form-fill exercise entirely")
@@ -496,6 +503,7 @@ def main() -> int:
             "wait_ms": args.wait_ms,
             "dwell_ms": args.dwell_ms if thorough else 0,
             "baseline_repeats": args.repeat_baseline if thorough else 0,
+            "time_budget_min": args.time_budget_min,
             "timeout_ms": args.timeout_ms,
             "headless": headless,
             "viewport": f"{viewport['width']}x{viewport['height']}",
@@ -587,6 +595,7 @@ def main() -> int:
                             baseline_repeats=args.repeat_baseline if thorough else 0,
                             include_persistence=not args.no_persistence,
                             include_policies=not args.no_policy_capture,
+                            time_budget_s=(args.time_budget_min * 60) if args.time_budget_min else None,
                         ),
                     }
             finally:
@@ -651,6 +660,15 @@ def main() -> int:
         print(f"{prefix}Report: {bundle_root / 'audit-report.html'}")
         if pdf_results[label].get("ok"):
             print(f"{prefix}PDF: {bundle_root / 'audit-report.pdf'}")
+    for label in viewport_labels:
+        budget = (captures[label]["results"].get("time_budget") or {})
+        for step in budget.get("skipped_steps") or []:
+            prefix = f"[{label}] " if multi_viewport else ""
+            print(
+                f"{prefix}SKIPPED for time budget: {step['step']} "
+                f"(elapsed {step['elapsed_s']}s of {step['budget_s']}s)",
+                file=sys.stderr,
+            )
     if zip_result:
         raw_note = "includes RAW evidence - handle as confidential" if zip_result["raw_included"] else "redacted evidence only"
         print(f"Archive: {zip_result['path']} ({zip_result['files']} files, {raw_note})")
