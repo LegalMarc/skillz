@@ -700,6 +700,163 @@ def test_measure_tab_order_bounded(page) -> None:
     ok("measure_tab_order bounds its Tab-press budget and reports the cap being hit")
 
 
+def _serve_cmp_fixture(page, html: str, url: str = "https://cmp-fixture.test/") -> None:
+    """Serve `html` at a real https origin and navigate to it.
+
+    `set_content` leaves the page on about:blank, where `document.cookie` is
+    silently dropped - so a denial that really did record a choice still looks
+    unverified, and the fixture would be testing the wrong thing. These CMP
+    tests assert the *verification* result, so they need an origin where
+    consent state can actually be written. serve_fixture registers the newest
+    route first, so this also shadows any route a previous test left behind.
+    """
+    serve_fixture(page, {"html": html}, url=url)
+    page.goto(url)
+    page.context.clear_cookies()
+
+
+def _denial_for(page, cmp_entry: dict | None = None) -> dict:
+    """Run a denial the way run_scenario does - with the fingerprinted CMP entry.
+
+    Passing the entry is the point of these tests: without it execute_denial
+    silently falls back to text scoring, and the CMP selector table it is
+    supposed to be exercising is never consulted.
+    """
+    return execute_denial(page, page.context, wait_ms=20, manual=False,
+                          share_scenario_dir=Path(tempfile.mkdtemp()), cmp_entry=cmp_entry)
+
+
+def test_onetrust_shape_uses_the_second_layer_reject(page) -> None:
+    """OneTrust often ships no top-level reject - its own table entry notes that
+    absence is a UI observation, not a detection failure. The denial then has to
+    open preferences and use the reject control inside, which is the
+    `second_layer_reject_clicked` path. Nothing exercised it before this.
+
+    Also the first non-HubSpot CMP fixture, so it is the first test that proves
+    a second entry in cmp-selectors.json actually resolves against markup shaped
+    like the real thing."""
+    _serve_cmp_fixture(page, """
+        <!doctype html><html><body>
+        <div id="onetrust-consent-sdk">
+          <div id="onetrust-banner-sdk" style="position:fixed;bottom:0;padding:24px;background:#fff">
+            <p>We use cookies for analytics and advertising.</p>
+            <button id="onetrust-accept-btn-handler">Allow All</button>
+            <button id="onetrust-pc-btn-handler">Cookie Settings</button>
+          </div>
+          <div id="onetrust-pc-sdk" hidden>
+            <button class="ot-pc-refuse-all-handler">Reject All</button>
+            <button class="save-preference-btn-handler">Confirm My Choices</button>
+          </div>
+        </div>
+        <script>
+          document.querySelector('#onetrust-pc-btn-handler').addEventListener('click', () => {
+            document.querySelector('#onetrust-banner-sdk').hidden = true;
+            document.querySelector('#onetrust-pc-sdk').hidden = false;
+          });
+          document.querySelector('.ot-pc-refuse-all-handler').addEventListener('click', () => {
+            document.querySelector('#onetrust-consent-sdk').remove();
+            document.cookie = 'OptanonConsent=groups=C0001:1,C0002:0; path=/';
+          });
+        </script></body></html>
+    """)
+    match = fingerprint_cmp(page, load_cmp_table())
+    assert match and match["id"] == "onetrust", match
+    assert match["matched_by"].startswith("selector:"), match
+
+    entry = match["entry"]
+    # No top-level reject exists, and that must read as absence rather than as
+    # the scanner failing to look.
+    top_level, _, reject_resolution = find_control(page, "reject", entry)
+    assert top_level is None, "this fixture deliberately has no first-layer reject"
+    assert reject_resolution["path"] == "none", reject_resolution
+    assert reject_resolution.get("cmp_table_miss") is True, reject_resolution
+
+    result = _denial_for(page, entry)
+    assert result["status"] == "second_layer_reject_clicked", result
+    assert result["click_count"] == 2, f"settings + reject is two interactions: {result['click_count']}"
+    assert (result.get("verification") or {}).get("verified") is True, result
+    assert result["resolution"]["second_layer_reject"]["path"] == "cmp_selector_table", result["resolution"]
+    validity = _scenario_validity("deny", result, [])
+    assert validity["valid"] is True, validity
+    ok("a OneTrust-shaped banner with no first-layer reject completes via the second layer")
+
+
+def test_usercentrics_shape_resolves_inside_a_shadow_root(page) -> None:
+    """Usercentrics renders its controls inside a shadow root; its table entry is
+    flagged shadow_dom. If control collection ever stopped piercing shadow DOM,
+    every Usercentrics site would silently become 'no denial control found'."""
+    _serve_cmp_fixture(page, """
+        <!doctype html><html><body>
+        <div id="usercentrics-root"></div>
+        <script>
+          const host = document.querySelector('#usercentrics-root');
+          const root = host.attachShadow({mode: 'open'});
+          root.innerHTML = `
+            <div style="position:fixed;bottom:0;padding:24px;background:#fff">
+              <p>We use cookies for analytics and advertising.</p>
+              <button data-testid="uc-accept-all-button">Accept All</button>
+              <button data-testid="uc-deny-all-button">Deny All</button>
+            </div>`;
+          root.querySelector('[data-testid=uc-deny-all-button]').addEventListener('click', () => {
+            host.remove();
+            localStorage.setItem('uc_settings', '{"consent":"denied"}');
+          });
+        </script></body></html>
+    """)
+    match = fingerprint_cmp(page, load_cmp_table())
+    assert match and match["id"] == "usercentrics", match
+
+    control, _, resolution = find_control(page, "reject", match["entry"])
+    assert control is not None, "the deny control lives in a shadow root and must still resolve"
+    assert resolution["path"] == "cmp_selector_table", resolution
+
+    result = _denial_for(page, match["entry"])
+    assert result["status"] == "direct_reject_clicked", result
+    assert result["resolution"]["reject"]["path"] == "cmp_selector_table", result["resolution"]
+    assert (result.get("verification") or {}).get("verified") is True, result
+    ok("a Usercentrics-shaped banner resolves and completes inside an open shadow root")
+
+
+def test_sourcepoint_shape_resolves_inside_an_iframe(page) -> None:
+    """Sourcepoint renders into an iframe; its controls never appear in the main
+    frame. Frame traversal is the only thing that reaches them."""
+    inner = """
+        <!doctype html><html><body style='margin:0'>
+          <div style='padding:20px'>
+            <p>We use cookies for analytics and advertising.</p>
+            <button class='sp_choice_type_11' title='Accept All'>Accept All</button>
+            <button class='sp_choice_type_13' title='Reject All'>Reject All</button>
+          </div>
+          <script>
+            document.querySelector('.sp_choice_type_13').addEventListener('click', () => {
+              document.body.innerHTML = '<p>choice recorded</p>';
+              try { localStorage.setItem('euconsent-v2', 'denied'); } catch (e) {}
+            });
+          </script>
+        </body></html>
+    """
+    _serve_cmp_fixture(page, f"""
+        <!doctype html><html><body>
+        <iframe id="sp_message_iframe_12345" srcdoc="{inner.replace('"', "&quot;")}"
+                style="position:fixed;bottom:0;width:500px;height:220px;border:0"></iframe>
+        </body></html>
+    """)
+    match = fingerprint_cmp(page, load_cmp_table())
+    assert match and match["id"] == "sourcepoint", match
+
+    control, _, resolution = find_control(page, "reject", match["entry"])
+    assert control is not None, "the reject control is inside the iframe and must still resolve"
+    assert resolution["path"] == "cmp_selector_table", resolution
+    # It must have been found in a child frame, not the top document.
+    assert control["frame"] != page.main_frame, "the control must be located in the CMP's iframe"
+
+    result = _denial_for(page, match["entry"])
+    assert result["status"] == "direct_reject_clicked", result
+    assert result["resolution"]["reject"]["path"] == "cmp_selector_table", result["resolution"]
+    assert (result.get("verification") or {}).get("verified") is True, result
+    ok("a Sourcepoint-shaped banner resolves and completes inside its iframe")
+
+
 def test_safe_internal_links_refuses_dangerous_and_offsite(page) -> None:
     """This decides what the auditor navigates to on a live site the user owns.
     The skill promises no logout, no account change, no purchase and no
@@ -2456,6 +2613,9 @@ def main() -> int:
             test_measure_tab_order_distinguishes_cap_from_unreachable(page)
             test_execute_denial_measures_focus_visibility_per_control(page)
             test_measure_tab_order_bounded(page)
+            test_onetrust_shape_uses_the_second_layer_reject(page)
+            test_usercentrics_shape_resolves_inside_a_shadow_root(page)
+            test_sourcepoint_shape_resolves_inside_an_iframe(page)
             test_safe_internal_links_refuses_dangerous_and_offsite(page)
             test_annotate_controls_marks_resolved_controls(page)
             test_annotation_labels_are_painted_above_every_outline(page)
