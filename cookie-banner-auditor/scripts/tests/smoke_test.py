@@ -1787,6 +1787,100 @@ def test_run_scenario_end_to_end(browser) -> None:
     ok("run_scenario wires checkpoints, exercises, event capture, and validity gating end to end")
 
 
+def test_capture_policy_texts_archives_and_skips_for_real_reasons(browser) -> None:
+    """capture_policy_texts (E6) had never actually run in a test - only ever
+    stubbed out entirely (see test_time_budget_skips_only_corroborating_work).
+    Its skip-reason branches are exactly the kind of thing that broke live
+    twice already (see the handoff: a decorated link archived four times, and
+    a GA client id transmitted to the policy host by fetching the decorated
+    URL) - this exercises every skip reason plus the successful archive path
+    against a real local server, not stubs."""
+    import threading
+    from http.server import BaseHTTPRequestHandler, HTTPServer
+
+    from lib import capture
+
+    policy_text = "This Privacy Policy describes how we collect, use, and share information. " * 10
+    assert len(policy_text) >= 200
+
+    routes = {
+        "/robots.txt": (200, "text/plain", b"User-agent: *\nDisallow: /blocked-privacy\n"),
+        "/privacy": (200, "text/html", f"<html><body>{policy_text}</body></html>".encode()),
+        "/cookie-policy-login": (200, "text/html", b"<html><body>Please sign in to continue.</body></html>"),
+        "/privacy-short": (200, "text/html", b"<html><body>We use cookies.</body></html>"),
+        "/privacy-data": (200, "application/json", b'{"policy": "see attached document"}'),
+        "/blocked-privacy": (200, "text/html", f"<html><body>{policy_text}</body></html>".encode()),
+    }
+
+    class _Handler(BaseHTTPRequestHandler):
+        def log_message(self, *args) -> None:
+            pass
+
+        def do_GET(self) -> None:
+            status, content_type, body = routes.get(self.path, (404, "text/plain", b"not found"))
+            self.send_response(status)
+            self.send_header("Content-Type", content_type)
+            self.send_header("Content-Length", str(len(body)))
+            self.end_headers()
+            self.wfile.write(body)
+
+    with HTTPServer(("127.0.0.1", 0), _Handler) as server:
+        port = server.server_port
+        thread = threading.Thread(target=server.serve_forever, daemon=True)
+        thread.start()
+        try:
+            origin = f"http://127.0.0.1:{port}"
+            links = [
+                {"text": "Privacy Policy", "href": f"{origin}/privacy"},
+                {"text": "Cookie Policy", "href": f"{origin}/cookie-policy-login"},
+                {"text": "Privacy Notice (short)", "href": f"{origin}/privacy-short"},
+                {"text": "Privacy Data", "href": f"{origin}/privacy-data"},
+                {"text": "Blocked Privacy Policy", "href": f"{origin}/blocked-privacy"},
+            ]
+            with tempfile.TemporaryDirectory(prefix="cookie-auditor-policies-") as temp:
+                share_dir = Path(temp)
+                result = capture.capture_policy_texts(browser, links, share_dir, timeout_ms=8000)
+
+                assert result["attempted"] == 5, result
+                assert result["archived"] == 1, result
+                by_url = {r["url"]: r for r in result["records"]}
+
+                archived = by_url[f"{origin}/privacy"]
+                assert archived["archived"] is True, archived
+                archived_path = Path(archived["path"])
+                assert archived_path.exists()
+                archived_text = archived_path.read_text(encoding="utf-8")
+                assert archived_text.startswith(f"Source URL: {origin}/privacy\n"), archived_text
+                assert "This Privacy Policy describes" in archived_text, archived_text
+                # The recorded hash must match what was actually written, not a
+                # hand-computed expectation - the browser's innerText extraction
+                # normalizes whitespace, so it will not byte-match the raw HTML.
+                body_text = archived_text.split("-" * 72 + "\n\n", 1)[1]
+                assert archived["sha256"] == hashlib.sha256(body_text.encode("utf-8")).hexdigest(), archived
+
+                login = by_url[f"{origin}/cookie-policy-login"]
+                assert login["archived"] is False and "login wall" in login["skipped_reason"], login
+
+                short = by_url[f"{origin}/privacy-short"]
+                assert short["archived"] is False and "too little text" in short["skipped_reason"], short
+
+                not_text = by_url[f"{origin}/privacy-data"]
+                assert not_text["archived"] is False and "not extractable as text" in not_text["skipped_reason"], not_text
+
+                blocked = by_url[f"{origin}/blocked-privacy"]
+                assert blocked["archived"] is False, blocked
+                assert "robots.txt disallows" in blocked["skipped_reason"], blocked
+                assert blocked["robots_note"] == "robots.txt consulted", blocked
+
+                # Only the one real archive exists on disk - a skip must never
+                # leave a stray file behind under any of its reasons.
+                archived_files = list((share_dir / "policies").glob("*.txt"))
+                assert len(archived_files) == 1, archived_files
+        finally:
+            server.shutdown()
+    ok("capture_policy_texts archives one real policy and records the four distinct real skip reasons")
+
+
 def test_run_detect_only_reports_and_annotates_a_real_control() -> None:
     """run_detect_only is the documented first step ("Always run the pre-flight
     first" in SKILL.md) and had zero test coverage before this: the CMP
@@ -3713,6 +3807,7 @@ def main() -> int:
             test_exercise_search_no_input_present(page)
             test_assert_clean_context_detects_dirty_state(page)
             test_run_scenario_end_to_end(browser)
+            test_capture_policy_texts_archives_and_skips_for_real_reasons(browser)
         finally:
             browser.close()
 
