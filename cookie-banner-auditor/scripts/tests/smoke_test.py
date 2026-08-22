@@ -1319,6 +1319,48 @@ def test_cookieyes_shape_scopes_to_the_visible_layer(page) -> None:
     ok("a CookieYes-shaped banner (verified live) scopes accept to the visible layer despite a duplicate hidden copy")
 
 
+def test_trustarc_shape_resolves_accept_and_reject_directly(page) -> None:
+    """First fixture for trustarc. Verified 2026-08-22 against trustarc.com's
+    own site: container, accept, reject, and settings selectors all matched
+    real markup exactly, and - unlike the enterprise iframe-embed pattern the
+    table's notes describe - both 'Accept All' and 'Reject Optional' are
+    directly visible at the first layer on this deployment, no settings
+    detour needed. Clicking 'Manage Settings' produced no
+    consent.trustarc.com iframe here, so the iframe/preference-manager
+    behaviour is documented as unverified on this deployment rather than
+    fixtured as if it were confirmed."""
+    _serve_cmp_fixture(page, """
+        <!doctype html><html><body>
+        <div id="truste-consent-track" class="tc-track ta-show ta-display-block" role="banner">
+          <div id="truste-consent-content" class="tc-content">
+            <p>This site uses cookies and related technologies for site operation, analytics, and advertising.</p>
+            <button id="truste-consent-button" class="tc-btn-primary tc-btn-icon">Accept All</button>
+            <button id="truste-consent-required" class="tc-btn-primary tc-btn-icon">Reject Optional</button>
+            <button id="truste-show-consent" class="tc-btn-secondary tc-btn-icon">Manage Settings</button>
+          </div>
+        </div>
+        <script>
+          document.getElementById('truste-consent-required').addEventListener('click', () => {
+            document.getElementById('truste-consent-track').remove();
+            document.cookie = 'notice_gdpr_prefs=0::; path=/';
+          });
+        </script></body></html>
+    """)
+    match = fingerprint_cmp(page, load_cmp_table())
+    assert match and match["id"] == "trustarc", match
+    entry = match["entry"]
+
+    accept_control, _, accept_resolution = find_control(page, "accept", entry)
+    assert accept_control is not None, accept_resolution
+    assert accept_resolution["path"] == "cmp_selector_table", accept_resolution
+
+    result = _denial_for(page, entry)
+    assert result["status"] == "direct_reject_clicked", result
+    assert result["resolution"]["reject"]["path"] == "cmp_selector_table", result["resolution"]
+    assert (result.get("verification") or {}).get("verified") is True, result
+    ok("a TrustArc-shaped banner (verified live against trustarc.com) resolves accept and reject directly")
+
+
 def test_safe_internal_links_refuses_dangerous_and_offsite(page) -> None:
     """This decides what the auditor navigates to on a live site the user owns.
     The skill promises no logout, no account change, no purchase and no
@@ -3794,6 +3836,7 @@ def main() -> int:
             test_termly_shape_settings_resolves_via_the_real_attribute(page)
             test_osano_shape_completes_via_settings_toggles_and_save(page)
             test_cookieyes_shape_scopes_to_the_visible_layer(page)
+            test_trustarc_shape_resolves_accept_and_reject_directly(page)
             test_safe_internal_links_refuses_dangerous_and_offsite(page)
             test_annotate_controls_marks_resolved_controls(page)
             test_annotation_labels_are_painted_above_every_outline(page)

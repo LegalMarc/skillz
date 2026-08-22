@@ -108,7 +108,7 @@
       "save": [],
       "consent_storage": ["notice_behavior", "notice_gdpr_prefs", "notice_preferences"],
       "iframe": true,
-      "notes": "The preference manager opens in an iframe from consent.trustarc.com."
+      "notes": "The preference manager opens in an iframe from consent.trustarc.com. Verified 2026-08-22 against trustarc.com's own site: container/accept/reject/settings selectors are all correct and both accept ('Accept All') and reject ('Reject Optional') are directly visible at the first layer, no settings detour needed. The iframe-based preference manager was NOT observed on this lightweight marketing-site deployment - clicking 'Manage Settings' produced no consent.trustarc.com iframe here, which is consistent with the enterprise SaaS embed this note describes simply not being how TrustArc's own site is configured, not with the note being wrong. Not re-verified against an enterprise deployment that actually uses it."
     },
     {
       "id": "osano",
