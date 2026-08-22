@@ -2324,9 +2324,183 @@ def test_cmp_table_integrity() -> None:
         assert fingerprint.get("selectors") or fingerprint.get("script_hosts"), \
             f"{entry['id']} has no fingerprint and can never be matched"
 
+        # A settings-panel denial with no save control (#6) has exactly one
+        # remaining automated verification path: a namespaced consent-storage
+        # write. Every entry must carry the namespace, and it is mandatory -
+        # not merely helpful - for the CMPs that have no save control at all.
+        assert entry.get("consent_storage"), f"{entry['id']} has no consent_storage namespace"
+        if not entry.get("save"):
+            assert entry.get("consent_storage"), (
+                f"{entry['id']} has an empty 'save' list and no consent_storage namespace - a "
+                "settings-path denial for it can never be verified."
+            )
+
     ids = [e["id"] for e in table]
     assert len(ids) == len(set(ids)), "CMP ids must be unique"
-    ok(f"CMP table integrity: {len(table)} entries, no save/accept or reject/accept collisions")
+    ok(f"CMP table integrity: {len(table)} entries, no save/accept or reject/accept collisions, "
+       "all carry a consent_storage namespace")
+
+
+def test_consent_namespace_and_key_matching() -> None:
+    """consent_namespace reads the table field; consent_key_matches applies the
+    cookie-key-splitting, prefix-rule, and case-insensitivity rules from #6."""
+    table = load_cmp_table()
+    hubspot = next(e for e in table if e["id"] == "hubspot")
+    iubenda = next(e for e in table if e["id"] == "iubenda")
+
+    ns = checks.consent_namespace(hubspot)
+    assert ns == ["__hs_cookie_cat_pref", "__hs_do_not_track", "__hs_initial_opt_in"], ns
+    assert checks.consent_namespace(None) == []
+    assert checks.consent_namespace({}) == []
+    assert checks.consent_namespace({"consent_storage": "not-a-list"}) == []
+
+    # Cookie snapshot keys are "{domain}|{name}"; split on the LAST '|' and
+    # match the name half.
+    assert checks.consent_key_matches(".example.test|__hs_cookie_cat_pref", ns, cookie_key=True) == "__hs_cookie_cat_pref"
+    assert checks.consent_key_matches(".example.test|_ga", ns, cookie_key=True) is None
+    # A domain-only key with no '|' at all still matches on its whole value.
+    assert checks.consent_key_matches("__hs_cookie_cat_pref", ns, cookie_key=False) == "__hs_cookie_cat_pref"
+
+    # A prefix rule ("_iub_cs-") matches only at the start.
+    iub_ns = checks.consent_namespace(iubenda)
+    assert checks.consent_key_matches("_iub_cs-9f3a", iub_ns, cookie_key=False) == "_iub_cs-"
+    assert checks.consent_key_matches("my_iub_cs-x", iub_ns, cookie_key=False) is None
+
+    # Exact rules are case-insensitive.
+    assert checks.consent_key_matches("__HS_COOKIE_CAT_PREF", ns, cookie_key=False) == "__hs_cookie_cat_pref"
+
+    ok("consent_namespace reads the CMP table and consent_key_matches applies prefix/exact/case rules")
+
+
+def test_narrow_consent_diff_ignores_noise_and_catches_namespaced_writes() -> None:
+    """The narrow diff must ignore ordinary analytics/session churn - a before/
+    after differing only in _ga, an unrelated localStorage key, or cmp_api -
+    and must still catch a real namespaced write. Both halves are asserted:
+    an implementation that always returned False would pass the noise half
+    alone."""
+    ns = ["__hs_cookie_cat_pref"]
+    before = {
+        "cookies": {".example.test|_ga": "h1"},
+        "local_storage": {"unrelated_key": "h1"},
+        "cmp_api": {"hasTCF": False},
+    }
+    noisy_after = {
+        "cookies": {".example.test|_ga": "h2"},
+        "local_storage": {"unrelated_key": "h9", "cmp_api": "h1"},
+        "cmp_api": {"hasTCF": True},
+    }
+    noisy_diff = checks.narrow_consent_diff(before, noisy_after, ns)
+    assert noisy_diff["namespaced_state_changed"] is False, noisy_diff
+    assert noisy_diff["new_keys"] == [] and noisy_diff["changed_keys"] == [] and noisy_diff["removed_keys"] == [], noisy_diff
+
+    real_after = {
+        "cookies": {".example.test|_ga": "h2", ".example.test|__hs_cookie_cat_pref": "h9"},
+        "local_storage": {"unrelated_key": "h9"},
+        "cmp_api": {"hasTCF": True},
+    }
+    real_diff = checks.narrow_consent_diff(before, real_after, ns)
+    assert real_diff["namespaced_state_changed"] is True, real_diff
+    assert real_diff["new_keys"] == [
+        {"store": "cookies", "key": ".example.test|__hs_cookie_cat_pref", "matched_rule": "__hs_cookie_cat_pref"}
+    ], real_diff
+
+    # An unknown/empty namespace is never "available", regardless of what changed.
+    unknown = checks.narrow_consent_diff(before, real_after, [])
+    assert unknown["namespace_available"] is False
+    assert unknown["namespaced_state_changed"] is False, unknown
+    ok("narrow_consent_diff ignores analytics/session/cmp_api noise and still catches a real namespaced write")
+
+
+def test_classify_autosave_denial_truth_table() -> None:
+    """Exercises every row of the #6 acceptance-criteria truth table."""
+    disabled_toggle = {"frame_url": "https://example.test/", "index": 0, "label": "Analytics", "state_before": True, "state_after": False}
+    examined_only = {"frame_url": "https://example.test/", "index": 0, "label": "Analytics", "state_before": True}
+    already_off = {"frame_url": "https://example.test/", "index": 0, "label": "Analytics", "state_before": False}
+
+    def reload_probe(states):
+        return {"toggle_states": [{"label": "Analytics", "state": s} for s in states], "banner_visible": True}
+
+    no_write = {"namespace_available": True, "namespaced_state_changed": False}
+    write = {"namespace_available": True, "namespaced_state_changed": True}
+    unavailable_but_flagged = {"namespace_available": False, "namespaced_state_changed": True}
+
+    # Row 1: >=1 disabled, all optional read back OFF -> verified via reload, regardless of diff.
+    r1 = checks.classify_autosave_denial(
+        {"examined": [examined_only], "disabled": [disabled_toggle], "unknown": []},
+        write, reload_probe([False]),
+    )
+    assert r1["status"] == checks.AUTOSAVE_VERIFIED_RELOAD and r1["verified"] is True, r1
+
+    # Row 2: >=1 disabled, inconclusive reload, namespaced write -> verified via storage.
+    r2 = checks.classify_autosave_denial(
+        {"examined": [examined_only], "disabled": [disabled_toggle], "unknown": []},
+        write, reload_probe([]),
+    )
+    assert r2["status"] == checks.AUTOSAVE_VERIFIED_STORAGE and r2["verified"] is True, r2
+
+    # Row 3 (load-bearing): >=1 disabled, read back ON again -> NOT verified even
+    # with a namespaced write present. Must beat row 2's storage evidence.
+    r3 = checks.classify_autosave_denial(
+        {"examined": [examined_only], "disabled": [disabled_toggle], "unknown": []},
+        write, reload_probe([True]),
+    )
+    assert r3["status"] == checks.AUTOSAVE_NO_SAVE_CONTROL and r3["verified"] is False, r3
+    assert "operated" in r3["note"] and "mutated" in r3["note"], r3["note"]
+
+    # Row 3 also beats a mix where some toggles read back off and one reads back on.
+    r3_mixed = checks.classify_autosave_denial(
+        {"examined": [examined_only], "disabled": [disabled_toggle], "unknown": []},
+        write, reload_probe([False, True]),
+    )
+    assert r3_mixed["verified"] is False, r3_mixed
+
+    # Row 4: >=1 disabled, inconclusive reload, no namespaced write -> not verified.
+    r4 = checks.classify_autosave_denial(
+        {"examined": [examined_only], "disabled": [disabled_toggle], "unknown": []},
+        no_write, reload_probe([]),
+    )
+    assert r4["status"] == checks.AUTOSAVE_NO_SAVE_CONTROL and r4["verified"] is False, r4
+
+    # Row 5: 0 disabled, some examined and already off, namespaced write -> verified via storage.
+    r5 = checks.classify_autosave_denial(
+        {"examined": [already_off], "disabled": [], "unknown": []},
+        write, reload_probe([True]),  # reload result is irrelevant on this branch
+    )
+    assert r5["status"] == checks.AUTOSAVE_VERIFIED_STORAGE and r5["verified"] is True, r5
+
+    # Row 6: 0 disabled, some examined and already off, no namespaced write -> not verified.
+    r6 = checks.classify_autosave_denial(
+        {"examined": [already_off], "disabled": [], "unknown": []},
+        no_write, reload_probe([False]),
+    )
+    assert r6["status"] == checks.AUTOSAVE_NO_SAVE_CONTROL and r6["verified"] is False, r6
+
+    # Row 7: none examined at all -> never verified, regardless of anything else.
+    r7 = checks.classify_autosave_denial(
+        {"examined": [], "disabled": [], "unknown": []},
+        write, reload_probe([False]),
+    )
+    assert r7["status"] == checks.AUTOSAVE_NO_SAVE_CONTROL and r7["verified"] is False, r7
+
+    # A namespace_available:False can never produce a _verified_storage status,
+    # even if some buggy caller left namespaced_state_changed True alongside it.
+    r_guard = checks.classify_autosave_denial(
+        {"examined": [already_off], "disabled": [], "unknown": []},
+        unavailable_but_flagged, reload_probe([]),
+    )
+    assert r_guard["status"] != checks.AUTOSAVE_VERIFIED_STORAGE, r_guard
+    assert r_guard["verified"] is False, r_guard
+
+    # Banner absence must never verify on its own: a probe reporting only
+    # "banner not visible", with no read-back and no namespaced write.
+    banner_only_probe = {"toggle_states": [], "banner_visible": False}
+    r_banner = checks.classify_autosave_denial(
+        {"examined": [examined_only], "disabled": [disabled_toggle], "unknown": []},
+        no_write, banner_only_probe,
+    )
+    assert r_banner["verified"] is False, r_banner
+
+    ok("classify_autosave_denial implements the #6 truth table, with reload-reversion beating a namespaced write")
 
 
 def test_repeat_stability() -> None:
@@ -3806,6 +3980,9 @@ def main() -> int:
     test_choose_headless_platform_rules()
     test_launch_browser_sandbox_args_and_error_message()
     test_cmp_table_integrity()
+    test_consent_namespace_and_key_matching()
+    test_narrow_consent_diff_ignores_noise_and_catches_namespaced_writes()
+    test_classify_autosave_denial_truth_table()
     test_repeat_stability()
     test_main_orchestrates_bundles_gates_and_exit_codes()
     test_main_validates_manual_flag_and_wires_detect_only()

@@ -906,6 +906,245 @@ def compare_repeat_runs(runs: list[set[str]]) -> dict[str, Any]:
 
 
 # --------------------------------------------------------------------------
+# Autosave-denial classification - settings-panel denial with no save control (#6)
+# --------------------------------------------------------------------------
+# Three CMPs in references/cmp-selectors.json (hubspot, trustarc, quantcast)
+# deliberately have an empty `save` list: their settings panel has no separate
+# save control, so a denial there is either autosaved as each toggle is
+# flipped or never persisted at all. Reporting "no denial control was
+# operated" for that path is false - a toggle *was* operated. What is missing
+# is proof the CMP kept it. The functions below decide that from already
+# -gathered facts; none of them drive a browser.
+#
+# `reload_probe` is the caller's already-gathered read-back after a reload:
+#   {
+#     "toggle_states": [{"label": str, "state": bool | None}, ...],  # the
+#         same optional toggles disable_optional_toggles operated (or found),
+#         re-read after a reload; state is None when re-location failed.
+#     "banner_visible": bool | None,  # observational only - see the note
+#         below on why banner absence can never verify anything by itself.
+#   }
+# A future ticket wires the actual reload; this one only defines the shape
+# the pure classifier consumes.
+
+def consent_namespace(cmp_entry: dict[str, Any] | None) -> list[str]:
+    """The CMP's known consent-storage key namespace, or [] when unknown.
+
+    This is `references/cmp-selectors.json`'s `consent_storage` field, read
+    via `load_cmp_table()`. Every entry in the table carries a non-empty list
+    (see `test_cmp_table_integrity`); an unfingerprinted CMP or a malformed
+    entry yields the empty list, and every caller here treats that as "no
+    namespaced verification is possible" rather than guessing.
+    """
+    if not cmp_entry:
+        return []
+    namespace = cmp_entry.get("consent_storage")
+    return [str(item) for item in namespace] if isinstance(namespace, list) else []
+
+
+def consent_key_matches(observed_key: str, namespace: list[str], *, cookie_key: bool = False) -> str | None:
+    """The namespace entry `observed_key` matches, or None.
+
+    Cookie snapshot keys are `"{domain}|{name}"` (see `consent_snapshot`), so
+    with `cookie_key=True` this splits on the *last* `|` and matches only the
+    name half - a domain that happens to contain `|` must not corrupt the
+    match. localStorage keys carry no such prefix and match whole.
+
+    A namespace entry ending in `-` or `_` is a prefix rule (iubenda's
+    `_iub_cs-<id>` cookies carry a random suffix per visitor); everything else
+    must match exactly. Both forms are case-insensitive.
+    """
+    if not namespace or not observed_key:
+        return None
+    name = observed_key.rsplit("|", 1)[-1] if cookie_key else observed_key
+    name_lower = name.lower()
+    for rule in namespace:
+        rule_lower = str(rule).lower()
+        if rule_lower.endswith("-") or rule_lower.endswith("_"):
+            if name_lower.startswith(rule_lower):
+                return rule
+        elif name_lower == rule_lower:
+            return rule
+    return None
+
+
+def narrow_consent_diff(before: dict[str, Any], after: dict[str, Any], namespace: list[str]) -> dict[str, Any]:
+    """Diff only the CMP's own consent-storage keys between two snapshots.
+
+    The broad diff (`verify_choice_registered`) rests on *any* cookie or
+    storage change, which is exactly wrong on the no-save-control path: the
+    banner usually stays open, so there is no `banner_dismissed` signal, and
+    ordinary analytics activity (`_ga`, a session cookie) would otherwise be
+    enough to certify a denial that was never actually recorded. This looks
+    only at keys matching the CMP's declared namespace, in `cookies` and
+    `local_storage` only.
+    """
+    namespace = namespace or []
+    namespace_available = bool(namespace)
+    new_keys: list[dict[str, Any]] = []
+    changed_keys: list[dict[str, Any]] = []
+    removed_keys: list[dict[str, Any]] = []
+
+    for store, is_cookie_store in (("cookies", True), ("local_storage", False)):
+        before_store = (before or {}).get(store) or {}
+        after_store = (after or {}).get(store) or {}
+        before_keys = set(before_store)
+        after_keys = set(after_store)
+
+        for key in sorted(after_keys - before_keys):
+            rule = consent_key_matches(key, namespace, cookie_key=is_cookie_store)
+            if rule:
+                new_keys.append({"store": store, "key": key, "matched_rule": rule})
+
+        for key in sorted(before_keys & after_keys):
+            if before_store[key] == after_store[key]:
+                continue
+            rule = consent_key_matches(key, namespace, cookie_key=is_cookie_store)
+            if rule:
+                changed_keys.append({"store": store, "key": key, "matched_rule": rule})
+
+        for key in sorted(before_keys - after_keys):
+            rule = consent_key_matches(key, namespace, cookie_key=is_cookie_store)
+            if rule:
+                removed_keys.append({"store": store, "key": key, "matched_rule": rule})
+
+    namespaced_state_changed = bool(new_keys or changed_keys or removed_keys)
+    if not namespace_available:
+        note = "No consent_storage namespace is known for this CMP; namespaced verification is unavailable."
+    elif namespaced_state_changed:
+        note = "A key in the CMP's declared consent-storage namespace changed."
+    else:
+        note = "No key in the CMP's declared consent-storage namespace changed."
+
+    return {
+        "namespace": list(namespace),
+        "namespace_available": namespace_available,
+        "new_keys": new_keys,
+        "changed_keys": changed_keys,
+        "removed_keys": removed_keys,
+        "namespaced_state_changed": namespaced_state_changed,
+        "note": note,
+    }
+
+
+AUTOSAVE_VERIFIED_RELOAD = "toggles_disabled_autosave_verified_reload"
+AUTOSAVE_VERIFIED_STORAGE = "toggles_disabled_autosave_verified_storage"
+AUTOSAVE_NO_SAVE_CONTROL = "toggles_disabled_no_save_control"
+
+
+def classify_autosave_denial(
+    toggle_result: dict[str, Any],
+    narrow_diff: dict[str, Any],
+    reload_probe: dict[str, Any],
+) -> dict[str, Any]:
+    """Decide whether a settings-panel denial with no save control was kept.
+
+    Implements the truth table from issue #6 exactly. Two things are
+    load-bearing and deliberately checked first, ahead of everything else:
+
+    - a toggle reading back ON after a reload is affirmative evidence the CMP
+      *discarded* the choice, and beats even a namespaced storage write - a
+      CMP can write a namespaced key and still not honour it on reload;
+    - banner absence is never consulted here at all, so a probe reporting
+      only "banner not visible" can never verify anything by itself.
+    """
+    toggle_result = toggle_result or {}
+    narrow_diff = narrow_diff or {}
+    reload_probe = reload_probe or {}
+
+    examined = [e for e in (toggle_result.get("examined") or []) if isinstance(e, dict)]
+    disabled = [e for e in (toggle_result.get("disabled") or []) if isinstance(e, dict)]
+    some_disabled = bool(disabled)
+    already_off = (not some_disabled) and any(e.get("state_before") is False for e in examined)
+
+    states = [t.get("state") for t in (reload_probe.get("toggle_states") or []) if isinstance(t, dict)]
+    any_read_back_on = any(state is True for state in states)
+    all_read_back_off = bool(states) and all(state is False for state in states)
+
+    namespaced_write = bool(narrow_diff.get("namespace_available")) and bool(narrow_diff.get("namespaced_state_changed"))
+
+    if not examined:
+        return {
+            "status": AUTOSAVE_NO_SAVE_CONTROL,
+            "verified": False,
+            "note": "No optional denial toggle was found, so no choice was operated and there is nothing to verify.",
+            "basis": "no_controls_examined",
+        }
+
+    if some_disabled:
+        if any_read_back_on:
+            return {
+                "status": AUTOSAVE_NO_SAVE_CONTROL,
+                "verified": False,
+                "note": (
+                    "Optional denial toggles were operated and page state was mutated, but a reload read "
+                    "at least one back ON: this CMP has no save control on this path and discarded the choice."
+                ),
+                "basis": "reload_reverted",
+            }
+        if all_read_back_off:
+            return {
+                "status": AUTOSAVE_VERIFIED_RELOAD,
+                "verified": True,
+                "note": (
+                    "Optional denial toggles were disabled and a reload confirmed every one read back OFF: "
+                    "the CMP persisted the choice without a separate save control."
+                ),
+                "basis": "reload_confirmed_off",
+            }
+        if namespaced_write:
+            return {
+                "status": AUTOSAVE_VERIFIED_STORAGE,
+                "verified": True,
+                "note": (
+                    "Optional denial toggles were operated and a namespaced consent-storage write was "
+                    "observed for this CMP, though the reload read-back was inconclusive."
+                ),
+                "basis": "namespaced_storage_write",
+            }
+        return {
+            "status": AUTOSAVE_NO_SAVE_CONTROL,
+            "verified": False,
+            "note": (
+                "Optional denial toggles were operated and page state was mutated, but neither a reload "
+                "read-back nor a namespaced consent-storage write confirmed the choice persisted."
+            ),
+            "basis": "unconfirmed",
+        }
+
+    if already_off:
+        if namespaced_write:
+            return {
+                "status": AUTOSAVE_VERIFIED_STORAGE,
+                "verified": True,
+                "note": (
+                    "Optional denial toggles were already off, and a namespaced consent-storage write was "
+                    "observed for this CMP."
+                ),
+                "basis": "already_off_namespaced_storage_write",
+            }
+        return {
+            "status": AUTOSAVE_NO_SAVE_CONTROL,
+            "verified": False,
+            "note": (
+                "Optional denial toggles were already off, but no namespaced consent-storage write "
+                "confirmed the state as this CMP's own recorded choice."
+            ),
+            "basis": "already_off_unconfirmed",
+        }
+
+    return {
+        "status": AUTOSAVE_NO_SAVE_CONTROL,
+        "verified": False,
+        "note": (
+            "Optional denial toggles were examined but neither confirmed disabled nor confirmed already off, "
+            "so there is nothing to verify."
+        ),
+        "basis": "no_confirmed_denial_state",
+    }
+
+
+# --------------------------------------------------------------------------
 # Retry classification - transient transport failures vs. consent findings (#12)
 # --------------------------------------------------------------------------
 
