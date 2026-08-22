@@ -1919,10 +1919,14 @@ def assert_clean_context(context: BrowserContext, page: Page) -> dict[str, Any]:
 
 
 def _collect_consent_mode(events: dict[str, list[dict[str, Any]]]) -> dict[str, Any]:
-    """Pull Google Consent Mode signals out of the observed request log (C3)."""
+    """Pull transmission-layer consent signals out of the request log (C3).
+
+    Google Consent Mode and Meta Limited Data Use; see checks.parse_consent_signal
+    for why other vendors are absent.
+    """
     signals: list[dict[str, Any]] = []
     for request in events.get("requests", []) or []:
-        parsed = checks.parse_consent_mode_signal(str(request.get("url", "")))
+        parsed = checks.parse_consent_signal(str(request.get("url", "")))
         if parsed:
             parsed["phase"] = request.get("phase")
             parsed["time"] = request.get("time")

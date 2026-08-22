@@ -221,16 +221,86 @@ def parse_consent_mode_signal(url: str) -> dict[str, Any] | None:
     }
 
 
-def summarize_consent_mode(signals: list[dict[str, Any]]) -> dict[str, Any]:
-    """Collapse per-request consent-mode signals into a per-scenario summary."""
-    recognized = [s for s in signals if s.get("gcs_recognized")]
+#: Hosts on which Meta's Limited Data Use flag is meaningful.
+META_LDU_HOSTS = ("facebook.com", "facebook.net", "instagram.com")
+
+
+def parse_meta_ldu_signal(url: str) -> dict[str, Any] | None:
+    """Extract Meta's Limited Data Use flag from a Meta pixel request.
+
+    LDU is Meta's transmission-layer restriction: the pixel still fires, but
+    `dpo=LDU` tells Meta to process the event under limited terms, with `dpoco`
+    and `dpost` carrying the country and state Meta should apply. It is the
+    closest Meta analogue to a denied Google Consent Mode signal, and like
+    Consent Mode it means a tag firing is not by itself proof consent was
+    ignored.
+
+    Read as an observation, never as a conclusion. This parser recognises the
+    documented parameter names; it does not verify that Meta honoured them, and
+    a `dpoco`/`dpost` of 0 means "infer from IP" rather than a specific place.
+    Confirm against a real capture before resting anything on it.
+    """
+    try:
+        parts = urlsplit(url)
+        host = (parts.hostname or "").lower()
+        query = dict(parse_qsl(parts.query, keep_blank_values=True))
+    except Exception:
+        return None
+    if not any(host == known or host.endswith("." + known) for known in META_LDU_HOSTS):
+        return None
+    if "dpo" not in query:
+        return None
+    raw = query.get("dpo", "")
     return {
-        "signal_count": len(signals),
+        "vendor": "meta",
+        "host": host,
+        "ldu_raw": raw or None,
+        "ldu_active": raw.upper() == "LDU",
+        "country_raw": query.get("dpoco") or None,
+        "state_raw": query.get("dpost") or None,
+        "pixel_id": query.get("id"),
+    }
+
+
+def parse_consent_signal(url: str) -> dict[str, Any] | None:
+    """Any recognised transmission-layer consent signal on one request.
+
+    Dispatches by vendor. Google Consent Mode and Meta LDU are implemented.
+
+    TikTok and other vendors are deliberately absent: their wire formats have
+    not been confirmed against a real capture here, and inventing a parameter
+    name would manufacture evidence for a signal that was never observed. Add a
+    vendor only after seeing its parameters in a HAR from a live run.
+    """
+    google = parse_consent_mode_signal(url)
+    if google:
+        return {"vendor": "google", **google}
+    return parse_meta_ldu_signal(url)
+
+
+def summarize_consent_mode(signals: list[dict[str, Any]]) -> dict[str, Any]:
+    """Collapse per-request consent signals into a per-scenario summary.
+
+    The Google-derived fields are computed from Google signals alone. Meta LDU
+    is reported alongside rather than folded in: `all_signals_denied` drives the
+    `consent-enforced-at-transmission` finding, and letting a Meta signal that
+    carries no `gcs` value dilute or satisfy that test would silently change
+    what the finding asserts.
+    """
+    google = [s for s in signals if s.get("vendor", "google") == "google"]
+    meta = [s for s in signals if s.get("vendor") == "meta"]
+    recognized = [s for s in google if s.get("gcs_recognized")]
+    return {
+        "signal_count": len(google),
         "recognized_count": len(recognized),
-        "present": bool(signals),
+        "present": bool(google),
         "all_signals_denied": bool(recognized) and all(s.get("all_denied") for s in recognized),
         "any_signal_granted": any(not s.get("all_denied") for s in recognized),
-        "distinct_gcs_values": sorted({s.get("gcs_raw") for s in signals if s.get("gcs_raw")}),
+        "distinct_gcs_values": sorted({s.get("gcs_raw") for s in google if s.get("gcs_raw")}),
+        "vendors": sorted({s.get("vendor", "google") for s in signals}),
+        "meta_ldu_signal_count": len(meta),
+        "meta_ldu_active": bool(meta) and all(s.get("ldu_active") for s in meta),
+        "total_signal_count": len(signals),
     }
 
 

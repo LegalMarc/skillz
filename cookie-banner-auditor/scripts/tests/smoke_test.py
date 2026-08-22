@@ -1112,6 +1112,55 @@ def test_repeat_stability() -> None:
 # B - validity gating
 # ---------------------------------------------------------------------------
 
+def test_meta_ldu_signal_parsing() -> None:
+    """Meta LDU is a transmission-layer restriction like a denied Consent Mode
+    signal, and must be recognised without contaminating the Google-derived
+    fields that drive the consent-enforced-at-transmission finding."""
+    ldu = checks.parse_meta_ldu_signal(
+        "https://www.facebook.com/tr/?id=123&ev=PageView&dpo=LDU&dpoco=1&dpost=1000"
+    )
+    assert ldu is not None and ldu["vendor"] == "meta", ldu
+    assert ldu["ldu_active"] is True, ldu
+    assert ldu["country_raw"] == "1" and ldu["state_raw"] == "1000", ldu
+    assert ldu["pixel_id"] == "123", ldu
+
+    # A pixel request with no dpo parameter carries no LDU signal at all.
+    assert checks.parse_meta_ldu_signal("https://www.facebook.com/tr/?id=1&ev=PageView") is None
+    # dpo present but not LDU: recognised, and explicitly not active.
+    off = checks.parse_meta_ldu_signal("https://www.facebook.com/tr/?id=1&dpo=0")
+    assert off is not None and off["ldu_active"] is False, off
+    # Right parameter, wrong vendor: must not be claimed as a Meta signal.
+    assert checks.parse_meta_ldu_signal("https://evil.test/tr/?dpo=LDU") is None
+
+    # Dispatch picks the right vendor for each.
+    google = checks.parse_consent_signal("https://www.google-analytics.com/g/collect?gcs=G100&tid=G-1")
+    assert google["vendor"] == "google" and google["all_denied"] is True, google
+    meta = checks.parse_consent_signal("https://www.facebook.com/tr/?id=1&dpo=LDU")
+    assert meta["vendor"] == "meta", meta
+    assert checks.parse_consent_signal("https://example.test/page") is None
+
+    # A Meta signal must not dilute or satisfy the Google-only test that drives
+    # the consent-enforced-at-transmission finding.
+    google_only = checks.summarize_consent_mode([google])
+    assert google_only["all_signals_denied"] is True, google_only
+    assert google_only["signal_count"] == 1, google_only
+
+    mixed = checks.summarize_consent_mode([google, meta])
+    assert mixed["all_signals_denied"] is True, "the Meta row must not dilute the Google verdict"
+    assert mixed["signal_count"] == 1, f"signal_count stays Google-only: {mixed}"
+    assert mixed["total_signal_count"] == 2, mixed
+    assert mixed["vendors"] == ["google", "meta"], mixed
+    assert mixed["meta_ldu_active"] is True, mixed
+
+    meta_only = checks.summarize_consent_mode([meta])
+    assert meta_only["present"] is False, (
+        "a Meta LDU signal alone must not read as Consent Mode being present, "
+        f"which would let it satisfy a Google-specific finding: {meta_only}"
+    )
+    assert meta_only["all_signals_denied"] is False, meta_only
+    ok("Meta LDU is parsed and summarised without contaminating the Google consent-mode verdict")
+
+
 def test_endpoint_key_is_shared_and_strict() -> None:
     """One definition of endpoint identity, used by both the stability check and
     the run diff. They previously disagreed at the edges, so a URL could count
@@ -1989,6 +2038,7 @@ def main() -> int:
     test_issue_matrix_renders_in_report()
     test_cmp_table_integrity()
     test_repeat_stability()
+    test_meta_ldu_signal_parsing()
     test_endpoint_key_is_shared_and_strict()
     test_viewport_profiles()
     test_context_options_device_emulation()
