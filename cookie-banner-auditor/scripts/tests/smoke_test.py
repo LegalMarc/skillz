@@ -12,6 +12,7 @@ produced wrong answers before.
 
 from __future__ import annotations
 
+import builtins
 import hashlib
 import json
 import os
@@ -33,6 +34,7 @@ from lib import checks
 from lib.analysis import (
     analyze_and_write,
     build_cookie_inventory,
+    build_request_inventory,
     generate_findings,
     partition_findings,
     preconsent_tracking_assertion_hits,
@@ -51,6 +53,7 @@ from lib.capture import (
     annotate_controls,
     annotation_layer_present,
     assert_clean_context,
+    banner_visible,
     build_context_options,
     capture_checkpoint,
     consent_snapshot,
@@ -65,6 +68,8 @@ from lib.capture import (
     measure_focus_visibility,
     SYNTHETIC_VALUES,
     measure_tab_order,
+    probe_autosave,
+    read_optional_toggle_states,
     run_scenario,
     safe_internal_links,
     verify_choice_registered,
@@ -84,6 +89,7 @@ from lib.util import (
     read_json,
     run_fingerprint,
     sanitize_har_data,
+    short_hash,
     utc_now,
 )
 
@@ -503,51 +509,462 @@ def test_settings_path_denial(page) -> None:
     ok("settings-layer denial disables optional toggles and saves")
 
 
-def test_settings_path_denial_without_save_control(page) -> None:
-    """A preferences layer whose toggles can be switched off but which offers no
-    resolvable save control must not report "No denial control was operated" -
-    the toggles *were* operated and page state was mutated.
+#: Shared by the #7 autosave-denial fixtures below: a settings panel with two
+#: optional toggles and *no save button at all*, matching HubSpot/TrustArc/
+#: Quantcast Choice's shape (`save` selector list intentionally empty). A
+#: persistent `#managePrefs` control stays reachable even once the initial
+#: banner is dismissed - the real-world "manage cookies" link/icon most CMPs
+#: keep around - so a reload can still reopen the settings layer to read the
+#: toggles back. `%PERSIST%` is substituted per-fixture with whatever (if
+#: anything) the toggle's `change` handler does.
+_AUTOSAVE_FIXTURE_TEMPLATE = """
+    <!doctype html><html><body>
+    <div id="cookie-consent" role="dialog" style="position:fixed;bottom:0;left:0;right:0;padding:24px;background:white">
+      <p>Choose cookie preferences for analytics and advertising.</p>
+      <button id="accept">Accept All</button>
+    </div>
+    <button id="managePrefs" style="position:fixed;bottom:0;right:0">Cookie Preferences</button>
+    <div id="panel" role="dialog" hidden>
+      <label><input id="necessary" type="checkbox" checked disabled> Strictly necessary</label>
+      <label><input id="analytics" type="checkbox" checked> Analytics</label>
+      <label><input id="ads" type="checkbox" checked> Advertising</label>
+    </div>
+    <script>
+      function getCookie(name) {
+        const match = document.cookie.match(new RegExp('(?:^|; )' + name + '=([^;]*)'));
+        return match ? match[1] : null;
+      }
+      %ON_LOAD%
+      managePrefs.addEventListener('click', () => { panel.hidden = false; });
+      function persist() { %PERSIST% }
+      analytics.addEventListener('change', persist);
+      ads.addEventListener('change', persist);
+    </script></body></html>
+"""
 
-    Reachable in the real world whenever a CMP's `save` selector list is
-    intentionally empty (HubSpot, TrustArc, Quantcast Choice), so the fixture
-    reproduces that shape: an open panel with optional toggles and no save
-    button at all."""
-    page.set_content("""
-        <!doctype html><html><body>
-        <div id="cookie-consent" role="dialog" style="position:fixed;bottom:0;left:0;right:0;padding:24px;background:white">
-          <p>Choose cookie preferences for analytics and advertising.</p>
-          <button id="accept">Accept All</button>
-          <button id="settings">Cookie Preferences</button>
-        </div>
-        <div id="panel" role="dialog" hidden>
-          <label><input id="necessary" type="checkbox" checked disabled> Strictly necessary</label>
-          <label><input id="analytics" type="checkbox" checked> Analytics</label>
-          <label><input id="ads" type="checkbox" checked> Advertising</label>
-        </div>
-        <script>
-          settings.addEventListener('click', () => { document.querySelector('#cookie-consent').hidden=true; panel.hidden=false; });
-        </script></body></html>
-    """)
-    result = execute_denial(page, page.context, wait_ms=20, manual=False, share_scenario_dir=Path(tempfile.mkdtemp()))
+
+def test_settings_path_autosave_verified_by_reload(page) -> None:
+    """Acceptance criterion #1 (#7): unchecking a toggle writes the CMP's own
+    consent cookie, there is no save button anywhere, and a reload confirms
+    the choice was kept - toggles read back unchecked and the original banner
+    stays gone. That is enough to verify a settings-path denial without ever
+    finding a save control."""
+    html = _AUTOSAVE_FIXTURE_TEMPLATE.replace(
+        "%ON_LOAD%",
+        # `load_seq` counts loads of this fixture: it reads back "1" for as
+        # long as only the initial navigation has happened, and "2" once
+        # probe_autosave has reloaded. That makes it a load-time side effect
+        # a consent snapshot cannot fake - see the evidence-ordering
+        # assertions at the end of this test.
+        "document.cookie = 'load_seq=' + (parseInt(getCookie('load_seq') || '0', 10) + 1) "
+        "+ '; path=/; max-age=31536000'; "
+        "if (getCookie('consent_pref') === 'off') { "
+        "document.getElementById('cookie-consent').hidden = true; analytics.checked = false; ads.checked = false; }",
+    ).replace(
+        "%PERSIST%",
+        "document.cookie = 'consent_pref=' + ((analytics.checked || ads.checked) ? 'on' : 'off') + '; path=/; max-age=31536000';",
+    )
+    holder = {"html": html}
+    serve_fixture(page, holder)
+    # These fixtures share the "fixture.test" origin across tests within the
+    # same browser context; without clearing, a consent cookie left by an
+    # earlier autosave test would be read back on the very first load here,
+    # before this test ever touches a toggle.
+    page.context.clear_cookies()
+    page.goto("https://fixture.test/")
+
+    result = execute_denial(page, page.context, wait_ms=50, manual=False, share_scenario_dir=Path(tempfile.mkdtemp()))
+    live_cookies = {cookie["name"]: cookie["value"] for cookie in page.context.cookies()}
+    page.unroute("**/*")
+
+    assert result["status"] == checks.AUTOSAVE_VERIFIED_RELOAD, result
+    assert result["status"] in COMPLETED_DENIAL_STATUSES, result["status"]
+    assert result["verification"]["verified"] is True, result["verification"]
+    assert result["verification"]["basis"] == "reload_confirmed_off", result["verification"]
+
+    validity = _scenario_validity("deny", result, [])
+    assert validity["interaction_completed"] is True, validity
+    assert validity["valid"] is True, validity
+    ok("a reload confirming toggles read back off verifies a settings-path denial with no save control")
+
+    # Evidence-ordering acceptance criterion (#7): consent_snapshot_before and
+    # consent_snapshot_after must both be taken *before* the reload inside
+    # probe_autosave - otherwise the reload the probe verifies against could
+    # have influenced the very snapshots it is being checked against, making
+    # the check circular. Assert the ordering at the execute_denial level,
+    # not only on probe_autosave in isolation: moving `finish()` (which takes
+    # both snapshots) after `probe_autosave()` in execute_denial must fail
+    # here.
+    #
+    # Asserted structurally, via the fixture's `load_seq` cookie, and
+    # deliberately NOT by comparing the snapshots' `time` fields. `utc_now()`
+    # truncates to whole seconds and the probe's reload+settle finishes well
+    # inside one second, so a timestamp comparison holds even when the order
+    # is inverted - measured at roughly a 1-in-4 escape rate against this
+    # exact mutation, which is no guard at all. `load_seq` instead names
+    # *which load* a snapshot saw, and no clock resolution can blur that.
+    load_seq_key = "fixture.test|load_seq"
+    first_load, second_load = short_hash("1"), short_hash("2")
+    assert result["consent_snapshot_before"]["cookies"].get(load_seq_key) == first_load, (
+        result["consent_snapshot_before"]["cookies"]
+    )
+    assert result["consent_snapshot_after"]["cookies"].get(load_seq_key) == first_load, (
+        "consent_snapshot_after saw a load later than the initial navigation, so it was taken after "
+        f"probe_autosave's reload: {result['consent_snapshot_after']['cookies']}"
+    )
+    assert first_load != second_load
+    # Positive control: the probe's reload really did bump `load_seq`, so the
+    # equality above is a live constraint rather than a marker that never
+    # moves and would pass under any ordering.
+    assert live_cookies.get("load_seq") == "2", live_cookies
+    ok("consent_snapshot_before/after are taken before probe_autosave's reload, not after")
+
+
+def test_settings_path_autosave_reload_reverts_stays_unverified(page) -> None:
+    """Acceptance criterion #2 (#7): unchecking the toggles writes nothing at
+    all, and a reload re-renders them checked again - the CMP discarded the
+    choice. This must stay `toggles_disabled_no_save_control`, unverified and
+    invalid, with a note describing what was actually observed.
+
+    This replaces the old fixture's assertion on "never committed", which was
+    the exact defect #7 exists to fix: that note was attached unconditionally,
+    even though nothing had actually confirmed the preference was discarded
+    rather than merely unconfirmed."""
+    html = _AUTOSAVE_FIXTURE_TEMPLATE.replace("%ON_LOAD%", "").replace("%PERSIST%", "")
+    holder = {"html": html}
+    serve_fixture(page, holder)
+    # These fixtures share the "fixture.test" origin across tests within the
+    # same browser context; without clearing, a consent cookie left by an
+    # earlier autosave test would be read back on the very first load here,
+    # before this test ever touches a toggle.
+    page.context.clear_cookies()
+    page.goto("https://fixture.test/")
+
+    result = execute_denial(page, page.context, wait_ms=50, manual=False, share_scenario_dir=Path(tempfile.mkdtemp()))
+    page.unroute("**/*")
 
     assert result["status"] == UNSAVED_PREFERENCE_STATUS, result
+    assert UNSAVED_PREFERENCE_STATUS not in COMPLETED_DENIAL_STATUSES
+
     disabled = result.get("toggle_result", {}).get("disabled", [])
     assert len(disabled) >= 2, result
 
+    verification = result.get("verification") or {}
+    assert verification.get("verified") is False, verification
+    note = verification.get("note", "")
+    assert "No denial control was operated" not in note, (
+        f"the toggles were operated, so this note is false: {note!r}"
+    )
+    # The entire point of #7: the old note asserted "never committed"
+    # regardless of what was actually observed. This one is grounded in what
+    # the reload showed - the toggles being operated, and a reload reading at
+    # least one of them back on.
+    assert "never committed" not in note, note
+    assert "toggles were operated" in note, note
+    assert "reload read" in note and "back ON" in note, note
+    assert "discarded the choice" in note, note
+
+    validity = _scenario_validity("deny", result, [])
+    assert validity["interaction_completed"] is False, validity
+    assert validity["valid"] is False, validity
+    ok("a reload reverting the toggles keeps the denial unverified with a note grounded in what was observed")
+
+
+def test_settings_path_autosave_verified_by_storage_write(page) -> None:
+    """Acceptance criterion #3 (#7): after a reload there is no way back into
+    the settings layer at all (a real shape - see Termly, per
+    UNSAVED_PREFERENCE_STATUS's docstring), but the CMP's own namespaced
+    consent-storage key was written before the reload. That alone is enough
+    to verify the denial."""
+    # `fixture_reload_marker` is in the declared namespace but is only ever
+    # written on a load that already sees a consent cookie - i.e. never on
+    # the initial navigation, only on probe_autosave's reload. It is the
+    # narrow diff's half of the evidence-ordering guard below.
+    cmp_entry = {
+        "id": "fixture-storage-cmp",
+        "consent_storage": ["fixture_consent_pref", "fixture_reload_marker"],
+    }
+    html = _AUTOSAVE_FIXTURE_TEMPLATE.replace(
+        "%ON_LOAD%",
+        "if (getCookie('fixture_consent_pref')) { document.getElementById('cookie-consent').remove(); "
+        "document.getElementById('managePrefs').remove(); "
+        "document.cookie = 'fixture_reload_marker=1; path=/; max-age=31536000'; }",
+    ).replace(
+        "%PERSIST%",
+        "document.cookie = 'fixture_consent_pref=' + ((analytics.checked || ads.checked) ? 'on' : 'off') + '; path=/; max-age=31536000';",
+    )
+    holder = {"html": html}
+    serve_fixture(page, holder)
+    # These fixtures share the "fixture.test" origin across tests within the
+    # same browser context; without clearing, a consent cookie left by an
+    # earlier autosave test would be read back on the very first load here,
+    # before this test ever touches a toggle.
+    page.context.clear_cookies()
+    page.goto("https://fixture.test/")
+
+    result = execute_denial(page, page.context, wait_ms=50, manual=False,
+                            share_scenario_dir=Path(tempfile.mkdtemp()), cmp_entry=cmp_entry)
+    live_cookies = {cookie["name"]: cookie["value"] for cookie in page.context.cookies()}
+    page.unroute("**/*")
+
+    assert result["status"] == checks.AUTOSAVE_VERIFIED_STORAGE, result
+    assert result["status"] in COMPLETED_DENIAL_STATUSES
+    assert result["verification"]["verified"] is True, result["verification"]
+
+    autosave_probe = result.get("autosave_probe") or {}
+    assert autosave_probe.get("settings_reopened") is False, (
+        "this fixture removes every reopen-settings control on reload; the probe must not fabricate one"
+    )
+    narrow = result.get("narrow_diff") or {}
+    assert narrow.get("namespace_available") is True, narrow
+    assert narrow.get("namespaced_state_changed") is True, narrow
+
+    validity = _scenario_validity("deny", result, [])
+    assert validity["valid"] is True, validity
+    ok("a namespaced consent-storage write verifies a settings-path denial when there is no way back into settings after reload")
+
+    # Evidence-ordering acceptance criterion (#7), narrow-diff half: the diff
+    # that certifies this denial must be computed from snapshots taken before
+    # probe_autosave's reload, or the reload it is verified against fed the
+    # very evidence doing the verifying. `fixture_reload_marker` is written
+    # only on a reload, and is inside the declared namespace, so a diff
+    # computed after the reload necessarily picks it up. Structural, not
+    # timing-based, for the reasons given in
+    # test_settings_path_autosave_verified_by_reload.
+    new_keys = {entry["key"] for entry in narrow.get("new_keys") or []}
+    assert new_keys == {"fixture.test|fixture_consent_pref"}, (
+        "the narrow diff saw a namespaced key that only a reload writes, so it was computed after "
+        f"probe_autosave's reload rather than before it: {new_keys}"
+    )
+    # Positive control: the marker really was written by the probe's reload,
+    # and really is in the namespace - otherwise the assertion above could
+    # never fail under any ordering.
+    assert live_cookies.get("fixture_reload_marker") == "1", live_cookies
+    assert checks.consent_key_matches(
+        "fixture.test|fixture_reload_marker", cmp_entry["consent_storage"], cookie_key=True,
+    ), cmp_entry
+    ok("the narrow consent diff is computed before probe_autosave's reload, not after")
+
+
+def test_probe_autosave_reload_ordering_and_phase_tagging(page) -> None:
+    """`probe_autosave` in isolation, covering the parts of #7's acceptance
+    criteria that execute_denial's own settings-click side effects would
+    confound if tested only end-to-end (opening the settings layer already
+    hides the banner, which would make a before/after banner comparison
+    trivially true regardless of whether the reload itself changed anything):
+
+    - screenshot, probe_started/probe_finished, and phase restoration;
+    - the reload demonstrably changing page state (banner visibility) rather
+      than being a no-op the probe or narrow diff could be trivially
+      "verified" against;
+    - the probe's own reload traffic is stamped with phase
+      `denial_verification_reload`, and that phase - and only that phase -
+      is what keeps it out of the post-denial-tracking finding.
+    """
+    html = _AUTOSAVE_FIXTURE_TEMPLATE.replace(
+        "%ON_LOAD%",
+        "fetch('https://connect.facebook.net/en_US/fbevents.js', {mode: 'no-cors'}).catch(() => {}); "
+        "if (getCookie('consent_pref') === 'off') { "
+        "document.getElementById('cookie-consent').hidden = true; analytics.checked = false; ads.checked = false; }",
+    ).replace(
+        "%PERSIST%",
+        "document.cookie = 'consent_pref=' + ((analytics.checked || ads.checked) ? 'on' : 'off') + '; path=/; max-age=31536000';",
+    )
+    holder = {"html": html}
+    serve_fixture(page, holder)
+    # These fixtures share the "fixture.test" origin across tests within the
+    # same browser context; without clearing, a consent cookie left by an
+    # earlier autosave test would be read back on the very first load here,
+    # before this test ever touches a toggle.
+    page.context.clear_cookies()
+    page.goto("https://fixture.test/")
+
+    # Simulate what execute_denial does before ever calling probe_autosave:
+    # open the settings layer and switch the optional toggles off.
+    page.click("#managePrefs")
+    page.click("#analytics")
+    page.click("#ads")
+
+    banner_visible_before_probe = banner_visible(page, None)
+
+    phase_ref = {"name": "denial_interaction"}
+    captured: list[dict] = []
+
+    def on_request(request) -> None:
+        captured.append({
+            "time": utc_now(), "phase": phase_ref["name"], "url": request.url,
+            "method": request.method, "resource_type": request.resource_type,
+            "is_navigation_request": request.is_navigation_request,
+        })
+
+    page.on("request", on_request)
+    action_log: list[dict] = []
+    scenario_dir = Path(tempfile.mkdtemp())
+    try:
+        probe = probe_autosave(page, page.context, None, 50, action_log, scenario_dir, phase_ref)
+    finally:
+        page.remove_listener("request", on_request)
+        page.unroute("**/*")
+
+    assert probe["probe_started"] and probe["probe_finished"], probe
+    assert probe["probe_started"] <= probe["probe_finished"], probe
+    assert probe["screenshot"] and Path(probe["screenshot"]).exists(), probe
+    assert (scenario_dir / "preferences-after-toggles.png").exists()
+    assert phase_ref["name"] == "denial_interaction", "phase must be restored to the caller's phase after the probe"
+    ok("probe_autosave screenshots, timestamps probe_started/probe_finished in order, and restores the caller's phase")
+
+    # Evidence ordering: the reload actually changed page state, so a probe
+    # or narrow diff "verifying" against it is not vacuous.
+    assert banner_visible_before_probe != probe["banner_visible_after_reload"], (
+        banner_visible_before_probe, probe["banner_visible_after_reload"],
+    )
+    ok("banner_visible_after_reload differs from the pre-reload reading, proving the reload actually ran")
+
+    assert probe["settings_reopened"] is True, probe
+    states = {t["label"]: t["state"] for t in probe["toggle_states"]}
+    assert states and all(state is False for state in states.values()), states
+    ok("the probe reopens settings after reload and reads the optional toggles back off")
+
+    tracking = [r for r in captured if "connect.facebook.net" in r["url"]]
+    assert tracking, "the fixture must fire its tracking request during the probe's reload"
+    assert all(r["phase"] == "denial_verification_reload" for r in tracking), tracking
+    ok("the probe's own reload traffic is stamped with phase denial_verification_reload")
+
+    patterns = read_json(SCRIPT_DIR.parent / "references" / "vendor-patterns.json")
+    excluded_rows = build_request_inventory({"denial": {"events": {"requests": tracking}}}, "fixture.test", patterns)
+    excluded_findings = generate_findings(
+        {"denial": {"action_result": {"status": UNSAVED_PREFERENCE_STATUS}, "checkpoints": []}}, [], excluded_rows,
+    )
+    assert "post-denial-tracking" not in {f["check_type"] for f in excluded_findings}, excluded_findings
+    ok("a tracking request phased denial_verification_reload produces no post-denial-tracking finding")
+
+    # Positive control: the identical request, tagged as ordinary denial
+    # interaction traffic instead, must produce the finding - otherwise the
+    # check above would only show the test request was inert.
+    positive = [{**r, "phase": "denial_interaction"} for r in tracking]
+    positive_rows = build_request_inventory({"denial": {"events": {"requests": positive}}}, "fixture.test", patterns)
+    positive_findings = generate_findings(
+        {"denial": {"action_result": {"status": UNSAVED_PREFERENCE_STATUS}, "checkpoints": []}}, [], positive_rows,
+    )
+    assert "post-denial-tracking" in {f["check_type"] for f in positive_findings}, positive_findings
+    ok("the identical request phased denial_interaction does produce a post-denial-tracking finding (positive control)")
+
+
+def test_execute_denial_wires_phase_ref_into_autosave_probe(page) -> None:
+    """The prior test drives probe_autosave in isolation, handing it a
+    phase_ref directly - it cannot catch execute_denial failing to forward
+    its own phase_ref through to probe_autosave (capture.py's autosave-fork
+    call site, and the run_scenario pass-through above it). If that wiring
+    is dropped, the probe's reload traffic goes untagged as
+    denial_verification_reload and is misattributed to ordinary denial
+    interaction traffic - manufacturing exactly the false post-denial-
+    tracking finding this tool exists to prevent. Drive the autosave path
+    through execute_denial itself with a real phase_ref, the way
+    run_scenario does, and assert the tagging survives that hop."""
+    html = _AUTOSAVE_FIXTURE_TEMPLATE.replace(
+        "%ON_LOAD%",
+        "fetch('https://connect.facebook.net/en_US/fbevents.js', {mode: 'no-cors'}).catch(() => {});",
+    ).replace("%PERSIST%", "")
+    holder = {"html": html}
+    serve_fixture(page, holder)
+    page.context.clear_cookies()
+    page.goto("https://fixture.test/")
+
+    phase_ref = {"name": "denial_interaction"}
+    captured: list[dict] = []
+
+    def on_request(request) -> None:
+        captured.append({"time": utc_now(), "phase": phase_ref["name"], "url": request.url})
+
+    page.on("request", on_request)
+    try:
+        result = execute_denial(
+            page, page.context, wait_ms=50, manual=False,
+            share_scenario_dir=Path(tempfile.mkdtemp()), phase_ref=phase_ref,
+        )
+    finally:
+        page.remove_listener("request", on_request)
+        page.unroute("**/*")
+
+    assert result["status"] == UNSAVED_PREFERENCE_STATUS, result
+    assert phase_ref["name"] == "denial_interaction", "phase must be restored to the caller's phase after execute_denial"
+
+    tracking = [r for r in captured if "connect.facebook.net" in r["url"]]
+    assert tracking, "the fixture must fire its tracking request during the probe's reload"
+    assert all(r["phase"] == "denial_verification_reload" for r in tracking), (
+        "execute_denial must forward its phase_ref into probe_autosave so the reload's own traffic "
+        f"gets stamped denial_verification_reload, not left on the caller's phase: {tracking}"
+    )
+    ok("execute_denial forwards its phase_ref into probe_autosave, tagging the reload's traffic denial_verification_reload")
+
+
+def test_manual_precedence_over_autosave_path(page) -> None:
+    """--manual must still take precedence when the autosave path IS entered -
+    i.e. there are optional toggles to disable and no save control, so #7's
+    classify_autosave_denial fork runs. An operator who explicitly asked to
+    make the choice by hand must still be prompted, and the recorded result
+    must come from that human action (`manual_denial_completed`), not from
+    the automated autosave verdict (e.g. AUTOSAVE_VERIFIED_RELOAD/STORAGE or
+    the unverified toggles_disabled_no_save_control)."""
+    html = _AUTOSAVE_FIXTURE_TEMPLATE.replace("%ON_LOAD%", "").replace("%PERSIST%", "")
+    holder = {"html": html}
+    serve_fixture(page, holder)
+    page.context.clear_cookies()
+    page.goto("https://fixture.test/")
+
+    original_input = builtins.input
+    builtins.input = lambda: ""
+    try:
+        result = execute_denial(page, page.context, wait_ms=20, manual=True, share_scenario_dir=Path(tempfile.mkdtemp()))
+    finally:
+        builtins.input = original_input
+        page.unroute("**/*")
+
+    assert result["status"] == "manual_denial_completed", result
+    assert result["manual_used"] is True, result
+    ok("--manual still wins over the autosave verdict when the autosave fork is entered")
+
+
+def test_manual_eof_with_operated_toggles_falls_back_to_autosave_classification(page) -> None:
+    """`manual_required`'s meaning ("nothing was operated") must stay exact,
+    because analysis.py keys the high-severity denial-control-unresolved
+    finding off exactly that status. If --manual is requested but the
+    operator's terminal is gone by the time the prompt runs (stdin closed
+    mid-run, `input()` raises EOFError) *after* optional toggles were already
+    switched off, those toggles are an operated denial control - reporting
+    manual_required here would be a false "nothing was operated" claim. The
+    run must instead fall back to the same probe-backed autosave
+    classification used when --manual was never requested."""
+    html = _AUTOSAVE_FIXTURE_TEMPLATE.replace("%ON_LOAD%", "").replace("%PERSIST%", "")
+    holder = {"html": html}
+    serve_fixture(page, holder)
+    page.context.clear_cookies()
+    page.goto("https://fixture.test/")
+
+    def _raise_eof() -> str:
+        raise EOFError()
+
+    original_input = builtins.input
+    builtins.input = _raise_eof
+    try:
+        result = execute_denial(page, page.context, wait_ms=50, manual=True, share_scenario_dir=Path(tempfile.mkdtemp()))
+    finally:
+        builtins.input = original_input
+        page.unroute("**/*")
+
+    assert result["manual_stdin_unavailable"] is True, result
+    disabled = result.get("toggle_result", {}).get("disabled", [])
+    assert len(disabled) >= 2, result
+
+    assert result["status"] != "manual_required", result
     note = (result.get("verification") or {}).get("note", "")
     assert "No denial control was operated" not in note, (
         f"the toggles were operated, so this note is false: {note!r}"
     )
-    assert "never committed" in note, note
-
-    # The decision this status encodes: an unsaved preference panel is not a
-    # recorded choice, so the scenario stays invalid and cannot support
-    # findings about post-denial behaviour.
-    assert UNSAVED_PREFERENCE_STATUS not in COMPLETED_DENIAL_STATUSES
-    validity = _scenario_validity("deny", result, [])
-    assert validity["interaction_completed"] is False, validity
-    assert validity["valid"] is False, validity
-    ok("toggles disabled with no save control is reported accurately and stays invalid")
+    # This fixture never persists the toggle change, so it lands in the same
+    # unverified classification as test_settings_path_autosave_reload_reverts_stays_unverified.
+    assert result["status"] == UNSAVED_PREFERENCE_STATUS, result
+    ok("--manual with operated toggles and an EOF stdin falls back to the autosave classification instead of manual_required")
 
 
 def test_settings_path_no_toggles_still_reports_manual_required(page) -> None:
@@ -4950,7 +5367,13 @@ def main() -> int:
             test_denial_flow_and_verification(page)
             test_local_storage_same_length_rewrite_detected(page)
             test_settings_path_denial(page)
-            test_settings_path_denial_without_save_control(page)
+            test_settings_path_autosave_verified_by_reload(page)
+            test_settings_path_autosave_reload_reverts_stays_unverified(page)
+            test_settings_path_autosave_verified_by_storage_write(page)
+            test_probe_autosave_reload_ordering_and_phase_tagging(page)
+            test_execute_denial_wires_phase_ref_into_autosave_probe(page)
+            test_manual_precedence_over_autosave_path(page)
+            test_manual_eof_with_operated_toggles_falls_back_to_autosave_classification(page)
             test_settings_path_no_toggles_still_reports_manual_required(page)
             test_tab_order_direction(page)
             test_tab_order_unreachable_control(page)

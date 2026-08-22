@@ -1094,12 +1094,20 @@ def _switch_state(locator: Locator) -> bool | None:
     return None
 
 
-def disable_optional_toggles(page: Page, action_log: list[dict[str, Any]]) -> dict[str, Any]:
-    result: dict[str, Any] = {"examined": [], "disabled": [], "unknown": []}
-    selector = "input[type='checkbox'], [role='switch'], button[aria-pressed], [aria-checked]"
+#: Shared by `read_optional_toggle_states` (read-only) and `disable_optional_toggles`
+#: (read + click) so a reload read-back walks the same frames and applies the
+#: same `_switch_label` / `OPTIONAL_CATEGORY` / `NECESSARY_CATEGORY` filtering as
+#: the original scan. Identical heuristics on both sides of a reload is what
+#: makes the read-back comparable to what was originally operated.
+_TOGGLE_SELECTOR = "input[type='checkbox'], [role='switch'], button[aria-pressed], [aria-checked]"
+
+
+def _iter_optional_toggles(page: Page):
+    """Yield (frame, index, item, label, state) for every visible optional
+    -category toggle across all frames, in a stable order."""
     for frame in page.frames:
         try:
-            locator = frame.locator(selector)
+            locator = frame.locator(_TOGGLE_SELECTOR)
             count = min(locator.count(), 250)
         except Exception:
             continue
@@ -1114,21 +1122,40 @@ def disable_optional_toggles(page: Page, action_log: list[dict[str, Any]]) -> di
             if not label or not OPTIONAL_CATEGORY.search(label) or NECESSARY_CATEGORY.search(label):
                 continue
             state = _switch_state(item)
-            public = {"frame_url": frame.url, "index": index, "label": label[:700], "state_before": state}
-            result["examined"].append(public)
-            if state is True:
-                try:
-                    item.click(timeout=5000)
-                    _sleep_ms(250)
-                    after = _switch_state(item)
-                    public["state_after"] = after
-                    result["disabled"].append(public)
-                    action_log.append({"time": utc_now(), "action": "disable_optional_toggle", "control": public, "success": after is False or after is None})
-                except Exception as error:
-                    public["error"] = str(error)[:800]
-                    result["unknown"].append(public)
-            elif state is None:
+            yield frame, index, item, label, state
+
+
+def read_optional_toggle_states(page: Page) -> list[dict[str, Any]]:
+    """Read-only half of `disable_optional_toggles`: the same frame walk and
+    label filtering, with nothing clicked.
+
+    Used to re-observe the optional-category toggles after a reload, so the
+    read-back can be compared against what was originally switched off.
+    """
+    return [
+        {"frame_url": frame.url, "index": index, "label": label[:700], "state": state}
+        for frame, index, item, label, state in _iter_optional_toggles(page)
+    ]
+
+
+def disable_optional_toggles(page: Page, action_log: list[dict[str, Any]]) -> dict[str, Any]:
+    result: dict[str, Any] = {"examined": [], "disabled": [], "unknown": []}
+    for frame, index, item, label, state in _iter_optional_toggles(page):
+        public = {"frame_url": frame.url, "index": index, "label": label[:700], "state_before": state}
+        result["examined"].append(public)
+        if state is True:
+            try:
+                item.click(timeout=5000)
+                _sleep_ms(250)
+                after = _switch_state(item)
+                public["state_after"] = after
+                result["disabled"].append(public)
+                action_log.append({"time": utc_now(), "action": "disable_optional_toggle", "control": public, "success": after is False or after is None})
+            except Exception as error:
+                public["error"] = str(error)[:800]
                 result["unknown"].append(public)
+        elif state is None:
+            result["unknown"].append(public)
     return result
 
 
@@ -1366,18 +1393,32 @@ COMPLETED_DENIAL_STATUSES = {
     "second_layer_reject_clicked",
     "preferences_disabled_and_saved",
     "manual_denial_completed",
+    # #7: a settings-path denial with no save control, where a post-reload
+    # probe (see `probe_autosave` / `checks.classify_autosave_denial`)
+    # affirmatively confirmed the CMP kept the choice - either the toggles
+    # read back off, or a namespaced consent-storage write was observed.
+    # `toggles_disabled_no_save_control` (below) is the unverified sibling of
+    # these two statuses and must never join this set: it is reached when the
+    # probe could not confirm the choice persisted, which is exactly the case
+    # that must stay an incomplete denial.
+    checks.AUTOSAVE_VERIFIED_RELOAD,
+    checks.AUTOSAVE_VERIFIED_STORAGE,
 }
 
 #: The settings path switched the optional-category toggles off, but no save
-#: control could be resolved, so the preference was never committed.
+#: control could be resolved, and the post-reload probe (`probe_autosave`)
+#: could not confirm the choice persisted - either a reload read a toggle
+#: back on, or neither the reload nor a namespaced consent-storage write
+#: verified it. See `checks.classify_autosave_denial` for the exact truth
+#: table this status name and its two verified siblings above are drawn from.
 #:
-#: Deliberately absent from COMPLETED_DENIAL_STATUSES: an unsaved preference
-#: panel is not a recorded choice, so this scenario stays invalid and cannot
-#: support findings about post-denial behaviour. It is nonetheless a distinct
-#: status rather than `manual_required`, because page state *was* mutated -
-#: reporting it as "no denial control was operated" would describe an
-#: interaction that did not happen as described, which is the exact defect
-#: this scenario gating exists to prevent.
+#: Deliberately absent from COMPLETED_DENIAL_STATUSES: an unsaved and
+#: unverified preference panel is not a recorded choice, so this scenario
+#: stays invalid and cannot support findings about post-denial behaviour. It
+#: is nonetheless a distinct status rather than `manual_required`, because
+#: page state *was* mutated - reporting it as "no denial control was
+#: operated" would describe an interaction that did not happen as described,
+#: which is the exact defect this scenario gating exists to prevent.
 #:
 #: Reachable whenever a CMP's `save` selector list is intentionally empty.
 #: Two distinct reasons produce that:
@@ -1387,7 +1428,94 @@ COMPLETED_DENIAL_STATUSES = {
 #: - Termly: live capture found no save control at all in its preference
 #:   modal (only Decline All / Allow All) - do not "fix" this by mapping
 #:   save to Allow All, which is the same hazard as the first case.
-UNSAVED_PREFERENCE_STATUS = "toggles_disabled_no_save_control"
+UNSAVED_PREFERENCE_STATUS = checks.AUTOSAVE_NO_SAVE_CONTROL
+
+
+def probe_autosave(
+    page: Page,
+    context: BrowserContext,
+    cmp_entry: dict[str, Any] | None,
+    wait_ms: int,
+    action_log: list[dict[str, Any]],
+    share_scenario_dir: Path,
+    phase_ref: dict[str, str] | None = None,
+) -> dict[str, Any]:
+    """Reload and re-observe optional toggles to check whether an unsaved
+    settings-panel denial was actually kept.
+
+    The exact step order here is the correctness, not a detail (issue #7):
+
+    1. Screenshot the page as it stood right after the toggles were switched
+       off, before anything else can change it.
+    2. Record `probe_started`.
+    3. Point `phase_ref` at `denial_verification_reload` *before* reloading.
+       `_attach_event_listeners` stamps every request with `phase_ref["name"]`,
+       and `analysis.py` only treats a request as post-denial when its phase is
+       in `POST_DENIAL_PHASES` or carries an `internal_navigation_`/`exercise_`
+       prefix - `denial_verification_reload` matches none of those, so this
+       probe's own traffic is excluded automatically, but only if this step
+       runs before the reload. Skipping it would manufacture the exact false
+       "tracking continued after denial" finding this tool exists to prevent.
+    4. Reload and let the page settle.
+    5. Re-read banner visibility (observational only - see below).
+    6. Only now try to reopen the settings layer, and if it opens, re-read the
+       optional toggles with `read_optional_toggle_states` - the same label
+       heuristics `disable_optional_toggles` used, so the read-back is
+       comparable to what was actually switched off.
+    7. Record `probe_finished` and restore whatever phase the caller was in.
+
+    Reopening the settings panel can itself write a cookie on some CMPs, which
+    is why the caller must compute its own narrow consent-storage diff from
+    snapshots taken *before* this function ever runs - never from a snapshot
+    taken after step 6.
+
+    `banner_visible` is recorded here for evidence only. It is deliberately
+    never consulted by `checks.classify_autosave_denial`: most CMPs leave a
+    settings-path denial's banner closed regardless of whether the choice was
+    kept, so banner absence alone can never verify anything.
+    """
+    probe: dict[str, Any] = {
+        "probe_started": None,
+        "probe_finished": None,
+        "screenshot": None,
+        "banner_visible_after_reload": None,
+        "settings_reopened": False,
+        "settings_resolution": None,
+        "toggle_states": [],
+    }
+
+    try:
+        screenshot_path = share_scenario_dir / "preferences-after-toggles.png"
+        page.screenshot(path=str(screenshot_path), full_page=False, animations="disabled")
+        probe["screenshot"] = str(screenshot_path)
+    except Exception:
+        pass
+
+    probe["probe_started"] = utc_now()
+    previous_phase = phase_ref["name"] if phase_ref is not None else None
+    if phase_ref is not None:
+        phase_ref["name"] = "denial_verification_reload"
+
+    try:
+        page.reload(wait_until="domcontentloaded")
+    except Exception as error:
+        probe["reload_error"] = str(error)[:800]
+    _sleep_ms(min(wait_ms, 4000))
+
+    probe["banner_visible_after_reload"] = banner_visible(page, cmp_entry)
+
+    settings_control, _settings_candidates, settings_resolution = find_control(page, "settings", cmp_entry)
+    probe["settings_resolution"] = settings_resolution
+    if settings_control and click_control(settings_control, action_log, "settings_reopen_probe"):
+        probe["settings_reopened"] = True
+        _sleep_ms(min(wait_ms, 1500))
+        probe["toggle_states"] = read_optional_toggle_states(page)
+
+    probe["probe_finished"] = utc_now()
+    if phase_ref is not None:
+        phase_ref["name"] = previous_phase
+
+    return probe
 
 
 def execute_denial(
@@ -1397,6 +1525,7 @@ def execute_denial(
     manual: bool,
     share_scenario_dir: Path,
     cmp_entry: dict[str, Any] | None = None,
+    phase_ref: dict[str, str] | None = None,
 ) -> dict[str, Any]:
     action_log: list[dict[str, Any]] = []
     before = consent_snapshot(page, context, cmp_entry)
@@ -1464,6 +1593,9 @@ def execute_denial(
     settings_control, settings_candidates, settings_resolution = find_control(page, "settings", cmp_entry)
     result["settings_candidates"] = settings_candidates
     result["resolution"]["settings"] = settings_resolution
+    toggle_result: dict[str, Any] | None = None
+    disabled: list[Any] = []
+
     if settings_control and click_control(settings_control, action_log, "settings"):
         result["click_count"] = 1
         _sleep_ms(min(wait_ms, 2000))
@@ -1485,28 +1617,43 @@ def execute_denial(
             return finish("preferences_disabled_and_saved", result["click_count"] + 1 + len(toggle_result.get("disabled", [])))
 
         disabled = toggle_result.get("disabled") or []
-        if disabled:
-            # Toggles were switched off but no save control resolved. Falling
-            # through to `manual_required` here would attach the note "No denial
-            # control was operated, so there is nothing to verify" - false, since
-            # the toggles above mutated page state. Record what actually
-            # happened. Still not a completed denial (see
-            # UNSAVED_PREFERENCE_STATUS), so the scenario remains invalid and
-            # dependent findings stay suppressed.
-            unsaved = finish(UNSAVED_PREFERENCE_STATUS, result["click_count"] + len(disabled))
-            verification = dict(unsaved.get("verification") or {})
-            # verify_choice_registered may legitimately report a state change
-            # here - some CMPs write provisional state on toggle. Keep that
-            # measurement, but replace its note: a change observed without a
-            # committed save is not evidence of a recorded choice.
-            verification["state_change_note"] = verification.get("note")
-            verification["note"] = (
-                f"{len(disabled)} optional-category toggle(s) were switched off, but no save "
-                "control could be resolved, so the preference was never committed. Any state "
-                "change observed here is provisional and is not a recorded denial."
-            )
-            unsaved["verification"] = verification
-            return unsaved
+
+    def classify_toggle_denial() -> dict[str, Any]:
+        # Toggles were switched off but no save control resolved. Falling
+        # through to `manual_required` here would attach the note "No denial
+        # control was operated, so there is nothing to verify" - false, since
+        # the toggles above mutated page state. Record what actually
+        # happened, then probe (#7) whether the CMP actually kept the
+        # choice: take the narrow, CMP-scoped diff and reload for a
+        # read-back *before* anything else can happen, so neither
+        # measurement is influenced by the reload it verifies against.
+        # `finish` takes both consent snapshots here, ahead of the reload
+        # inside `probe_autosave` below - that ordering is what the
+        # evidence-ordering acceptance check in #7 asserts on directly.
+        unsaved = finish(UNSAVED_PREFERENCE_STATUS, result["click_count"] + len(disabled))
+        broad_diff = dict(unsaved.get("verification") or {})
+
+        namespace = checks.consent_namespace(cmp_entry)
+        narrow_diff = checks.narrow_consent_diff(before, unsaved["consent_snapshot_after"], namespace)
+        autosave_probe = probe_autosave(
+            page, context, cmp_entry, wait_ms, action_log, share_scenario_dir, phase_ref,
+        )
+        classification = checks.classify_autosave_denial(toggle_result, narrow_diff, autosave_probe)
+
+        unsaved["status"] = classification["status"]
+        unsaved["narrow_diff"] = narrow_diff
+        unsaved["autosave_probe"] = autosave_probe
+        # `broad_diff` is `verify_choice_registered`'s any-cookie-or-storage
+        # comparison, kept for evidence only - some CMPs write provisional
+        # state on toggle, which is not by itself proof the CMP kept the
+        # choice. `verification["verified"]`/`["note"]` now come from the
+        # probe-backed classification instead: whether the CMP actually
+        # kept the choice, not merely whether *something* changed.
+        unsaved["verification"] = {**classification, "broad_diff": broad_diff}
+        return unsaved
+
+    if disabled and not manual:
+        return classify_toggle_denial()
 
     if manual:
         result["manual_used"] = True
@@ -1522,8 +1669,16 @@ def execute_denial(
         except EOFError:
             # Non-interactive stdin. audit_site.py refuses --manual without a
             # terminal, so reaching this branch means the environment changed
-            # mid-run; record it rather than silently continuing.
+            # mid-run; record it rather than silently continuing. If optional
+            # toggles were already switched off before the prompt failed, that
+            # is an operated denial control - manual_required's "nothing was
+            # operated" meaning must stay exact (analysis.py keys
+            # denial-control-unresolved off it), so fall back to the same
+            # probe-backed classification used when --manual was not
+            # requested instead of misreporting manual_required here.
             result["manual_stdin_unavailable"] = True
+            if disabled:
+                return classify_toggle_denial()
 
     result["status"] = "manual_required"
     result["consent_snapshot_after"] = consent_snapshot(page, context, cmp_entry)
@@ -2313,7 +2468,7 @@ def run_scenario(
 
         if action == "deny":
             phase_ref["name"] = "denial_interaction"
-            action_result = execute_denial(page, context, config.wait_ms, config.manual, share_scenario, cmp_entry)
+            action_result = execute_denial(page, context, config.wait_ms, config.manual, share_scenario, cmp_entry, phase_ref)
             phase_ref["name"] = "post_denial"
             checkpoints.append(capture_checkpoint(page, context, scenario, "02-post-denial", private_dir, share_dir))
         elif action == "accept":
