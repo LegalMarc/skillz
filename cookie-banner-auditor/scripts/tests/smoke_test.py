@@ -2374,6 +2374,28 @@ def test_main_handles_fatal_errors_and_writes_real_artifacts() -> None:
         assert len(zips) == 1, f"a real zip archive must be written when --no-zip is not passed: {zips}"
         assert zips[0].stat().st_size > 0, zips[0]
 
+        # --- --submit-forms prints its side-effect warning, and
+        # --assert-no-preconsent-tracking's FAILED block prints against the
+        # synthetic baseline's real tracking request - both untested before ---
+        import contextlib
+        import io
+
+        buffer_out, buffer_err = io.StringIO(), io.StringIO()
+        gated_out = Path(tempfile.mkdtemp()) / "gated"
+        with contextlib.redirect_stdout(buffer_out), contextlib.redirect_stderr(buffer_err):
+            code = run(["--url", "https://example.test", "--out", str(gated_out), "--headless", "--no-geo",
+                        "--no-zip", "--no-pdf", "--submit-forms", "--assert-no-preconsent-tracking"])
+        assert code == 5, (code, buffer_err.getvalue())
+        assert "*** --submit-forms is enabled ***" in buffer_err.getvalue(), buffer_err.getvalue()
+        assert "--assert-no-preconsent-tracking FAILED" in buffer_err.getvalue(), buffer_err.getvalue()
+        assert "google-analytics.com/g/collect" in buffer_err.getvalue(), buffer_err.getvalue()
+
+        # --- a bogus --browser must be refused in the main (non-detect-only)
+        # flow too, before any capture is attempted ---
+        code = run(["--url", "https://example.test", "--out", str(Path(tempfile.mkdtemp())), "--headless",
+                    "--browser", "/nonexistent/definitely-not-a-browser"])
+        assert code == 2, code
+
         # --- KeyboardInterrupt must exit 130, not propagate as a crash ---
         def raise_keyboard_interrupt(*a, **k):
             raise KeyboardInterrupt()
