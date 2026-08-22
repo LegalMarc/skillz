@@ -52,6 +52,7 @@ from lib.capture import (
     load_cmp_table,
     load_transmission_patterns,
     measure_focus_visibility,
+    SYNTHETIC_VALUES,
     measure_tab_order,
     safe_internal_links,
     verify_choice_registered,
@@ -1068,6 +1069,64 @@ def test_mobile_emulation_reaches_the_page(page) -> None:
     finally:
         desktop_context.close()
     ok("the mobile profile changes the page's real user agent, width, touch, and pixel ratio")
+
+
+def test_form_submission_never_touches_an_unsafe_form(page) -> None:
+    """--submit-forms is the only flag in the tool with a real-world side effect:
+    it creates a genuine record in the site's CRM. The promise is that login,
+    signup, payment, and account forms are skipped *entirely* even then. Nothing
+    exercised the submitting path at all, so that promise was untested."""
+    page.set_content("""
+        <!doctype html><html><body>
+        <form id="login-form" action="/session">
+          <input name="username" type="text">
+          <input name="password" type="password">
+          <button type="submit">Sign in</button>
+        </form>
+        <form id="contact-us" action="/contact">
+          <input name="email" type="email">
+          <input name="phone" type="tel">
+          <input name="full_name" type="text">
+          <input name="secret" type="password">
+          <button type="submit">Send</button>
+        </form>
+        <script>
+          window.__submitted = [];
+          for (const f of document.querySelectorAll('form')) {
+            f.addEventListener('submit', e => { e.preventDefault(); window.__submitted.push(f.id); });
+          }
+        </script></body></html>
+    """)
+    config = ScenarioConfig(url="https://example.test", wait_ms=10, submit_forms=True)
+    record = exercise_forms(page, config)
+
+    skipped = {s["index"]: s for s in record["skipped_forms"]}
+    assert 0 in skipped, f"the login form must be skipped outright: {record['skipped_forms']}"
+    assert "unsafe" in skipped[0]["reason"], skipped[0]
+
+    filled = {f["field"] for f in record["fields_filled"]}
+    assert not any("username" in f for f in filled), f"no field of a login form may be filled: {filled}"
+
+    # A password input is refused by type as well as by form signature, so a
+    # safe-looking form containing one still never has it filled.
+    assert not any("secret" in f for f in filled), f"password fields must never be filled: {filled}"
+    values = page.evaluate(
+        "() => ({secret: document.querySelector('[name=secret]').value,"
+        " username: document.querySelector('[name=username]').value,"
+        " email: document.querySelector('[name=email]').value})"
+    )
+    assert values["secret"] == "", "a password field must be left empty"
+    assert values["username"] == "", "a login form's fields must be left empty"
+
+    # The safe form was filled with obviously synthetic, undeliverable values.
+    assert "@example.com" in values["email"], values
+    assert values["email"] == SYNTHETIC_VALUES["email"], values
+
+    # And only the safe form was submitted.
+    assert record["submitted"] is True, record
+    submitted = page.evaluate("() => window.__submitted")
+    assert submitted == ["contact-us"], f"only the safe form may be submitted: {submitted}"
+    ok("--submit-forms fills and submits only a safe form, never a login or a password field")
 
 
 def test_form_exercise_does_not_submit(page) -> None:
@@ -2703,6 +2762,7 @@ def main() -> int:
             test_annotation_labels_are_painted_above_every_outline(page)
             test_mobile_emulation_reaches_the_page(page)
             test_form_exercise_does_not_submit(page)
+            test_form_submission_never_touches_an_unsafe_form(page)
         finally:
             browser.close()
 
