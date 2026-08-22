@@ -943,6 +943,80 @@ def test_sourcepoint_shape_resolves_inside_an_iframe(page) -> None:
     ok("a Sourcepoint-shaped banner resolves and completes inside its iframe")
 
 
+def test_didomi_shape_resolves_and_save_stays_specific_to_settings(page) -> None:
+    """The didomi table entry was written from documentation, not a live capture,
+    and had never been checked against real markup. Verified 2026-08-22 against
+    https://www.didomi.io itself (Didomi runs its own CMP on its own site): no
+    shadow root, a direct first-layer 'I disagree' button
+    (#didomi-notice-disagree-button), and a second-layer preferences panel whose
+    real Save control is `id="btn-toggle-save"` with
+    aria-label="Save: Save your choices and close" - matched today via the
+    broader `button.didomi-components-button[aria-label*='Save' i]` selector.
+    That selector's whole reason to exist (per the table's own notes) is to
+    avoid also matching the first-layer 'I agree'/'I disagree' buttons, which
+    share the same `didomi-components-button` class - this pins that against
+    real attribute values rather than a hand-written approximation."""
+    _serve_cmp_fixture(page, """
+        <!doctype html><html><body>
+        <div id="didomi-host">
+          <div id="didomi-popup" class="didomi-popup-backdrop didomi-notice-popup didomi-popup__backdrop">
+            <p>We use cookies to improve your experience.</p>
+            <button id="didomi-notice-disagree-button"
+                    class="didomi-components-button didomi-button didomi-disagree-button didomi-components-button--color didomi-button-highlight highlight-button"
+                    aria-label="I disagree: Disagree to our data processing and close">I disagree</button>
+            <button id="didomi-notice-agree-button"
+                    class="didomi-components-button didomi-button didomi-dismiss-button didomi-components-button--color didomi-button-highlight highlight-button"
+                    aria-label="I agree: Agree to our data processing and close">I agree</button>
+            <button id="didomi-notice-learn-more-button"
+                    class="didomi-components-button didomi-button didomi-learn-more-button didomi-button-standard standard-button"
+                    aria-label="Configure: Configure your consents">Configure</button>
+          </div>
+          <div id="didomi-preferences" hidden>
+            <button class="didomi-components-radio__option didomi-components-radio__option--unselected">Disagree</button>
+            <button class="didomi-components-radio__option didomi-components-radio__option--unselected">Agree</button>
+            <button id="btn-toggle-save"
+                    class="didomi-components-button didomi-button didomi-button-standard standard-button"
+                    aria-label="Save: Save your choices and close">Save</button>
+          </div>
+        </div>
+        <script>
+          document.querySelector('#didomi-notice-learn-more-button').addEventListener('click', () => {
+            document.querySelector('#didomi-preferences').hidden = false;
+          });
+          document.querySelector('#didomi-notice-disagree-button').addEventListener('click', () => {
+            document.querySelector('#didomi-host').remove();
+            document.cookie = 'didomi_token=denied; path=/';
+          });
+        </script></body></html>
+    """)
+    match = fingerprint_cmp(page, load_cmp_table())
+    assert match and match["id"] == "didomi", match
+
+    # Before the settings panel opens, "save" must not resolve at all - the
+    # first-layer agree/disagree buttons share its base class, and if the
+    # selector were too broad it would match one of them here.
+    premature_save, _, premature_resolution = find_control(page, "save", match["entry"])
+    assert premature_save is None, premature_resolution
+
+    page.click("#didomi-notice-learn-more-button")
+
+    # Now the real save control must resolve, and must resolve to itself - not
+    # to either first-layer button that shares its base class.
+    save_control, _, save_resolution = find_control(page, "save", match["entry"])
+    assert save_control is not None, save_resolution
+    assert save_resolution["path"] == "cmp_selector_table", save_resolution
+    assert save_control["id"] == "btn-toggle-save", (
+        f"save must resolve to the real save control, not a first-layer button "
+        f"sharing its base class: {save_control.get('id')!r}"
+    )
+
+    result = _denial_for(page, match["entry"])
+    assert result["status"] == "direct_reject_clicked", result
+    assert result["resolution"]["reject"]["path"] == "cmp_selector_table", result["resolution"]
+    assert (result.get("verification") or {}).get("verified") is True, result
+    ok("a Didomi-shaped banner (verified against didomi.io) resolves reject directly and save stays scoped to the settings panel")
+
+
 def test_safe_internal_links_refuses_dangerous_and_offsite(page) -> None:
     """This decides what the auditor navigates to on a live site the user owns.
     The skill promises no logout, no account change, no purchase and no
@@ -3015,6 +3089,7 @@ def main() -> int:
             test_onetrust_shape_uses_the_second_layer_reject(page)
             test_usercentrics_shape_resolves_inside_a_shadow_root(page)
             test_sourcepoint_shape_resolves_inside_an_iframe(page)
+            test_didomi_shape_resolves_and_save_stays_specific_to_settings(page)
             test_safe_internal_links_refuses_dangerous_and_offsite(page)
             test_annotate_controls_marks_resolved_controls(page)
             test_annotation_labels_are_painted_above_every_outline(page)
