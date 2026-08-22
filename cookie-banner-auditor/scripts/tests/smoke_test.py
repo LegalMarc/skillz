@@ -35,8 +35,10 @@ from lib.capture import (
     COMPLETED_DENIAL_STATUSES,
     SCORE_THRESHOLD,
     UNSAVED_PREFERENCE_STATUS,
+    VIEWPORT_PROFILES,
     ScenarioConfig,
     _scenario_validity,
+    build_context_options,
     consent_snapshot,
     execute_denial,
     exercise_forms,
@@ -48,6 +50,7 @@ from lib.capture import (
     measure_focus_visibility,
     measure_tab_order,
     verify_choice_registered,
+    viewport_profile,
 )
 from lib.util import (
     build_zip_bundle,
@@ -685,6 +688,88 @@ def test_measure_tab_order_bounded(page) -> None:
     ok("measure_tab_order bounds its Tab-press budget and reports the cap being hit")
 
 
+def test_mobile_emulation_reaches_the_page(page) -> None:
+    """End-to-end proof that the mobile profile changes what the page observes.
+
+    The unit test above asserts the options dict is built correctly; this
+    asserts Chromium actually applies it. Without this, the options could stop
+    being passed to new_context and every run would still pass while capturing
+    the desktop banner under a mobile label."""
+    profile = viewport_profile("mobile")
+    config = ScenarioConfig(
+        url="https://example.test",
+        viewport=dict(profile["viewport"]),
+        viewport_label="mobile",
+        is_mobile=profile["is_mobile"],
+        has_touch=profile["has_touch"],
+        device_scale_factor=profile["device_scale_factor"],
+        device_user_agent=profile["user_agent"],
+    )
+    probe = (
+        "() => ({ua: navigator.userAgent, width: window.innerWidth,"
+        " touch: navigator.maxTouchPoints > 0, dpr: window.devicePixelRatio})"
+    )
+    responsive_page = """
+        <!doctype html><html><head>
+          <meta name="viewport" content="width=device-width, initial-scale=1">
+        </head><body>viewport probe</body></html>
+    """
+    context = page.context.browser.new_context(**build_context_options(config))
+    try:
+        mobile_page = context.new_page()
+        mobile_page.set_content(responsive_page)
+        observed = mobile_page.evaluate(probe)
+        assert "Mobile" in observed["ua"], observed
+        assert observed["width"] == profile["viewport"]["width"], observed
+        assert observed["touch"] is True, observed
+        assert observed["dpr"] > 1, observed
+
+        # Documenting a real emulation quirk rather than asserting a wish: with
+        # is_mobile set, Chromium lays out a page that declares no viewport meta
+        # tag at the legacy 980px default, NOT at the device width. Every modern
+        # responsive site ships the meta tag, so audits see the device width -
+        # but a target that omits it is genuinely laid out wide on a phone, and
+        # that is the site's behaviour, not a bug in this runner. Do not "fix"
+        # this by forcing the viewport.
+        legacy_page = context.new_page()
+        legacy_page.set_content("<!doctype html><html><body>no meta</body></html>")
+        legacy = legacy_page.evaluate(probe)
+        # Asserted as a range: Chromium reports 981 rather than exactly 980 at
+        # this device scale, and pinning the rounding would break on a browser
+        # update without anything meaningful having changed.
+        assert legacy["width"] >= 900, (
+            "a page with no viewport meta tag is expected to lay out near the 980px "
+            f"legacy default under mobile emulation: {legacy}"
+        )
+        assert legacy["width"] > observed["width"], (
+            f"the no-meta page must lay out wider than the responsive one: {legacy} vs {observed}"
+        )
+        assert "Mobile" in legacy["ua"], legacy
+    finally:
+        context.close()
+
+    # The desktop profile must not leak any of that into its own contexts.
+    desktop_profile = viewport_profile("desktop")
+    desktop_config = ScenarioConfig(
+        url="https://example.test",
+        viewport=dict(desktop_profile["viewport"]),
+        viewport_label="desktop",
+    )
+    desktop_context = page.context.browser.new_context(**build_context_options(desktop_config))
+    try:
+        desktop_page = desktop_context.new_page()
+        desktop_page.set_content("<!doctype html><html><body>viewport probe</body></html>")
+        observed = desktop_page.evaluate(
+            "() => ({ua: navigator.userAgent, width: window.innerWidth, touch: navigator.maxTouchPoints > 0})"
+        )
+        assert "Mobile" not in observed["ua"], observed
+        assert observed["width"] == 1440, observed
+        assert observed["touch"] is False, observed
+    finally:
+        desktop_context.close()
+    ok("the mobile profile changes the page's real user agent, width, touch, and pixel ratio")
+
+
 def test_form_exercise_does_not_submit(page) -> None:
     page.set_content("""
         <!doctype html><html><body>
@@ -942,6 +1027,100 @@ def test_repeat_stability() -> None:
 # ---------------------------------------------------------------------------
 # B - validity gating
 # ---------------------------------------------------------------------------
+
+def test_viewport_profiles() -> None:
+    """The mobile profile must carry touch and a mobile user agent, not just a
+    narrow viewport — a 412px context with a desktop UA is routinely served the
+    desktop banner, which would be captured and labelled as mobile evidence."""
+    desktop = viewport_profile("desktop")
+    assert desktop["viewport"] == {"width": 1440, "height": 1000}, desktop
+    assert desktop["is_mobile"] is False and desktop["user_agent"] is None, desktop
+
+    mobile = viewport_profile("mobile")
+    assert mobile["viewport"]["width"] < 500, mobile
+    assert mobile["is_mobile"] is True and mobile["has_touch"] is True, mobile
+    assert "Mobile" in (mobile["user_agent"] or ""), mobile
+    assert "Android" in (mobile["user_agent"] or ""), mobile
+
+    # An unknown label must fail loudly. Falling back to desktop would produce a
+    # bundle labelled with a profile it was not captured under.
+    try:
+        viewport_profile("tablet")
+    except ValueError as error:
+        assert "tablet" in str(error) and "desktop" in str(error), error
+    else:
+        raise AssertionError("an unknown viewport profile must raise, not fall back to desktop")
+    ok("viewport profiles carry touch and a mobile UA, and an unknown label fails loudly")
+
+
+def test_context_options_device_emulation() -> None:
+    """The emulation options must actually be built for mobile and absent for
+    desktop, and an explicit --user-agent must beat the profile's UA."""
+    def config_for(label: str, **overrides) -> ScenarioConfig:
+        profile = viewport_profile(label)
+        return ScenarioConfig(
+            url="https://example.test",
+            viewport=dict(profile["viewport"]),
+            viewport_label=label,
+            is_mobile=profile["is_mobile"],
+            has_touch=profile["has_touch"],
+            device_scale_factor=profile["device_scale_factor"],
+            device_user_agent=profile["user_agent"],
+            **overrides,
+        )
+
+    desktop = build_context_options(config_for("desktop"))
+    assert "is_mobile" not in desktop, desktop
+    assert "has_touch" not in desktop, desktop
+    assert "user_agent" not in desktop, desktop
+    assert desktop["viewport"] == {"width": 1440, "height": 1000}, desktop
+
+    mobile = build_context_options(config_for("mobile"))
+    assert mobile["is_mobile"] is True, mobile
+    assert mobile["has_touch"] is True, mobile
+    assert mobile["device_scale_factor"] > 1, mobile
+    assert "Mobile" in mobile["user_agent"], mobile
+    assert mobile["viewport"]["width"] < 500, mobile
+
+    # An explicit override is a deliberate act and must win over the profile UA.
+    overridden = build_context_options(config_for("mobile", user_agent="my-custom-agent/1.0"))
+    assert overridden["user_agent"] == "my-custom-agent/1.0", overridden
+    assert overridden["is_mobile"] is True, "an override of the UA must not disable emulation"
+
+    # GPC and storage_state must still thread through after the extraction.
+    gpc = build_context_options(config_for("desktop"), gpc=True)
+    assert gpc["extra_http_headers"] == {"Sec-GPC": "1"}, gpc
+    assert "storage_state" not in gpc, gpc
+    seeded = build_context_options(config_for("desktop"), storage_state={"cookies": []})
+    assert seeded["storage_state"] == {"cookies": []}, seeded
+    ok("mobile context options carry touch, scale, and a mobile UA; an explicit override wins")
+
+
+def test_merge_invalid_scenarios() -> None:
+    """Across profiles the invalid maps must union, not overwrite: both bundles
+    have a scenario called `denial`, so an unqualified merge would report one
+    incomplete scenario where there were two."""
+    desktop_only = audit_site.merge_invalid_scenarios(
+        {"desktop": {"invalid_scenarios": {"denial": {"invalid_reason": "no control"}}}}
+    )
+    assert desktop_only == {"denial": {"invalid_reason": "no control"}}, desktop_only
+
+    both = audit_site.merge_invalid_scenarios({
+        "desktop": {"invalid_scenarios": {"denial": {"invalid_reason": "desktop reason"}}},
+        "mobile": {"invalid_scenarios": {"denial": {"invalid_reason": "mobile reason"}}},
+    })
+    assert set(both) == {"desktop/denial", "mobile/denial"}, both
+    assert both["mobile/denial"]["invalid_reason"] == "mobile reason", both
+
+    # A clean profile alongside a broken one must still report the breakage.
+    mixed = audit_site.merge_invalid_scenarios({
+        "desktop": {"invalid_scenarios": {}},
+        "mobile": {"invalid_scenarios": {"denial": {"invalid_reason": "mobile reason"}}},
+    })
+    assert set(mixed) == {"mobile/denial"}, mixed
+    assert audit_site.exit_code([], mixed) == 4, "a clean desktop run must not mask an incomplete mobile one"
+    ok("invalid scenarios union across profiles instead of overwriting by scenario name")
+
 
 def test_denial_not_committed_finding() -> None:
     """The unsaved-preference status must produce its own finding rather than
@@ -1698,6 +1877,9 @@ def main() -> int:
     test_issue_matrix_renders_in_report()
     test_cmp_table_integrity()
     test_repeat_stability()
+    test_viewport_profiles()
+    test_context_options_device_emulation()
+    test_merge_invalid_scenarios()
     test_denial_not_committed_finding()
     test_validity_gating()
     test_unknown_scenario_dependency_fails_closed()
@@ -1733,6 +1915,7 @@ def main() -> int:
             test_measure_tab_order_distinguishes_cap_from_unreachable(page)
             test_execute_denial_measures_focus_visibility_per_control(page)
             test_measure_tab_order_bounded(page)
+            test_mobile_emulation_reaches_the_page(page)
             test_form_exercise_does_not_submit(page)
         finally:
             browser.close()

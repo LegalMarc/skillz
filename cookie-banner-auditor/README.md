@@ -67,7 +67,12 @@ python scripts/audit_site.py --url https://example.com --detect-only
 
 # Full audit — thorough profile, ~15 minutes
 python scripts/audit_site.py --url https://example.com --out ./audit-example --accept-control
+
+# Desktop and mobile, separately reported (~2x runtime)
+python scripts/audit_site.py --url https://example.com --out ./audit-example --viewport both
 ```
+
+`--viewport mobile` emulates a Pixel-7-class phone — narrow viewport, touch, and a mobile user agent together, since CMPs branch on all three and a merely narrow desktop context is usually served the desktop banner. Small screens routinely get a different banner, often with decline one tap further away than accept, so `both` writes a complete bundle per profile rather than merging them: a finding in one and not the other is evidence about the site, not noise.
 
 Exit `4` means the run completed but a required interaction did not — findings depending on it were withheld. That is not a crash; it is the tool declining to answer a question it couldn't test. Usually fixed by adding the CMP's selectors to `references/cmp-selectors.json`.
 

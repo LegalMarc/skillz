@@ -27,6 +27,57 @@ from .util import (
 
 REFERENCES_DIR = Path(__file__).resolve().parents[2] / "references"
 
+#: Device profiles a scenario set can be run under.
+#:
+#: Mobile is not a narrower desktop. CMPs routinely ship a different banner on
+#: small screens - more often a full-screen interstitial, frequently with the
+#: decline choice moved behind a settings layer that is one tap further away
+#: than accept - so symmetry and click-count findings can differ entirely from
+#: the desktop result. Most traffic is mobile, which makes the desktop-only
+#: default the narrowest part of the audit's coverage.
+#:
+#: The user agent is pinned rather than derived from the running browser so a
+#: Chromium upgrade cannot silently change what the site was told, which would
+#: make two runs incomparable without anything in the fingerprint moving. Update
+#: it deliberately.
+VIEWPORT_PROFILES: dict[str, dict[str, Any]] = {
+    "desktop": {
+        "viewport": {"width": 1440, "height": 1000},
+        "is_mobile": False,
+        "has_touch": False,
+        "device_scale_factor": 1.0,
+        "user_agent": None,
+    },
+    "mobile": {
+        # Pixel-7-class Android phone: the most common shape of mobile visit,
+        # and narrow enough to trigger the small-screen branch in every CMP in
+        # the selector table.
+        "viewport": {"width": 412, "height": 915},
+        "is_mobile": True,
+        "has_touch": True,
+        "device_scale_factor": 2.625,
+        "user_agent": (
+            "Mozilla/5.0 (Linux; Android 14; Pixel 7) AppleWebKit/537.36 "
+            "(KHTML, like Gecko) Chrome/126.0.0.0 Mobile Safari/537.36"
+        ),
+    },
+}
+
+
+def viewport_profile(label: str) -> dict[str, Any]:
+    """Look up a device profile by label, failing loudly on an unknown one.
+
+    A silent fallback to desktop here would produce a bundle labelled `mobile`
+    that was captured at 1440px - evidence describing a visit that never
+    happened, which is the defect class this tool exists to avoid.
+    """
+    try:
+        return VIEWPORT_PROFILES[label]
+    except KeyError:
+        raise ValueError(
+            f"Unknown viewport profile {label!r}. Known profiles: {', '.join(sorted(VIEWPORT_PROFILES))}."
+        ) from None
+
 
 @dataclass
 class ScenarioConfig:
@@ -48,6 +99,17 @@ class ScenarioConfig:
     proxy: str | None = None
     ignore_https_errors: bool = False
     viewport: dict[str, int] = field(default_factory=lambda: {"width": 1440, "height": 1000})
+    # Device emulation. A narrow viewport alone is not a mobile visit: CMPs and
+    # tag managers branch on the user agent and on touch capability as well as
+    # on width, so a 390px-wide context with a desktop UA can still be served
+    # the desktop banner - and would then be reported as "mobile" evidence for
+    # a layout no phone ever sees. These travel together, set from
+    # VIEWPORT_PROFILES.
+    viewport_label: str = "desktop"
+    is_mobile: bool = False
+    has_touch: bool = False
+    device_scale_factor: float = 1.0
+    device_user_agent: str | None = None
     # Thoroughness profile
     thorough: bool = True
     dwell_ms: int = 15000
@@ -1787,6 +1849,55 @@ def _collect_consent_mode(events: dict[str, list[dict[str, Any]]]) -> dict[str, 
     return {"signals": signals, "summary": checks.summarize_consent_mode(signals)}
 
 
+def build_context_options(
+    config: ScenarioConfig,
+    gpc: bool = False,
+    storage_state: Any = None,
+    raw_har: Path | None = None,
+) -> dict[str, Any]:
+    """Build the Playwright context options for one scenario run.
+
+    Extracted from `run_scenario` so device emulation is assertable without
+    driving a full capture. The mobile branch is the reason this matters: if
+    those options silently stopped being applied, every run would still
+    succeed and would still be *labelled* mobile while actually being served
+    the desktop banner.
+    """
+    options: dict[str, Any] = {
+        "viewport": dict(config.viewport),
+        "locale": config.locale,
+        "ignore_https_errors": config.ignore_https_errors,
+        "service_workers": "allow",
+        "accept_downloads": False,
+    }
+    if raw_har is not None:
+        options["record_har_path"] = str(raw_har)
+        options["record_har_mode"] = "full"
+        options["record_har_content"] = "omit"
+    if config.is_mobile:
+        # Chromium-only options; this runner always launches chromium. Touch
+        # and the mobile UA travel with the narrow viewport because CMPs and
+        # tag managers branch on all three.
+        options["is_mobile"] = True
+        options["has_touch"] = True
+        options["device_scale_factor"] = config.device_scale_factor
+    if config.timezone_id:
+        options["timezone_id"] = config.timezone_id
+    # The device profile supplies a user agent; an explicit --user-agent is a
+    # deliberate override and wins, so applying it second is load-bearing.
+    if config.device_user_agent:
+        options["user_agent"] = config.device_user_agent
+    if config.user_agent:
+        options["user_agent"] = config.user_agent
+    if config.proxy:
+        options["proxy"] = {"server": config.proxy}
+    if gpc:
+        options["extra_http_headers"] = {"Sec-GPC": "1"}
+    if storage_state is not None:
+        options["storage_state"] = storage_state
+    return options
+
+
 def _scenario_validity(action: str, action_result: dict[str, Any], errors: list[dict[str, Any]]) -> dict[str, Any]:
     """Decide whether this scenario may support findings.
 
@@ -1850,26 +1961,7 @@ def run_scenario(
     phase_ref = {"name": "context_created"}
     page_count = config.pages if pages is None else pages
 
-    context_options: dict[str, Any] = {
-        "viewport": dict(config.viewport),
-        "locale": config.locale,
-        "ignore_https_errors": config.ignore_https_errors,
-        "record_har_path": str(raw_har),
-        "record_har_mode": "full",
-        "record_har_content": "omit",
-        "service_workers": "allow",
-        "accept_downloads": False,
-    }
-    if config.timezone_id:
-        context_options["timezone_id"] = config.timezone_id
-    if config.user_agent:
-        context_options["user_agent"] = config.user_agent
-    if config.proxy:
-        context_options["proxy"] = {"server": config.proxy}
-    if gpc:
-        context_options["extra_http_headers"] = {"Sec-GPC": "1"}
-    if storage_state is not None:
-        context_options["storage_state"] = storage_state
+    context_options = build_context_options(config, gpc=gpc, storage_state=storage_state, raw_har=raw_har)
 
     context: BrowserContext | None = None
     page: Page | None = None
@@ -2021,6 +2113,11 @@ def run_scenario(
         "started": started,
         "finished": utc_now(),
         "gpc": gpc,
+        # Recorded per scenario, not only in run metadata: with --viewport both
+        # a single bundle carries scenarios captured under two device profiles,
+        # and a finding must be traceable to the one it was observed under.
+        "viewport_label": config.viewport_label,
+        "viewport": dict(config.viewport),
         "action": action,
         "action_result": action_result,
         "checkpoints": checkpoints,

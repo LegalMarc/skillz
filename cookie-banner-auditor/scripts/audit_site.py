@@ -32,6 +32,7 @@ from lib.capture import (
     render_pdf_from_html,
     resolve_egress_region,
     run_all_scenarios,
+    viewport_profile,
 )
 from lib.util import (
     build_zip_bundle,
@@ -72,6 +73,16 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--timezone", help="IANA timezone, e.g. America/Los_Angeles")
     parser.add_argument("--user-agent", help="Optional user-agent override")
     parser.add_argument("--ignore-https-errors", action="store_true", help="Allow invalid TLS certificates; report this exception")
+    parser.add_argument(
+        "--viewport", choices=("desktop", "mobile", "both"), default="desktop",
+        help=(
+            "Device profile to audit under (default: desktop, 1440x1000). 'mobile' emulates a "
+            "Pixel-7-class Android phone - 412x915, touch, and a mobile user agent, because CMPs "
+            "branch on all three and a narrow desktop context is often still served the desktop "
+            "banner. 'both' runs the whole scenario set twice and writes a complete, separately "
+            "reported bundle per profile under desktop/ and mobile/, which roughly doubles runtime."
+        ),
+    )
 
     thoroughness = parser.add_mutually_exclusive_group()
     thoroughness.add_argument("--quick", action="store_true", help="Fast profile: no dwell, scroll, form, or search exercises, no baseline repeats (~4 min)")
@@ -219,6 +230,24 @@ def assertion_hits_for(enabled: bool, findings: list[dict]) -> list[dict]:
     return preconsent_tracking_assertion_hits(findings) if enabled else []
 
 
+def merge_invalid_scenarios(analyses: dict[str, dict]) -> dict:
+    """Union the invalid scenarios across device profiles.
+
+    With one profile this is just that profile's map, so single-viewport
+    behaviour is unchanged. With two, scenario names collide (both profiles
+    have a `denial`), so keys are qualified by profile - otherwise a mobile
+    failure would silently overwrite the desktop entry and the operator would
+    be told about one incomplete scenario when there were two.
+    """
+    if len(analyses) == 1:
+        return next(iter(analyses.values())).get("invalid_scenarios") or {}
+    merged: dict = {}
+    for label, analysis in analyses.items():
+        for name, detail in (analysis.get("invalid_scenarios") or {}).items():
+            merged[f"{label}/{name}"] = detail
+    return merged
+
+
 def exit_code(assertion_hits: list[dict], invalid: dict) -> int:
     """Decide the process exit code from the two independent gate signals.
 
@@ -286,16 +315,22 @@ def main() -> int:
         print(f"Configuration error: output directory is not empty: {root}", file=sys.stderr)
         return 2
     ensure_dir(root)
-    private_dir = ensure_dir(root / "evidence-private")
-    share_dir = ensure_dir(root / "evidence-shareable")
 
-    write_text(
-        private_dir / "README-SENSITIVE.txt",
-        "This folder contains raw HAR files and raw browser state. It may contain cookie values, identifiers, URLs, request headers, and other personal or confidential information. Keep it local, restrict access, and do not upload or send it without an intentional privilege and data-minimization review. Use evidence-shareable for ordinary collaboration.\n",
-    )
-    write_text(
-        root / "README.txt",
-        "Cookie Banner Auditor evidence bundle\n\n"
+    # With --viewport both, each device profile gets its own complete bundle so
+    # a desktop observation and a mobile one are never conflated in a single
+    # findings table: the two profiles can legitimately disagree about symmetry,
+    # click count, and which controls exist at all. A single profile keeps the
+    # historical flat layout so existing paths and compare_runs bundles from
+    # earlier versions stay valid.
+    viewport_labels = ["desktop", "mobile"] if args.viewport == "both" else [args.viewport]
+    multi_viewport = len(viewport_labels) > 1
+
+    bundle_roots = {
+        label: (ensure_dir(root / label) if multi_viewport else root)
+        for label in viewport_labels
+    }
+
+    bundle_contents = (
         "audit-report-draft.html  Open locally for a visual report with screenshots.\n"
         "audit-report-draft.md    Editable report draft.\n"
         "audit-data.json          Structured shareable audit data.\n"
@@ -305,9 +340,50 @@ def main() -> int:
         "research-queue.md        Unknown cookies/endpoints requiring research.\n"
         "evidence-shareable/      Sanitized HAR, redacted state, screenshots, logs.\n"
         "evidence-private/        RAW SENSITIVE HAR/state; do not share casually.\n"
-        "manifest.sha256          Integrity hashes for the evidence bundle.\n\n"
-        "This is a point-in-time technical audit and issue-spotting work product, not a legal opinion or certification.\n",
     )
+    for label, bundle_root in bundle_roots.items():
+        write_text(
+            ensure_dir(bundle_root / "evidence-private") / "README-SENSITIVE.txt",
+            "This folder contains raw HAR files and raw browser state. It may contain cookie values, identifiers, URLs, request headers, and other personal or confidential information. Keep it local, restrict access, and do not upload or send it without an intentional privilege and data-minimization review. Use evidence-shareable for ordinary collaboration.\n",
+        )
+        ensure_dir(bundle_root / "evidence-shareable")
+        if multi_viewport:
+            profile = viewport_profile(label)
+            write_text(
+                bundle_root / "README.txt",
+                f"Cookie Banner Auditor evidence bundle - {label} profile "
+                f"({profile['viewport']['width']}x{profile['viewport']['height']})\n\n"
+                + bundle_contents
+                + "\nThis bundle covers the "
+                + label
+                + " profile only. The sibling directory holds the other profile, captured in a\n"
+                "separate set of fresh browser contexts. The two are independent observations: a\n"
+                "finding present in one and absent in the other is a real difference in what the\n"
+                "site served, not an inconsistency in the audit.\n\n"
+                "This is a point-in-time technical audit and issue-spotting work product, not a legal opinion or certification.\n",
+            )
+
+    if multi_viewport:
+        write_text(
+            root / "README.txt",
+            "Cookie Banner Auditor evidence bundle - two device profiles\n\n"
+            "desktop/   Full bundle captured at 1440x1000.\n"
+            "mobile/    Full bundle captured at 412x915 with touch and a mobile user agent.\n"
+            "manifest.sha256  Integrity hashes covering both bundles.\n\n"
+            "Each directory holds its own report, findings, and inventories. Read them separately.\n"
+            "CMPs frequently ship a different banner on small screens, so symmetry, click count,\n"
+            "and even which controls exist can differ between the two. A difference is evidence\n"
+            "about the site, not noise.\n\n"
+            "This is a point-in-time technical audit and issue-spotting work product, not a legal opinion or certification.\n",
+        )
+    else:
+        write_text(
+            root / "README.txt",
+            "Cookie Banner Auditor evidence bundle\n\n"
+            + bundle_contents
+            + "manifest.sha256          Integrity hashes for the evidence bundle.\n\n"
+            "This is a point-in-time technical audit and issue-spotting work product, not a legal opinion or certification.\n",
+        )
 
     explicit_browser = None
     try:
@@ -317,91 +393,117 @@ def main() -> int:
         return 2
 
     thorough = not args.quick
-    viewport = {"width": 1440, "height": 1000}
     egress = {"resolved": False, "region": None} if args.no_geo else resolve_egress_region()
 
-    metadata = {
-        "tool": "cookie-banner-auditor",
-        "tool_version": VERSION,
-        "started_at": utc_now(),
-        "target_url": target_url,
-        "host": host,
-        "location_label": args.location_label,
-        "egress_region": egress.get("region") or args.location_label,
-        "egress_resolution": egress,
-        "profile": "thorough" if thorough else "quick",
-        "pages": args.pages,
-        "wait_ms": args.wait_ms,
-        "dwell_ms": args.dwell_ms if thorough else 0,
-        "baseline_repeats": args.repeat_baseline if thorough else 0,
-        "timeout_ms": args.timeout_ms,
-        "headless": headless,
-        "viewport": f"{viewport['width']}x{viewport['height']}",
-        "manual_fallback": args.manual,
-        "gpc_included": not args.no_gpc,
-        "accept_control_included": args.accept_control,
-        "persistence_check_included": not args.no_persistence,
-        "forms_exercised": thorough and not args.no_forms,
-        "forms_submitted": bool(args.submit_forms),
-        "search_exercised": thorough and not args.no_search,
-        "browser_executable": explicit_browser or "Playwright-managed browser",
-        "proxy_configured": bool(args.proxy),
-        "locale": args.locale,
-        "timezone": args.timezone,
-        "user_agent_overridden": bool(args.user_agent),
-        "ignore_https_errors": args.ignore_https_errors,
-        "platform": platform.platform(),
-        "python": platform.python_version(),
-        "isolation_method": (
-            "Playwright chromium.launch() with a throwaway profile (not launch_persistent_context), "
-            "one fresh browser context per scenario, no storage_state reuse except in the persistence check."
-        ),
-        "limitations": [
-            "Public logged-out browser sample only unless separately authorized and configured.",
-            "One egress region unless additional runs are performed.",
-            "Heuristic vendor and purpose classification requires confirmation.",
-            "A script load is not proof of transmission; see evidence_strength on each request observation.",
-            "Browser evidence does not reveal all downstream uses, contracts, server-side processing, or offline sharing.",
-        ],
-    }
-    metadata["run_fingerprint"] = run_fingerprint(metadata)
-    write_json(root / "run-metadata.json", metadata)
-
+    def build_metadata(label: str) -> dict:
+        profile = viewport_profile(label)
+        viewport = profile["viewport"]
+        return {
+            "tool": "cookie-banner-auditor",
+            "tool_version": VERSION,
+            "started_at": utc_now(),
+            "target_url": target_url,
+            "host": host,
+            "location_label": args.location_label,
+            "egress_region": egress.get("region") or args.location_label,
+            "egress_resolution": egress,
+            "profile": "thorough" if thorough else "quick",
+            "pages": args.pages,
+            "wait_ms": args.wait_ms,
+            "dwell_ms": args.dwell_ms if thorough else 0,
+            "baseline_repeats": args.repeat_baseline if thorough else 0,
+            "timeout_ms": args.timeout_ms,
+            "headless": headless,
+            "viewport": f"{viewport['width']}x{viewport['height']}",
+            "viewport_profile": label,
+            "device_emulation": (
+                "touch + mobile user agent" if profile["is_mobile"] else "none (desktop)"
+            ),
+            "manual_fallback": args.manual,
+            "gpc_included": not args.no_gpc,
+            "accept_control_included": args.accept_control,
+            "persistence_check_included": not args.no_persistence,
+            "forms_exercised": thorough and not args.no_forms,
+            "forms_submitted": bool(args.submit_forms),
+            "search_exercised": thorough and not args.no_search,
+            "browser_executable": explicit_browser or "Playwright-managed browser",
+            "proxy_configured": bool(args.proxy),
+            "locale": args.locale,
+            "timezone": args.timezone,
+            "user_agent_overridden": bool(args.user_agent),
+            "ignore_https_errors": args.ignore_https_errors,
+            "platform": platform.platform(),
+            "python": platform.python_version(),
+            "isolation_method": (
+                "Playwright chromium.launch() with a throwaway profile (not launch_persistent_context), "
+                "one fresh browser context per scenario, no storage_state reuse except in the persistence check."
+            ),
+            "limitations": [
+                "Public logged-out browser sample only unless separately authorized and configured.",
+                "One egress region unless additional runs are performed.",
+                "Heuristic vendor and purpose classification requires confirmation.",
+                "A script load is not proof of transmission; see evidence_strength on each request observation.",
+                "Browser evidence does not reveal all downstream uses, contracts, server-side processing, or offline sharing.",
+            ],
+        }
     patterns_path = Path(__file__).resolve().parents[1] / "references" / "vendor-patterns.json"
-    config = ScenarioConfig(
-        url=target_url,
-        wait_ms=args.wait_ms,
-        timeout_ms=args.timeout_ms,
-        pages=args.pages,
-        manual=args.manual,
-        locale=args.locale,
-        timezone_id=args.timezone,
-        user_agent=args.user_agent,
-        proxy=args.proxy,
-        ignore_https_errors=args.ignore_https_errors,
-        viewport=viewport,
-        thorough=thorough,
-        dwell_ms=args.dwell_ms,
-        exercise_forms=thorough and not args.no_forms,
-        submit_forms=bool(args.submit_forms),
-        exercise_search=thorough and not args.no_search,
-        transmission_patterns=load_transmission_patterns(),
-    )
+
+    def build_config(label: str) -> ScenarioConfig:
+        profile = viewport_profile(label)
+        return ScenarioConfig(
+            url=target_url,
+            wait_ms=args.wait_ms,
+            timeout_ms=args.timeout_ms,
+            pages=args.pages,
+            manual=args.manual,
+            locale=args.locale,
+            timezone_id=args.timezone,
+            user_agent=args.user_agent,
+            proxy=args.proxy,
+            ignore_https_errors=args.ignore_https_errors,
+            viewport=dict(profile["viewport"]),
+            viewport_label=label,
+            is_mobile=profile["is_mobile"],
+            has_touch=profile["has_touch"],
+            device_scale_factor=profile["device_scale_factor"],
+            device_user_agent=profile["user_agent"],
+            thorough=thorough,
+            dwell_ms=args.dwell_ms,
+            exercise_forms=thorough and not args.no_forms,
+            submit_forms=bool(args.submit_forms),
+            exercise_search=thorough and not args.no_search,
+            transmission_patterns=load_transmission_patterns(),
+        )
+
+    captures: dict[str, dict] = {}
     try:
         with sync_playwright() as playwright:
             browser = launch_browser(playwright, explicit_browser, headless)
             try:
-                metadata["browser_version"] = browser.version
-                results = run_all_scenarios(
-                    browser=browser,
-                    config=config,
-                    private_dir=private_dir,
-                    share_dir=share_dir,
-                    include_gpc=not args.no_gpc,
-                    include_accept=args.accept_control,
-                    baseline_repeats=args.repeat_baseline if thorough else 0,
-                    include_persistence=not args.no_persistence,
-                )
+                for label in viewport_labels:
+                    bundle_root = bundle_roots[label]
+                    metadata = build_metadata(label)
+                    metadata["run_fingerprint"] = run_fingerprint(metadata)
+                    metadata["browser_version"] = browser.version
+                    write_json(bundle_root / "run-metadata.json", metadata)
+                    if multi_viewport:
+                        print(f"\nCapturing {label} profile ({metadata['viewport']})...")
+                    # A fresh browser context per scenario already isolates the
+                    # profiles from each other; they share only the throwaway
+                    # browser process.
+                    captures[label] = {
+                        "metadata": metadata,
+                        "results": run_all_scenarios(
+                            browser=browser,
+                            config=build_config(label),
+                            private_dir=bundle_root / "evidence-private",
+                            share_dir=bundle_root / "evidence-shareable",
+                            include_gpc=not args.no_gpc,
+                            include_accept=args.accept_control,
+                            baseline_repeats=args.repeat_baseline if thorough else 0,
+                            include_persistence=not args.no_persistence,
+                        ),
+                    }
             finally:
                 browser.close()
     except KeyboardInterrupt:
@@ -412,15 +514,24 @@ def main() -> int:
         print(f"Audit failed: {error}\nPartial evidence, if any, is in {root}", file=sys.stderr)
         return 3
 
-    metadata["completed_at"] = utc_now()
-    write_json(root / "run-metadata.json", metadata)
-    analysis = analyze_and_write(root, target_url, results, metadata, patterns_path)
+    analyses: dict[str, dict] = {}
+    pdf_results: dict[str, dict] = {}
+    for label in viewport_labels:
+        bundle_root = bundle_roots[label]
+        metadata = captures[label]["metadata"]
+        metadata["completed_at"] = utc_now()
+        write_json(bundle_root / "run-metadata.json", metadata)
+        analyses[label] = analyze_and_write(
+            bundle_root, target_url, captures[label]["results"], metadata, patterns_path
+        )
 
-    pdf_result = {"ok": False, "error": "skipped"}
-    if not args.no_pdf:
-        pdf_result = render_pdf_from_html(root / "audit-report.html", root / "audit-report.pdf", explicit_browser)
-        if not pdf_result.get("ok"):
-            print(f"PDF rendering failed: {pdf_result.get('error')}", file=sys.stderr)
+        pdf_results[label] = {"ok": False, "error": "skipped"}
+        if not args.no_pdf:
+            pdf_results[label] = render_pdf_from_html(
+                bundle_root / "audit-report.html", bundle_root / "audit-report.pdf", explicit_browser
+            )
+            if not pdf_results[label].get("ok"):
+                print(f"PDF rendering failed ({label}): {pdf_results[label].get('error')}", file=sys.stderr)
 
     create_hash_manifest(root)
 
@@ -431,18 +542,30 @@ def main() -> int:
         zip_path = root / f"{slugify(host)}-{timestamp_slug()}-{suffix}.zip"
         zip_result = build_zip_bundle(root, zip_path, include_raw=include_raw)
 
-    invalid = analysis.get("invalid_scenarios") or {}
-    suppressed = analysis.get("suppressed_findings") or []
-    assertion_hits = assertion_hits_for(args.assert_no_preconsent_tracking, analysis["findings"])
+    # Across profiles the two gate signals are unioned, so a clean desktop run
+    # can never mask an incomplete or dirty mobile one. exit_code keeps its
+    # precedence rule: incompleteness anywhere outranks an assertion hit
+    # anywhere.
+    invalid = merge_invalid_scenarios(analyses)
+    assertion_hits = [
+        hit
+        for label in viewport_labels
+        for hit in assertion_hits_for(args.assert_no_preconsent_tracking, analyses[label]["findings"])
+    ]
 
     print("\nCookie banner audit complete.")
-    print(f"Overall result: {analysis['overall_status']}")
-    print(f"Findings reported: {len(analysis['findings'])}")
-    if suppressed:
-        print(f"Findings WITHHELD as unsupported: {len(suppressed)} (see suppressed-findings.json)")
-    print(f"Report: {root / 'audit-report.html'}")
-    if pdf_result.get("ok"):
-        print(f"PDF: {root / 'audit-report.pdf'}")
+    for label in viewport_labels:
+        analysis = analyses[label]
+        suppressed = analysis.get("suppressed_findings") or []
+        bundle_root = bundle_roots[label]
+        prefix = f"[{label}] " if multi_viewport else ""
+        print(f"{prefix}Overall result: {analysis['overall_status']}")
+        print(f"{prefix}Findings reported: {len(analysis['findings'])}")
+        if suppressed:
+            print(f"{prefix}Findings WITHHELD as unsupported: {len(suppressed)} (see suppressed-findings.json)")
+        print(f"{prefix}Report: {bundle_root / 'audit-report.html'}")
+        if pdf_results[label].get("ok"):
+            print(f"{prefix}PDF: {bundle_root / 'audit-report.pdf'}")
     if zip_result:
         raw_note = "includes RAW evidence - handle as confidential" if zip_result["raw_included"] else "redacted evidence only"
         print(f"Archive: {zip_result['path']} ({zip_result['files']} files, {raw_note})")

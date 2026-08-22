@@ -50,6 +50,12 @@ python scripts/audit_site.py \
 
 That runs the **thorough** profile (roughly 15 minutes): 15-second dwell with staged scrolling on every page, form-field entry, on-site search, two baseline repeats, and a fresh-context persistence check. Use `--quick` (about 4 minutes) only for a smoke check, and say so in the report — the quick profile systematically under-observes tags that fire on engagement rather than load.
 
+**Audit mobile, not just desktop.** The default profile is desktop (1440x1000). `--viewport mobile` emulates a Pixel-7-class Android phone — 412x915, touch, and a mobile user agent together, because CMPs branch on all three and a merely narrow desktop context is often still served the desktop banner. `--viewport both` runs the whole set twice, writing a complete bundle per profile under `desktop/` and `mobile/`, and roughly doubles runtime.
+
+Treat the two as independent observations rather than one result with a footnote. Small screens frequently get a different banner: more often a full-screen interstitial, and frequently with decline moved behind a settings layer that is one tap further away than accept. Symmetry, click count, and which controls exist at all can legitimately differ, so a finding present in one profile and absent in the other is evidence about the site, not an inconsistency in the audit. Most traffic is mobile; a desktop-only audit should say so in its scope.
+
+One quirk worth knowing before reading a mobile bundle: a page that declares no `<meta name="viewport">` is laid out near the legacy 980px width even under mobile emulation. That is genuinely what a phone does with such a page, not a measurement artefact.
+
 Add `--headed` to watch it work. `--manual` requires an interactive terminal and now fails immediately if stdin is not a TTY, instead of silently skipping the pause. Use `--location-label` or `--proxy` when geography matters; the runner also resolves and records the actual egress region unless `--no-geo` is passed.
 
 ### Scenarios
