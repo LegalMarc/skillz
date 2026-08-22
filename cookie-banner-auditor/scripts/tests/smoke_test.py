@@ -2277,6 +2277,128 @@ def test_main_orchestrates_bundles_gates_and_exit_codes() -> None:
     ok("main() lays out bundles per profile, unions gate signals, and refuses unsafe configurations")
 
 
+def test_main_validates_manual_flag_and_wires_detect_only() -> None:
+    """--manual has two preconditions main() must enforce before anything runs
+    (a visible browser, an interactive terminal) - a scenario that blocks on
+    input() with neither would hang or silently continue as if a human had
+    declined. --detect-only's dispatch (viewport "both" has no meaning for a
+    single-rendering preview, so it previews mobile instead) was also
+    untested - only run_detect_only itself was, not main()'s wiring into it."""
+
+    def run(argv: list[str]) -> int:
+        original_argv = sys.argv
+        sys.argv = ["audit_site.py", *argv]
+        try:
+            return audit_site.main()
+        finally:
+            sys.argv = original_argv
+
+    out = Path(tempfile.mkdtemp())
+    assert run(["--url", "https://example.test", "--out", str(out), "--manual", "--headless"]) == 2, (
+        "--manual with --headless must be refused before any capture"
+    )
+
+    class _FakeStdin:
+        def isatty(self) -> bool:
+            return False
+
+    original_stdin = sys.stdin
+    sys.stdin = _FakeStdin()
+    try:
+        assert run(["--url", "https://example.test", "--out", str(Path(tempfile.mkdtemp())),
+                    "--manual", "--headed"]) == 2, "--manual without an interactive terminal must be refused"
+    finally:
+        sys.stdin = original_stdin
+
+    original_detect = audit_site.run_detect_only
+    captured: dict = {}
+
+    def fake_run_detect_only(target_url, executable, headless, timeout_ms, viewport_label, screenshot_path):
+        captured.update(target_url=target_url, viewport_label=viewport_label, screenshot_path=screenshot_path)
+        return 0
+
+    audit_site.run_detect_only = fake_run_detect_only
+    try:
+        detect_out = Path(tempfile.mkdtemp())
+        code = run(["--url", "https://example.test", "--out", str(detect_out),
+                    "--headless", "--detect-only", "--viewport", "both"])
+        assert code == 0, code
+        assert captured["viewport_label"] == "mobile", (
+            f"--viewport both has no meaning for a one-rendering preview; must fall back to mobile: {captured}"
+        )
+        assert "mobile" in captured["screenshot_path"].name, captured["screenshot_path"]
+
+        # A bogus --browser must be refused before run_detect_only is even reached.
+        captured.clear()
+        code = run(["--url", "https://example.test", "--out", str(Path(tempfile.mkdtemp())),
+                    "--headless", "--detect-only", "--browser", "/nonexistent/definitely-not-a-browser"])
+        assert code == 2, code
+        assert captured == {}, "run_detect_only must not be reached when the browser path is invalid"
+    finally:
+        audit_site.run_detect_only = original_detect
+    ok("main() refuses --manual without a visible, interactive terminal and wires --detect-only correctly")
+
+
+def test_main_handles_fatal_errors_and_writes_real_artifacts() -> None:
+    """Two things main()'s happy-path tests couldn't reach: a scenario runner
+    that raises (KeyboardInterrupt must exit 130 without a traceback dumped to
+    the user; anything else must exit 3 and leave a fatal-error.txt behind
+    rather than losing whatever partial evidence exists), and the real
+    (non-stubbed) zip and PDF-failure-message paths, which every other test
+    skips via --no-zip/--no-pdf for speed."""
+    originals = {
+        name: getattr(audit_site, name)
+        for name in ("sync_playwright", "launch_browser", "run_all_scenarios",
+                     "resolve_egress_region", "render_pdf_from_html")
+    }
+    audit_site.sync_playwright = lambda: _StubPlaywright()
+    audit_site.launch_browser = lambda *a, **k: _StubBrowser()
+    audit_site.resolve_egress_region = lambda *a, **k: {"resolved": False, "region": None}
+    audit_site.render_pdf_from_html = lambda *a, **k: {"ok": False, "error": "stubbed"}
+
+    def run(argv: list[str]) -> int:
+        original_argv = sys.argv
+        sys.argv = ["audit_site.py", *argv]
+        try:
+            return audit_site.main()
+        finally:
+            sys.argv = original_argv
+
+    try:
+        # --- a real zip and the PDF-failure message, neither skipped here ---
+        real_out = Path(tempfile.mkdtemp()) / "real"
+        audit_site.run_all_scenarios = lambda *a, **k: synthetic_results(denial_completed=True)
+        code = run(["--url", "https://example.test", "--out", str(real_out), "--headless", "--no-geo"])
+        assert code == 0, code
+        zips = list(real_out.glob("*.zip"))
+        assert len(zips) == 1, f"a real zip archive must be written when --no-zip is not passed: {zips}"
+        assert zips[0].stat().st_size > 0, zips[0]
+
+        # --- KeyboardInterrupt must exit 130, not propagate as a crash ---
+        def raise_keyboard_interrupt(*a, **k):
+            raise KeyboardInterrupt()
+
+        audit_site.run_all_scenarios = raise_keyboard_interrupt
+        interrupted_out = Path(tempfile.mkdtemp()) / "interrupted"
+        code = run(["--url", "https://example.test", "--out", str(interrupted_out), "--headless", "--no-geo"])
+        assert code == 130, code
+
+        # --- any other exception must exit 3 and preserve a diagnosis trail ---
+        def raise_value_error(*a, **k):
+            raise ValueError("synthetic capture failure")
+
+        audit_site.run_all_scenarios = raise_value_error
+        fatal_out = Path(tempfile.mkdtemp()) / "fatal"
+        code = run(["--url", "https://example.test", "--out", str(fatal_out), "--headless", "--no-geo"])
+        assert code == 3, code
+        fatal_text = (fatal_out / "fatal-error.txt").read_text(encoding="utf-8")
+        assert "ValueError" in fatal_text and "synthetic capture failure" in fatal_text, fatal_text
+    finally:
+        for name, value in originals.items():
+            setattr(audit_site, name, value)
+    ok("main() exits 130 on interrupt, exits 3 with a fatal-error.txt on any other failure, and writes a real zip")
+
+
 def test_redact_storage_state_does_not_leak_or_mutate() -> None:
     """redact_storage_state produces what goes into evidence-shareable, so an
     under-redaction here leaks identifiers to anyone the bundle is sent to. It
@@ -3498,6 +3620,8 @@ def main() -> int:
     test_cmp_table_integrity()
     test_repeat_stability()
     test_main_orchestrates_bundles_gates_and_exit_codes()
+    test_main_validates_manual_flag_and_wires_detect_only()
+    test_main_handles_fatal_errors_and_writes_real_artifacts()
     test_redact_storage_state_does_not_leak_or_mutate()
     test_registrable_domain_and_third_party_edges()
     test_hash_manifest_covers_the_bundle()
