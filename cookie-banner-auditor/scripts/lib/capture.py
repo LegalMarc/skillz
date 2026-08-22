@@ -552,19 +552,32 @@ def fingerprint_cmp(page: Page, cmp_table: list[dict[str, Any]] | None = None) -
 
 
 def _locate_by_selectors(page: Page, selectors: list[str] | None) -> dict[str, Any] | None:
-    """Resolve the first visible element matching any of `selectors`, any frame."""
+    """Resolve the first visible element matching any of `selectors`, any frame.
+
+    A selector can match more than one element - a hidden preference-center
+    copy of a control alongside the visible banner one is a real shape (seen
+    on CookieYes). Check every match for visibility before moving to the next
+    selector, not just the first; `.first` being invisible does not mean the
+    selector has no visible match.
+    """
     for selector in selectors or []:
         for frame in page.frames:
             try:
-                locator = frame.locator(selector).first
-                if locator.count() == 0 or not locator.is_visible(timeout=750):
-                    continue
+                locator = frame.locator(selector)
+                count = locator.count()
             except Exception:
                 continue
-            metadata = _control_metadata(locator, frame, 0)
-            if metadata:
-                metadata["matched_selector"] = selector
-                return metadata
+            for index in range(min(count, 10)):
+                try:
+                    candidate = locator.nth(index)
+                    if not candidate.is_visible(timeout=750):
+                        continue
+                except Exception:
+                    continue
+                metadata = _control_metadata(candidate, frame, index)
+                if metadata:
+                    metadata["matched_selector"] = selector
+                    return metadata
     return None
 
 
@@ -1378,10 +1391,14 @@ COMPLETED_DENIAL_STATUSES = {
 #: interaction that did not happen as described, which is the exact defect
 #: this scenario gating exists to prevent.
 #:
-#: Reachable whenever a CMP's `save` selector list is intentionally empty
-#: (HubSpot, TrustArc, Quantcast Choice - emptied because their save selector
-#: was the *accept* control, which would have converted a denial into an
-#: acceptance).
+#: Reachable whenever a CMP's `save` selector list is intentionally empty.
+#: Two distinct reasons produce that:
+#: - HubSpot, TrustArc, Quantcast Choice: the only candidate save selector
+#:   was the *accept* control, which would have converted a denial into an
+#:   acceptance - never add one back without confirming it isn't accept.
+#: - Termly: live capture found no save control at all in its preference
+#:   modal (only Decline All / Allow All) - do not "fix" this by mapping
+#:   save to Allow All, which is the same hazard as the first case.
 UNSAVED_PREFERENCE_STATUS = "toggles_disabled_no_save_control"
 
 

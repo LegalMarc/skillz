@@ -1012,6 +1012,15 @@ def test_didomi_shape_resolves_and_save_stays_specific_to_settings(page) -> None
         f"sharing its base class: {save_control.get('id')!r}"
     )
 
+    # Structural guard against reintroduction: _locate_by_selectors returns
+    # the first visible match in list order, so if the buggy fallback were
+    # ever added back *behind* the correct id, find_control would still
+    # resolve correctly and the mutation check below (which replaces the
+    # list wholesale) would not catch it. Assert directly against the table.
+    assert "button.didomi-components-button--color[aria-label*='Agree' i]" not in match["entry"]["accept"], (
+        "the historically buggy accept fallback (matches both agree and disagree) must not return to the table"
+    )
+
     # The current table's accept resolves to the real agree button, and only
     # that. Checked before the denial click below, which removes the host
     # element entirely.
@@ -1094,6 +1103,16 @@ def test_cookiebot_shape_settings_never_resolves_to_the_category_checkbox(page) 
     assert settings_control is not None, settings_resolution
     assert settings_control["id"] == "CybotCookiebotDialogBodyLevelButtonCustomize", (
         f"settings must resolve to the real launcher, not the category-toggle checkbox: {settings_control}"
+    )
+
+    # Structural guard against reintroduction: _locate_by_selectors returns
+    # the first visible match in list order, so if this checkbox selector
+    # were ever added back *behind* the real launcher, find_control would
+    # still resolve correctly and the mutation check below (which replaces
+    # the list wholesale) would not catch it. Assert directly against the
+    # table entry itself.
+    assert "#CybotCookiebotDialogBodyLevelButtonPreferences" not in entry["settings"], (
+        "the category-toggle checkbox (a role=switch input, not a settings launcher) must not return to the table"
     )
 
     # Mutation check, before anything below removes the fixture from the DOM:
@@ -1273,15 +1292,17 @@ def test_cookieyes_shape_scopes_to_the_visible_layer(page) -> None:
     markup exactly. Fixtured anyway to close out the set and pin a real quirk
     the research flagged: the standard template's preference-center Accept
     All button shares its class with the first-layer one and both can exist
-    in the DOM at once, so resolution must be scoped to whichever is actually
-    visible rather than assuming only one instance exists."""
+    in the DOM at once.
+
+    The hidden modal copy is placed BEFORE the visible banner one - the
+    adversarial order, and a real shape (a preference center injected ahead
+    of the banner in markup order). `_locate_by_selectors` used to check only
+    `.first` for visibility and give up on the whole selector if it wasn't
+    visible, so this exact fixture used to fall through to text scoring
+    (`cmp_table_miss: True`) with a passing-but-vacuous assertion. It now
+    checks every match in order, so the CMP table itself must resolve this."""
     _serve_cmp_fixture(page, """
         <!doctype html><html><body>
-        <div class="cky-consent-container cky-banner-bottom" role="region" aria-label="We value your privacy" tabindex="-1">
-          <button class="cky-btn cky-btn-customize" aria-label="Customise" data-cky-tag="settings-button">Customise</button>
-          <button class="cky-btn cky-btn-reject" aria-label="Reject All" data-cky-tag="reject-button">Reject All</button>
-          <button class="cky-btn cky-btn-accept" aria-label="Accept All" data-cky-tag="accept-button">Accept All</button>
-        </div>
         <div class="cky-modal" hidden>
           <div class="cky-preference-center" id="ckyPreferenceCenter">
             <button class="cky-btn cky-btn-accept" aria-label="Accept All" data-cky-tag="accept-button">Accept All</button>
@@ -1289,6 +1310,11 @@ def test_cookieyes_shape_scopes_to_the_visible_layer(page) -> None:
               Save My Preferences
             </button>
           </div>
+        </div>
+        <div class="cky-consent-container cky-banner-bottom" role="region" aria-label="We value your privacy" tabindex="-1">
+          <button class="cky-btn cky-btn-customize" aria-label="Customise" data-cky-tag="settings-button">Customise</button>
+          <button class="cky-btn cky-btn-reject" aria-label="Reject All" data-cky-tag="reject-button">Reject All</button>
+          <button class="cky-btn cky-btn-accept" aria-label="Accept All" data-cky-tag="accept-button">Accept All</button>
         </div>
         <script>
           document.querySelector('.cky-btn-reject').addEventListener('click', () => {
@@ -1301,15 +1327,19 @@ def test_cookieyes_shape_scopes_to_the_visible_layer(page) -> None:
     assert match and match["id"] == "cookieyes", match
     entry = match["entry"]
 
-    # Two elements match the accept selector at once (first layer + hidden
-    # modal copy); resolution must land on the visible one, not merely "a"
-    # match.
+    # Two elements match the accept selector at once, the hidden one first in
+    # DOM order; resolution must still land on the CMP table, on the visible
+    # instance - not fall through to text scoring because the first match
+    # happened to be hidden.
     accept_control, _, accept_resolution = find_control(page, "accept", entry)
     assert accept_control is not None, accept_resolution
+    assert accept_resolution["path"] == "cmp_selector_table", (
+        f"a hidden first match must not make the whole selector miss and fall back to text scoring: {accept_resolution}"
+    )
     assert accept_control["frame_url"] == page.main_frame.url
     box = accept_control.get("box") or {}
     assert box.get("width", 0) > 0 and box.get("height", 0) > 0, (
-        f"the resolved accept control must be the visible first-layer one, not the hidden modal copy: {accept_control}"
+        f"the resolved accept control must be the visible one, not the hidden modal copy listed first in the DOM: {accept_control}"
     )
 
     result = _denial_for(page, entry)
