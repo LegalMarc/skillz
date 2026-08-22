@@ -3965,6 +3965,175 @@ def test_retry_never_fires_for_a_failed_consent_interaction() -> None:
     ok("a scenario whose consent interaction failed to verify is never retried")
 
 
+# ---------------------------------------------------------------------------
+# Viewport scenario keys, planning, and finding collapse (#10)
+# ---------------------------------------------------------------------------
+
+def test_scenario_key_and_parsing() -> None:
+    assert checks.scenario_key("denial") == "denial"
+    assert checks.scenario_key("denial", "desktop") == "denial"
+    assert checks.scenario_key("denial", "mobile") == "denial@mobile"
+    assert checks.parse_scenario_key("denial") == ("denial", "desktop")
+    assert checks.parse_scenario_key("denial@mobile") == ("denial", "mobile")
+    # The collision guard: '-' already appears in real scenario names, which
+    # is exactly why '@' and not '-' is the separator.
+    assert checks.parse_scenario_key("baseline-repeat-1") == ("baseline-repeat-1", "desktop")
+    assert checks.scenario_dir_name("denial@mobile") == "denial-mobile"
+    assert checks.scenario_dir_name("denial") == "denial"
+    ok("scenario_key/parse_scenario_key/scenario_dir_name round-trip and keep desktop bare")
+
+
+def test_plan_scenarios_desktop_only_matches_today() -> None:
+    plan = checks.plan_scenarios(
+        include_gpc=True, include_accept=True, baseline_repeats=2,
+        include_persistence=True, viewport_labels=["desktop"],
+    )
+    keys = [entry["key"] for entry in plan]
+    assert keys == [
+        "baseline", "denial", "gpc", "accept",
+        "baseline-repeat-1", "baseline-repeat-2", "persistence",
+    ], keys
+    assert not any("@" in key for key in keys), "a desktop-only plan must never contain the viewport separator"
+
+    # Every field must mirror the real run_scenario_with_retry calls in
+    # capture.py exactly - a mismatch here means the plan would change
+    # behaviour, not just describe it, once a caller wires it in.
+    by_key = {entry["key"]: entry for entry in plan}
+    expected = {
+        "baseline": {"action": "none", "gpc": False, "pages": 0, "run_exercises": False, "storage_state_from": None},
+        "denial": {"action": "deny", "gpc": False, "pages": None, "run_exercises": True, "storage_state_from": None},
+        "gpc": {"action": "none", "gpc": True, "pages": None, "run_exercises": True, "storage_state_from": None},
+        "accept": {"action": "accept", "gpc": False, "pages": None, "run_exercises": True, "storage_state_from": None},
+        "baseline-repeat-1": {"action": "none", "gpc": False, "pages": 0, "run_exercises": False, "storage_state_from": None},
+        "baseline-repeat-2": {"action": "none", "gpc": False, "pages": 0, "run_exercises": False, "storage_state_from": None},
+        "persistence": {"action": "none", "gpc": False, "pages": 0, "run_exercises": False, "storage_state_from": "denial"},
+    }
+    for key, fields in expected.items():
+        entry = by_key[key]
+        for field, value in fields.items():
+            assert entry[field] == value, f"{key}.{field}: expected {value!r}, got {entry[field]!r}"
+        assert entry["viewport_label"] == "desktop"
+
+    # Disabling the optional steps drops exactly those keys and nothing else.
+    minimal = checks.plan_scenarios(
+        include_gpc=False, include_accept=False, baseline_repeats=0,
+        include_persistence=False, viewport_labels=["desktop"],
+    )
+    assert [entry["key"] for entry in minimal] == ["baseline", "denial"]
+    ok("plan_scenarios(desktop-only) reproduces today's exact scenario sequence and names")
+
+
+def test_plan_scenarios_multi_viewport() -> None:
+    plan = checks.plan_scenarios(
+        include_gpc=True, include_accept=True, baseline_repeats=2,
+        include_persistence=True, viewport_labels=["desktop", "mobile"],
+    )
+    keys = [entry["key"] for entry in plan]
+    desktop_block = ["baseline", "denial", "gpc", "accept", "baseline-repeat-1", "baseline-repeat-2", "persistence"]
+    assert keys[: len(desktop_block)] == desktop_block, keys
+    assert "denial@mobile" in keys
+    assert "persistence@mobile" in keys
+    assert not any(key.startswith("baseline-repeat") and "@" in key for key in keys), (
+        "baseline repeats must stay desktop-only"
+    )
+    mobile_entries = {e["key"]: e for e in plan if e["viewport_label"] == "mobile"}
+    assert mobile_entries["denial@mobile"]["base"] == "denial"
+
+    # Desktop-first is an invariant the code enforces, not an accident of
+    # caller ordering: a caller-supplied ["mobile", "desktop"] must still
+    # come out desktop-first, matching the plan above key-for-key.
+    reordered = checks.plan_scenarios(
+        include_gpc=True, include_accept=True, baseline_repeats=2,
+        include_persistence=True, viewport_labels=["mobile", "desktop"],
+    )
+    assert [entry["key"] for entry in reordered] == keys, [entry["key"] for entry in reordered]
+
+    # Duplicate viewport labels must not produce colliding scenario keys.
+    deduped = checks.plan_scenarios(
+        include_gpc=True, include_accept=True, baseline_repeats=2,
+        include_persistence=True, viewport_labels=["mobile", "mobile"],
+    )
+    deduped_keys = [entry["key"] for entry in deduped]
+    assert deduped_keys.count("denial@mobile") == 1, deduped_keys
+    assert deduped_keys.count("persistence@mobile") == 1, deduped_keys
+
+    ok("plan_scenarios([desktop, mobile]) runs desktop first and adds @mobile scenarios without touching repeats")
+    ok("plan_scenarios normalises viewport_labels: desktop is hoisted first and duplicates are dropped")
+
+
+def _viewport_test_finding(**overrides: Any) -> dict[str, Any]:
+    finding = {
+        "id": "F-DENIAL-EXAMPLE",
+        "check_type": "denial-example",
+        "title": "Example finding",
+        "severity": "critical",
+        "certainty": "high",
+        "observation": "Something was observed.",
+        "strict_us_composite_baseline": "Non-compliant.",
+        "potential_legal_relevance": "Relevant.",
+        "applicability_needed": None,
+        "evidence": [],
+        "all_evidence": [],
+        "recommendation": "Fix it.",
+        "depends_on_scenarios": ["denial"],
+        "evidence_strength": "beacon_observed",
+        "evidence_strength_label": checks.STRENGTH_LABEL["beacon_observed"],
+        "evidence_strength_caveat": checks.STRENGTH_CAVEAT["beacon_observed"],
+    }
+    finding.update(overrides)
+    return finding
+
+
+def test_collapse_viewport_findings() -> None:
+    desktop_finding = _viewport_test_finding(id="F-DENIAL-DESKTOP")
+    mobile_finding = _viewport_test_finding(id="F-DENIAL-MOBILE", depends_on_scenarios=["denial@mobile"])
+
+    collapsed = checks.collapse_viewport_findings([desktop_finding, mobile_finding])
+    assert len(collapsed) == 1, "identical findings differing only by viewport must merge to one"
+    merged = collapsed[0]
+    assert merged["id"] == "F-DENIAL-DESKTOP", "the merged finding keeps the desktop id"
+    assert merged["observed_viewports"] == ["desktop", "mobile"]
+    assert merged["also_observed_in_scenarios"] == ["denial@mobile"]
+    assert merged["depends_on_scenarios"] == ["denial"], "depends_on_scenarios must stay desktop-only after collapse"
+
+    # Divergent severity is a real finding about mobile, not noise to merge away.
+    desktop_critical = _viewport_test_finding(id="F-SEV-DESKTOP", severity="critical")
+    mobile_moderate = _viewport_test_finding(
+        id="F-SEV-MOBILE", severity="moderate", depends_on_scenarios=["denial@mobile"],
+    )
+    not_collapsed = checks.collapse_viewport_findings([desktop_critical, mobile_moderate])
+    assert len(not_collapsed) == 2, "findings differing in severity must not be collapsed"
+
+    # Same for evidence_strength.
+    desktop_beacon = _viewport_test_finding(id="F-STR-DESKTOP", evidence_strength="beacon_observed")
+    mobile_identifier = _viewport_test_finding(
+        id="F-STR-MOBILE", evidence_strength="identifier_transmitted", depends_on_scenarios=["denial@mobile"],
+    )
+    not_collapsed_strength = checks.collapse_viewport_findings([desktop_beacon, mobile_identifier])
+    assert len(not_collapsed_strength) == 2, "findings differing in evidence_strength must not be collapsed"
+
+    # A mobile-only finding, with no desktop counterpart, passes through untouched.
+    mobile_only = _viewport_test_finding(id="F-MOBILE-ONLY", depends_on_scenarios=["gpc@mobile"])
+    passthrough = checks.collapse_viewport_findings([desktop_finding, mobile_only])
+    assert len(passthrough) == 2
+    kept = next(f for f in passthrough if f["id"] == "F-MOBILE-ONLY")
+    assert kept["depends_on_scenarios"] == ["gpc@mobile"], "a mobile-only finding keeps its @mobile dependency intact"
+
+    # Collapse must preserve input order, not push non-desktop findings to
+    # the back: generate_findings sorts by (severity, id) over the order
+    # collapse hands back, so a mobile-only high-severity finding placed
+    # before a lower-severity desktop finding must still precede it.
+    mobile_high = _viewport_test_finding(
+        id="F-ORDER-MOBILE", severity="high", depends_on_scenarios=["gpc@mobile"],
+    )
+    desktop_low = _viewport_test_finding(id="F-ORDER-DESKTOP", severity="low")
+    ordered = checks.collapse_viewport_findings([mobile_high, desktop_low])
+    assert [f["id"] for f in ordered] == ["F-ORDER-MOBILE", "F-ORDER-DESKTOP"], (
+        "collapse_viewport_findings must preserve input order, not append non-desktop findings at the end"
+    )
+    ok("collapse_viewport_findings merges identical cross-viewport findings and preserves real divergence")
+
+
 def main() -> int:
     print("\nOffline checks")
     test_har_sanitization()
@@ -4011,6 +4180,10 @@ def main() -> int:
     test_retry_never_fires_for_a_failed_consent_interaction()
     test_robots_allows_respects_disallow()
     test_collect_consent_mode_extracts_signals_from_request_log()
+    test_scenario_key_and_parsing()
+    test_plan_scenarios_desktop_only_matches_today()
+    test_plan_scenarios_multi_viewport()
+    test_collapse_viewport_findings()
 
     print("\nBrowser-backed checks")
     executable = discover_browser_executable(None)

@@ -1216,3 +1216,214 @@ def classify_scenario_failure(
 def should_retry_scenario(failure_class: str) -> bool:
     """Pure retry predicate: only a transport-class failure earns a retry."""
     return failure_class in RETRYABLE_FAILURE_CLASSES
+
+
+# --------------------------------------------------------------------------
+# Viewport scenario keys, planning, and finding collapse (#10)
+# --------------------------------------------------------------------------
+
+#: The implicit viewport when none is given, and the one label that never
+#: appears in a scenario key. Centralising this (instead of an inline
+#: `"desktop"` wherever a key is built or parsed) is what keeps a
+#: desktop-only run's keys byte-identical to today's.
+DESKTOP_VIEWPORT = "desktop"
+
+#: Separator between a scenario's base name and its viewport label.
+#: Deliberately not `-`: base names already contain `-` (`baseline-repeat-1`),
+#: so a `-` separator could not be parsed back unambiguously. `@` never
+#: appears in a base name.
+VIEWPORT_KEY_SEPARATOR = "@"
+
+
+def scenario_key(base: str, viewport_label: str | None = None) -> str:
+    """Encode a scenario's `results` dict key.
+
+    Desktop (`None` or `"desktop"`) is always the bare base name - that
+    single rule is the entire backward-compatibility story for every
+    existing consumer of `results`. Any other viewport is suffixed
+    `@<label>`. The format must only ever be produced here, never as an
+    inline f-string elsewhere, so a stray `== "denial"` comparison cannot
+    silently degrade a check to desktop-only.
+    """
+    if viewport_label is None or viewport_label == DESKTOP_VIEWPORT:
+        return base
+    return f"{base}{VIEWPORT_KEY_SEPARATOR}{viewport_label}"
+
+
+def parse_scenario_key(key: str) -> tuple[str, str]:
+    """Inverse of `scenario_key`: `(base, viewport_label)`.
+
+    A key with no `@` is desktop - this is what lets `baseline-repeat-1`
+    (which contains a `-` but never a `@`) round-trip correctly instead of
+    colliding with the separator.
+    """
+    if VIEWPORT_KEY_SEPARATOR in key:
+        base, viewport_label = key.split(VIEWPORT_KEY_SEPARATOR, 1)
+        return base, viewport_label
+    return key, DESKTOP_VIEWPORT
+
+
+def scenario_dir_name(key: str) -> str:
+    """Filesystem/HAR-safe form of a scenario key: `@` becomes `-`.
+
+    Directory and HAR filenames are built from this, not from the key
+    itself, so a viewport-suffixed scenario never puts `@` on disk.
+    """
+    return key.replace(VIEWPORT_KEY_SEPARATOR, "-")
+
+
+def plan_scenarios(
+    *,
+    include_gpc: bool = True,
+    include_accept: bool = True,
+    baseline_repeats: int = 2,
+    include_persistence: bool = True,
+    viewport_labels: Iterable[str] = (DESKTOP_VIEWPORT,),
+) -> list[dict[str, Any]]:
+    """Build the ordered scenario plan `run_all_scenarios` will eventually execute.
+
+    Desktop always runs first and in full - baseline, denial, gpc, accept,
+    baseline repeats, persistence - which reproduces today's exact sequence
+    and names when `viewport_labels` is desktop-only. That reproduction is
+    the regression guard for the whole viewport effort. Additional viewports
+    repeat the single-run scenarios (baseline, denial, gpc, accept,
+    persistence) under their own `@<label>` keys; `baseline-repeat-*` stays
+    desktop-only because its entire purpose is measuring desktop A/B and
+    flake noise, which a second viewport adds nothing to.
+
+    Each entry carries enough to drive `run_scenario_with_retry` later:
+    `key`, `base`, `action`, `gpc`, `viewport_label`, `pages`, `run_exercises`,
+    `storage_state_from` (the scenario key whose saved storage state this
+    entry must be replayed with, or `None` for entries that start fresh).
+    Nothing calls this yet - it is pure planning.
+    """
+    plan: list[dict[str, Any]] = []
+
+    seen: list[str] = []
+    for viewport_label in viewport_labels:
+        if viewport_label not in seen:
+            seen.append(viewport_label)
+    if DESKTOP_VIEWPORT in seen:
+        seen.remove(DESKTOP_VIEWPORT)
+        seen.insert(0, DESKTOP_VIEWPORT)
+
+    def add(
+        base: str,
+        action: str,
+        viewport_label: str,
+        *,
+        gpc: bool = False,
+        pages: int | None = None,
+        run_exercises: bool = True,
+        storage_state_from: str | None = None,
+    ) -> None:
+        plan.append({
+            "key": scenario_key(base, viewport_label),
+            "base": base,
+            "action": action,
+            "gpc": gpc,
+            "viewport_label": viewport_label,
+            "pages": pages,
+            "run_exercises": run_exercises,
+            "storage_state_from": storage_state_from,
+        })
+
+    for viewport_label in seen:
+        add("baseline", "none", viewport_label, pages=0, run_exercises=False)
+        add("denial", "deny", viewport_label)
+        if include_gpc:
+            add("gpc", "none", viewport_label, gpc=True)
+        if include_accept:
+            add("accept", "accept", viewport_label)
+        if viewport_label == DESKTOP_VIEWPORT:
+            for index in range(1, max(0, baseline_repeats) + 1):
+                add(f"baseline-repeat-{index}", "none", viewport_label, pages=0, run_exercises=False)
+        if include_persistence:
+            add(
+                "persistence", "none", viewport_label, pages=0, run_exercises=False,
+                storage_state_from=scenario_key("denial", viewport_label),
+            )
+
+    return plan
+
+
+#: Fields (beyond the normalised `depends_on_scenarios` bases) that must
+#: match for two findings to be the same finding seen from different
+#: viewports. `severity` and `evidence_strength` are included deliberately -
+#: a finding that reads differently on mobile is exactly the divergence
+#: testing mobile exists to surface, and must never be silently merged away.
+_VIEWPORT_COLLAPSE_MATCH_FIELDS = (
+    "check_type", "title", "severity", "certainty", "observation",
+    "strict_us_composite_baseline", "potential_legal_relevance",
+    "applicability_needed", "recommendation", "evidence_strength",
+)
+
+
+def _finding_viewport(finding: dict[str, Any]) -> str:
+    deps = finding.get("depends_on_scenarios") or []
+    if not deps:
+        return DESKTOP_VIEWPORT
+    return parse_scenario_key(deps[0])[1]
+
+
+def _finding_match_key(finding: dict[str, Any]) -> tuple[Any, ...]:
+    bases = tuple(sorted(parse_scenario_key(s)[0] for s in (finding.get("depends_on_scenarios") or [])))
+    return (bases,) + tuple(finding.get(field) for field in _VIEWPORT_COLLAPSE_MATCH_FIELDS)
+
+
+def collapse_viewport_findings(findings: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Merge findings that are identical across viewports into one.
+
+    A non-desktop finding collapses into its desktop counterpart when every
+    field in `_VIEWPORT_COLLAPSE_MATCH_FIELDS` matches and their
+    `depends_on_scenarios` share the same base scenario names. The merged
+    result keeps the desktop finding untouched - including its id and its
+    desktop-only `depends_on_scenarios`, so re-running `partition_findings`
+    over a written bundle cannot let a mobile-only failure suppress a valid
+    desktop finding - and gains `observed_viewports` (desktop plus every
+    viewport it also matched) and `also_observed_in_scenarios` (the matched
+    findings' own scenario keys).
+
+    A finding with no desktop counterpart (mobile-only) passes through
+    unchanged, `@`-suffixed dependency intact. Findings differing in
+    `severity` or `evidence_strength` are never collapsed.
+
+    Designed to run after `partition_findings`, over already-valid findings.
+    Nothing calls this yet.
+    """
+    desktop: list[dict[str, Any]] = []
+    others: list[dict[str, Any]] = []
+    for finding in findings:
+        (desktop if _finding_viewport(finding) == DESKTOP_VIEWPORT else others).append(finding)
+
+    unmatched_others = list(others)
+    merged_by_id: dict[int, dict[str, Any]] = {}
+    consumed_ids: set[int] = set()
+    for finding in desktop:
+        key = _finding_match_key(finding)
+        matches = [other for other in unmatched_others if _finding_match_key(other) == key]
+        if matches:
+            for match in matches:
+                unmatched_others.remove(match)
+                consumed_ids.add(id(match))
+            merged = dict(finding)
+            merged["observed_viewports"] = [DESKTOP_VIEWPORT] + sorted({_finding_viewport(m) for m in matches})
+            merged["also_observed_in_scenarios"] = [
+                scenario
+                for match in matches
+                for scenario in (match.get("depends_on_scenarios") or [])
+            ]
+            merged_by_id[id(finding)] = merged
+
+    # Single pass over the input in its original order: emit each finding at
+    # its original position (merged, if it absorbed matches), skipping only
+    # the non-desktop findings that were consumed by a merge above. This
+    # preserves the severity-then-id ordering `generate_findings` relies on -
+    # findings are never reshuffled to the back just for being non-desktop.
+    output: list[dict[str, Any]] = []
+    for finding in findings:
+        fid = id(finding)
+        if fid in consumed_ids:
+            continue
+        output.append(merged_by_id.get(fid, finding))
+    return output
