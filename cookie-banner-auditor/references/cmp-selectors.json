@@ -42,10 +42,10 @@
       "container": ["#CybotCookiebotDialog"],
       "accept": ["#CybotCookiebotDialogBodyLevelButtonLevelOptinAllowAll", "#CybotCookiebotDialogBodyButtonAccept"],
       "reject": ["#CybotCookiebotDialogBodyButtonDecline", "#CybotCookiebotDialogBodyLevelButtonLevelOptinDeclineAll"],
-      "settings": ["#CybotCookiebotDialogBodyLevelButtonCustomize", "#CybotCookiebotDialogBodyLevelButtonPreferences"],
+      "settings": ["#CybotCookiebotDialogBodyLevelButtonCustomize"],
       "save": ["#CybotCookiebotDialogBodyLevelButtonLevelOptinAllowallSelection", "#CybotCookiebotDialogBodyButtonAcceptSelected"],
       "consent_storage": ["CookieConsent", "CookieConsentBulkTicket"],
-      "notes": "Cookiebot is now owned by Usercentrics but ships a distinct DOM; keep both entries."
+      "notes": "Cookiebot is now owned by Usercentrics but ships a distinct DOM; keep both entries. #CybotCookiebotDialogBodyLevelButtonPreferences was removed from settings 2026-08-22: live capture showed it is a role=switch category-toggle checkbox, not a settings launcher - clicking it during execute_denial's settings step would have flipped a consent category instead of opening the preference panel."
     },
     {
       "id": "usercentrics",
@@ -87,12 +87,12 @@
         "script_hosts": ["sdk.privacy-center.org", "api.privacy-center.org"]
       },
       "container": ["#didomi-popup", ".didomi-popup-container", "#didomi-host"],
-      "accept": ["#didomi-notice-agree-button", "button.didomi-components-button--color[aria-label*='Agree' i]"],
-      "reject": ["#didomi-notice-disagree-button", "button[aria-label*='Disagree' i]"],
+      "accept": ["#didomi-notice-agree-button"],
+      "reject": ["#didomi-notice-disagree-button", "button[aria-label*='Disagree' i]", ".didomi-continue-without-agreeing[role='button']"],
       "settings": ["#didomi-notice-learn-more-button"],
-      "save": ["button.didomi-components-button[aria-label*='Save' i]"],
+      "save": ["#btn-toggle-save"],
       "consent_storage": ["didomi_token", "euconsent-v2"],
-      "notes": "The generic preferences-layer button class is not used for 'save' because it also matches Didomi's agree control."
+      "notes": "The generic preferences-layer button class is not used for 'save' because it also matches Didomi's agree control; 'save' resolved to the real #btn-toggle-save id 2026-08-22 after live capture, replacing an aria-label substring match that failed to localize (French 'Enregistrer'). The former accept fallback `button.didomi-components-button--color[aria-label*='Agree' i]` was removed the same day: 'Disagree' contains 'agree' as a substring, so it matched both the agree AND disagree buttons - a live regression, not a hypothetical one. `.didomi-continue-without-agreeing[role='button']` covers deployments (e.g. Chantelle) that ship no disagree button at all, only a 'continue without agreeing' link."
     },
     {
       "id": "trustarc",
@@ -121,8 +121,9 @@
       "accept": [".osano-cm-accept-all", ".osano-cm-button--type_accept"],
       "reject": [".osano-cm-deny-all", ".osano-cm-button--type_denyAll", ".osano-cm-denyAll"],
       "settings": [".osano-cm-manage", ".osano-cm-button--type_manage"],
-      "save": [".osano-cm-save", ".osano-cm-button--type_save"],
-      "consent_storage": ["osano_consentmanager", "osano_consentmanager_uuid"]
+      "save": [".osano-cm-save"],
+      "consent_storage": ["osano_consentmanager", "osano_consentmanager_uuid"],
+      "notes": "`.osano-cm-button--type_save` removed 2026-08-22: not observed on a live save control, which carries only `.osano-cm-save`. accept/reject selectors are retained as unverified compatibility fallbacks - all three sites checked served US-region configurations exposing only Manage Preferences (and one exposing only Close), so accept/deny-all controls were never observed rendered, not confirmed absent."
     },
     {
       "id": "termly",
@@ -134,9 +135,10 @@
       "container": ["#termly-code-snippet-support", ".t-consentPrompt"],
       "accept": ["[data-tid='banner-accept']", ".t-acceptAllButton"],
       "reject": ["[data-tid='banner-decline']", ".t-declineAllButton"],
-      "settings": ["[data-tid='banner-preferences']", ".t-preference-button"],
-      "save": [".t-saveButton"],
-      "consent_storage": ["TERMLY_API_CACHE"]
+      "settings": [".t-preference-button", "[data-focus-id='preferences-button']"],
+      "save": [],
+      "consent_storage": ["TERMLY_API_CACHE"],
+      "notes": "`[data-tid='banner-preferences']` replaced with `[data-focus-id='preferences-button']` 2026-08-22: the current runtime's settings button carries the latter, not the former. `save` emptied to match: three live deployments each opened a preference modal offering only Decline All / Allow All, with no save control at all - an empty list here is accurate, not a gap, and is what routes this CMP through UNSAVED_PREFERENCE_STATUS if toggles are ever operated without one."
     },
     {
       "id": "cookieyes",
