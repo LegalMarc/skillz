@@ -944,18 +944,19 @@ def test_sourcepoint_shape_resolves_inside_an_iframe(page) -> None:
 
 
 def test_didomi_shape_resolves_and_save_stays_specific_to_settings(page) -> None:
-    """The didomi table entry was written from documentation, not a live capture,
-    and had never been checked against real markup. Verified 2026-08-22 against
-    https://www.didomi.io itself (Didomi runs its own CMP on its own site): no
-    shadow root, a direct first-layer 'I disagree' button
-    (#didomi-notice-disagree-button), and a second-layer preferences panel whose
-    real Save control is `id="btn-toggle-save"` with
-    aria-label="Save: Save your choices and close" - matched today via the
-    broader `button.didomi-components-button[aria-label*='Save' i]` selector.
-    That selector's whole reason to exist (per the table's own notes) is to
-    avoid also matching the first-layer 'I agree'/'I disagree' buttons, which
-    share the same `didomi-components-button` class - this pins that against
-    real attribute values rather than a hand-written approximation."""
+    """The didomi table entry was written from documentation, not a live capture.
+    A first pass (2026-08-22) verified it against https://www.didomi.io itself
+    and found the table already correct. A second, wider pass across
+    didomi.io plus two customer deployments (Planity, Chantelle) then found a
+    real bug in the entry that pass had missed: the accept fallback
+    `button.didomi-components-button--color[aria-label*='Agree' i]` also
+    matched the DISAGREE button, because the string "agree" is a substring of
+    "disagree". This was a live defect, not a hypothetical one - confirmed
+    against real ariaLabel text, not just noticed by inspection. The fallback
+    was removed; `#didomi-notice-agree-button` alone is sufficient and
+    unambiguous. `save` was also corrected to the real `#btn-toggle-save` id,
+    which localizes (the old aria-label-substring approach did not: French
+    Planity's save button reads "Enregistrer", not "Save")."""
     _serve_cmp_fixture(page, """
         <!doctype html><html><body>
         <div id="didomi-host">
@@ -1010,11 +1011,115 @@ def test_didomi_shape_resolves_and_save_stays_specific_to_settings(page) -> None
         f"sharing its base class: {save_control.get('id')!r}"
     )
 
+    # The current table's accept resolves to the real agree button, and only
+    # that. Checked before the denial click below, which removes the host
+    # element entirely.
+    accept_control, _, accept_resolution = find_control(page, "accept", match["entry"])
+    assert accept_control is not None, accept_resolution
+    assert accept_control["id"] == "didomi-notice-agree-button", accept_control
+
+    # Mutation check: the fallback this entry used to carry -
+    # `button.didomi-components-button--color[aria-label*='Agree' i]` - is
+    # proven here to have been a live bug, not a defensive selector removed
+    # out of caution. "disagree" contains "agree" as a substring, so the old
+    # selector matched BOTH buttons; which one `.first` returned was an
+    # accident of DOM order, not a guarantee of the right one.
+    buggy_entry = dict(match["entry"])
+    buggy_entry["accept"] = ["button.didomi-components-button--color[aria-label*='Agree' i]"]
+    buggy_control, _, _ = find_control(page, "accept", buggy_entry)
+    assert buggy_control is not None, "the old selector should still match something"
+    assert buggy_control["id"] == "didomi-notice-disagree-button", (
+        "this pins the actual historical bug: the removed accept fallback resolved "
+        f"to the DISAGREE button first, not agree - got {buggy_control.get('id')!r}. "
+        "If this ever stops reproducing, the fixture's DOM order changed, not the bug."
+    )
+    ok("the removed Didomi accept fallback is confirmed to have matched 'I disagree', not just suspected to")
+
     result = _denial_for(page, match["entry"])
     assert result["status"] == "direct_reject_clicked", result
     assert result["resolution"]["reject"]["path"] == "cmp_selector_table", result["resolution"]
     assert (result.get("verification") or {}).get("verified") is True, result
     ok("a Didomi-shaped banner (verified against didomi.io) resolves reject directly and save stays scoped to the settings panel")
+
+
+def test_cookiebot_shape_settings_never_resolves_to_the_category_checkbox(page) -> None:
+    """First fixture for cookiebot (19 table entries existed with no fixture at
+    all). Verified 2026-08-22 against three live deployments: cookiebot.com,
+    University of the People (overlay - Deny stays hidden until Customize is
+    opened, mirrored below), and Langley School (bottom multilevel layout).
+
+    The Langley capture surfaced a real bug: the table's `settings` list
+    included `#CybotCookiebotDialogBodyLevelButtonPreferences`, which live
+    markup shows is `<input type="checkbox" role="switch">` - a per-category
+    consent toggle, not a settings launcher. Clicking it during execute_denial's
+    settings step would have silently flipped a consent category rather than
+    opening the preference panel. Removed from the table; this fixture
+    reproduces the real markup (checkbox present, same naming pattern) and
+    proves settings resolves past it to the real button."""
+    _serve_cmp_fixture(page, """
+        <!doctype html><html><body>
+        <div id="CybotCookiebotDialog" role="dialog" data-template="overlay">
+          <p>We use cookies to analyze traffic and personalize content.</p>
+          <button id="CybotCookiebotDialogBodyLevelButtonCustomize">
+            Customize
+          </button>
+          <button id="CybotCookiebotDialogBodyLevelButtonLevelOptinAllowAll">Allow all</button>
+          <button id="CybotCookiebotDialogBodyButtonDecline" class="CybotCookiebotDialogHide" style="display:none">
+            Deny
+          </button>
+          <input type="checkbox" id="CybotCookiebotDialogBodyLevelButtonPreferences" role="switch"
+                 aria-label="Statistics" checked>
+          <button id="CybotCookiebotDialogBodyLevelButtonLevelOptinAllowallSelection" class="CybotCookiebotDialogHide" style="display:none">
+            Allow selection
+          </button>
+        </div>
+        <script>
+          document.querySelector('#CybotCookiebotDialogBodyLevelButtonCustomize').addEventListener('click', () => {
+            const decline = document.querySelector('#CybotCookiebotDialogBodyButtonDecline');
+            decline.style.display = '';
+            decline.classList.remove('CybotCookiebotDialogHide');
+          });
+          document.querySelector('#CybotCookiebotDialogBodyButtonDecline').addEventListener('click', () => {
+            document.querySelector('#CybotCookiebotDialog').remove();
+            document.cookie = 'CookieConsent=%7Bnecessary%3Atrue%2Cpreferences%3Afalse%7D; path=/';
+          });
+        </script></body></html>
+    """)
+    match = fingerprint_cmp(page, load_cmp_table())
+    assert match and match["id"] == "cookiebot", match
+    entry = match["entry"]
+
+    settings_control, _, settings_resolution = find_control(page, "settings", entry)
+    assert settings_control is not None, settings_resolution
+    assert settings_control["id"] == "CybotCookiebotDialogBodyLevelButtonCustomize", (
+        f"settings must resolve to the real launcher, not the category-toggle checkbox: {settings_control}"
+    )
+
+    # Mutation check, before anything below removes the fixture from the DOM:
+    # the removed checkbox selector is proven to have been a real hazard, not
+    # a defensive removal - it resolves and reports itself as a switch, which
+    # execute_denial's settings step would have clicked as if it were "open
+    # preferences".
+    buggy_entry = dict(entry)
+    buggy_entry["settings"] = ["#CybotCookiebotDialogBodyLevelButtonPreferences"]
+    buggy_control, _, _ = find_control(page, "settings", buggy_entry)
+    assert buggy_control is not None, "the removed selector should still match something"
+    assert buggy_control["tag"] == "input" and buggy_control.get("role") == "switch", (
+        f"this confirms the removed selector resolved to the category-toggle checkbox, not a launcher: {buggy_control}"
+    )
+
+    # Deny is hidden until Customize is opened (the UoPeople quirk); the
+    # top-level reject lookup must reflect that rather than reporting a false
+    # "no reject exists" or matching a hidden element.
+    top_level, _, top_resolution = find_control(page, "reject", entry)
+    assert top_level is None, "this fixture's Deny button starts hidden, like UoPeople's"
+    assert top_resolution["cmp_table_miss"] is True, top_resolution
+
+    result = _denial_for(page, entry)
+    assert result["status"] == "second_layer_reject_clicked", result
+    assert result["resolution"]["second_layer_reject"]["path"] == "cmp_selector_table", result["resolution"]
+    assert (result.get("verification") or {}).get("verified") is True, result
+    ok("a Cookiebot-shaped banner (verified live, 3 deployments) keeps settings off the category-toggle checkbox")
 
 
 def test_safe_internal_links_refuses_dangerous_and_offsite(page) -> None:
@@ -3090,6 +3195,7 @@ def main() -> int:
             test_usercentrics_shape_resolves_inside_a_shadow_root(page)
             test_sourcepoint_shape_resolves_inside_an_iframe(page)
             test_didomi_shape_resolves_and_save_stays_specific_to_settings(page)
+            test_cookiebot_shape_settings_never_resolves_to_the_category_checkbox(page)
             test_safe_internal_links_refuses_dangerous_and_offsite(page)
             test_annotate_controls_marks_resolved_controls(page)
             test_annotation_labels_are_painted_above_every_outline(page)
