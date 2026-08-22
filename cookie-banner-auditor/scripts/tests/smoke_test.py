@@ -43,9 +43,12 @@ from lib.capture import (
     annotate_controls,
     annotation_layer_present,
     build_context_options,
+    capture_checkpoint,
     consent_snapshot,
+    dwell_and_nudge,
     execute_denial,
     exercise_forms,
+    exercise_search,
     find_control,
     fingerprint_cmp,
     inspect_banner,
@@ -1153,6 +1156,84 @@ def test_form_exercise_does_not_submit(page) -> None:
     assert values[0] == "privacy-audit-test@example.com"
     assert "555-0100" in values[1]
     ok("form fields are filled with synthetic data and NOT submitted by default")
+
+
+def test_capture_checkpoint_writes_state_and_screenshots(page) -> None:
+    """capture_checkpoint is the one function that touches disk on every scenario
+    step: raw + redacted state JSON, viewport/full screenshots, and - when a
+    banner container resolves in the main frame - a cropped banner screenshot.
+    None of the disk-writing or banner-crop paths were exercised at all."""
+    page.set_content(HUBSPOT_BANNER)
+    with tempfile.TemporaryDirectory(prefix="cookie-auditor-checkpoint-") as temp:
+        temp_path = Path(temp)
+        private_dir = temp_path / "private"
+        share_dir = temp_path / "share"
+        result = capture_checkpoint(page, page.context, "baseline", "before", private_dir, share_dir)
+
+        assert result["scenario"] == "baseline"
+        assert result["checkpoint"] == "before"
+        assert isinstance(result["cookies"], list)
+        assert "storage_state" in result
+        assert result["banner"]["containers"], "the HubSpot banner container should be detected"
+
+        # Viewport and full-page screenshots are always attempted; the banner
+        # crop only fires when the top container resolved in the main frame
+        # with a usable rect, which this fixture satisfies.
+        assert len(result["screenshots"]) == 3, result["screenshots"]
+        for shot in result["screenshots"]:
+            assert Path(shot).exists() and Path(shot).stat().st_size > 0, shot
+        assert any(shot.endswith("-banner.png") for shot in result["screenshots"]), result["screenshots"]
+
+        raw_path = private_dir / "baseline" / "before-state.raw.json"
+        redacted_path = share_dir / "baseline" / "before-state.json"
+        assert raw_path.exists()
+        assert redacted_path.exists()
+    ok("capture_checkpoint writes raw+redacted state and viewport/full/banner screenshots")
+
+
+def test_dwell_and_nudge_scrolls_when_thorough(page) -> None:
+    page.set_content("<!doctype html><html><body><div style='height:4000px'>tall</div></body></html>")
+    config = ScenarioConfig(url="https://example.test", wait_ms=10, thorough=True, dwell_ms=200, scroll_stages=2)
+    record = dwell_and_nudge(page, config)
+    assert record["scrolled_to"] == [0.5, 1.0], record
+    assert page.evaluate("() => window.scrollY") == 0, "must scroll back to the top when finished"
+    ok("dwell_and_nudge scrolls through stages and returns to the top when thorough")
+
+
+def test_dwell_and_nudge_skips_scrolling_when_not_thorough(page) -> None:
+    page.set_content("<!doctype html><html><body><div style='height:4000px'>tall</div></body></html>")
+    page.evaluate("() => window.scrollTo(0, 500)")
+    config = ScenarioConfig(url="https://example.test", wait_ms=10, thorough=False)
+    record = dwell_and_nudge(page, config)
+    assert record == {"scrolled_to": [], "dwell_ms": 10}
+    assert page.evaluate("() => window.scrollY") == 500, "non-thorough mode must not touch scroll position"
+    ok("dwell_and_nudge is a no-op scroll when the profile is not thorough")
+
+
+def test_exercise_search_fills_and_submits(page) -> None:
+    page.set_content("""
+        <!doctype html><html><body>
+        <form id="site-search" onsubmit="window.__query = document.querySelector('#q').value; return false;">
+          <input id="q" type="search" name="q">
+        </form>
+        </body></html>
+    """)
+    config = ScenarioConfig(url="https://example.test", wait_ms=10, timeout_ms=2000)
+    record = exercise_search(page, config, query="widgets")
+    assert record["attempted"] is True
+    assert record["submitted"] is True
+    assert record["selector"] == "input[type='search']"
+    assert page.evaluate("() => window.__query") == "widgets"
+    ok("exercise_search fills the on-site search box and submits via Enter")
+
+
+def test_exercise_search_no_input_present(page) -> None:
+    page.set_content("<!doctype html><html><body><p>no search here</p></body></html>")
+    config = ScenarioConfig(url="https://example.test", wait_ms=10)
+    record = exercise_search(page, config)
+    assert record["attempted"] is False
+    assert "selector" not in record
+    ok("exercise_search is a no-op when no search input is present")
 
 
 # ---------------------------------------------------------------------------
@@ -2763,6 +2844,11 @@ def main() -> int:
             test_mobile_emulation_reaches_the_page(page)
             test_form_exercise_does_not_submit(page)
             test_form_submission_never_touches_an_unsafe_form(page)
+            test_capture_checkpoint_writes_state_and_screenshots(page)
+            test_dwell_and_nudge_scrolls_when_thorough(page)
+            test_dwell_and_nudge_skips_scrolling_when_not_thorough(page)
+            test_exercise_search_fills_and_submits(page)
+            test_exercise_search_no_input_present(page)
         finally:
             browser.close()
 
