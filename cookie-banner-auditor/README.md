@@ -43,7 +43,7 @@ One structural safety rule, enforced by a test rather than by review: **a CMP's 
 
 **Exercising the page**, because a page view alone doesn't fire the tags that matter: staged scrolling with dwell, form fields filled with obviously synthetic values (`privacy-audit-test@example.com` on IANA-reserved `example.com`, `+1-555-0100` from the reserved fictional range) and blurred to trigger form-capture tags, and on-site search submitted. **Forms are filled but never submitted by default** — submission creates real CRM records and can trigger sales workflows, so it requires `--submit-forms` and prints a warning. Login, signup, payment, and account forms are skipped entirely.
 
-**Checks that were previously manual**: a scan for durable identifiers hardcoded into served markup (a GA cross-domain linker pasted into a CMS republishes one person's client id to every visitor, and the decoder recovers the creation date), a statutory-rights sweep for a sale/share mechanism separate from the banner, and measured symmetry — rendered size, colour, computed WCAG contrast, keyboard focusability — rather than an inference from click counts.
+**Checks that were previously manual**: a scan for durable identifiers hardcoded into served markup (a GA cross-domain linker pasted into a CMS republishes one person's client id to every visitor, and the decoder recovers the creation date), a statutory-rights sweep for a sale/share mechanism separate from the banner, and measured symmetry — rendered size, colour, computed WCAG contrast, and the page's *real* keyboard focus order, walked by pressing Tab and reading focus back out across every frame (a control first in markup can still be reached last, or never) plus whether each control shows a focus ring at all — rather than an inference from click counts.
 
 ## Output
 
@@ -71,8 +71,10 @@ python scripts/audit_site.py --url https://example.com --out ./audit-example --a
 
 Exit `4` means the run completed but a required interaction did not — findings depending on it were withheld. That is not a crash; it is the tool declining to answer a question it couldn't test. Usually fixed by adding the CMP's selectors to `references/cmp-selectors.json`.
 
+Add `--assert-no-preconsent-tracking` to turn an audit into a release gate: exit `5` when advertising, social, or session-replay endpoints are contacted before any consent choice. It only trips on an observed beacon or a transmitted identifier, never on a bare script load — Consent Mode legitimately produces those, and a gate that cried wolf would be switched off. Incompleteness still wins: a run that didn't finish can't certify anything.
+
 ```bash
-python scripts/tests/smoke_test.py   # 28 offline tests, no site visits
+python scripts/tests/smoke_test.py   # 59 tests, no site visits
 ```
 
 ## What makes it different from the other skills here

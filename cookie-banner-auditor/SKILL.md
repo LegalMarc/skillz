@@ -71,6 +71,10 @@ A scenario declares the interaction it required, whether that interaction comple
 
 Do not work around this. If a denial control exists but was not resolved, add its selectors to `references/cmp-selectors.json` and re-run. Never describe post-denial behaviour from a run where no denial occurred, and never let a scenario's silence read as a pass.
 
+The corollary is that a status must describe what actually happened. Where the settings path switches the optional-category toggles off but no save control resolves — which is the expected shape on CMPs whose `save` list is intentionally empty — the run reports `toggles_disabled_no_save_control` and the `denial-not-committed` finding, not "no denial control was operated." It is still **not** a completed denial: an unsaved preference panel is not a recorded choice, so the scenario stays invalid and dependent findings stay suppressed. If a CMP writes provisional state when a toggle flips, that change is recorded but labelled provisional; do not read it as consent having been registered.
+
+A scenario that fails on a navigation or timeout error is retried once, and both attempts are recorded. A *failed consent interaction* is never retried — that is a real finding, not a flake.
+
 ## Distinguish a tag loading from a tag transmitting
 
 Every request observation carries an `evidence_strength`:
@@ -101,7 +105,13 @@ Controls resolve in this order: the known-CMP selector table (`references/cmp-se
 
 After any consent click, the runner diffs cookies, local storage, CMP API state, and banner visibility. A click Playwright reports as successful but which changes nothing is not a completed denial: it invalidates the scenario and raises `denial-not-registered`.
 
-When adding a CMP to the selector table, never map `save` to the same element as `accept`. The denial fallback is settings → toggles → save, so that mistake converts a denial into an acceptance while reporting a completed denial. The smoke test enforces this structurally.
+When adding a CMP to the selector table, never map `save` to the same element as `accept`. The denial fallback is settings → toggles → save, so that mistake converts a denial into an acceptance while reporting a completed denial. The smoke test enforces this structurally. Leaving a CMP's `save` list empty is the correct move when no safe selector exists; the run will report `toggles_disabled_no_save_control` rather than silently clicking accept.
+
+### Symmetry is measured, not inferred
+
+Before either control is clicked, the runner walks the page's **real** keyboard focus order — pressing Tab and reading `document.activeElement` back out across every frame, descending into iframe-hosted CMPs — and records where accept and reject actually land. This is not the DOM `tabIndex` attribute: a control that comes first in markup can be reached last, or never. It also compares each control's computed outline, box-shadow, and border focused versus unfocused, so a suppressed focus ring is caught regardless of what the CSS declares.
+
+Read the reachability fields as three-state. `None` means not measured or not knowable — the traversal hit its Tab-press budget before completing a lap — and must not be reported as "unreachable." Only a completed lap that never saw the control proves it is absent from the focus order. Never state that decline is keyboard-unreachable unless `tab_order_cap_hit` is false.
 
 ## Preserve and protect evidence
 
@@ -211,6 +221,18 @@ Read two warnings carefully when they appear. **Run conditions differ** means th
 
 An endpoint disappearing is also consistent with an A/B test, a geo difference, or a tag that did not fire this time. Check each run's baseline stability section before calling it a fix.
 
+## Gate a release on the result
+
+Section 9 of the report tells the user to add consent-regression testing. `--assert-no-preconsent-tracking` is that gate:
+
+```bash
+python scripts/audit_site.py --url "<TARGET_URL>" --out "<OUTPUT_DIRECTORY>" --quick --headless --assert-no-preconsent-tracking
+```
+
+It exits non-zero when advertising, social, or session-replay endpoints are contacted in the baseline scenario — before any consent choice. It is deliberately strict about evidence: only `beacon_observed` and `identifier_transmitted` rows trip it. A `script_loaded_only` row alone does not, because Consent Mode legitimately produces loads without beacons, and a gate that fired on those would be turned off within a week.
+
+The flag is opt-in, so default runs keep their existing exit behaviour. Exit codes: **5** an assertion hit, **4** a scenario was incomplete, **0** clean. Incompleteness takes precedence — a run that did not finish cannot certify anything, and must never be read as a pass.
+
 ## Read supporting material only when needed
 
 - Browser and clean-state setup: `references/browser-setup.md`
@@ -230,4 +252,6 @@ An endpoint disappearing is also consistent with an A/B test, a geo difference, 
 python scripts/tests/smoke_test.py
 ```
 
-Runs offline and covers control detection (including the bare-label regression that once caused a false critical finding), click verification, validity gating and suppression, transmission classification, Consent Mode parsing, the embedded-identifier and rights-mechanism scans, symmetry measurement, CMP table integrity, report rendering, packaging, and run comparison. A live site is still required to validate real CMP behaviour and network conditions.
+Covers control detection (including the bare-label regression that once caused a false critical finding), click verification, validity gating and suppression, transmission classification, Consent Mode parsing, the embedded-identifier and rights-mechanism scans, symmetry measurement including real tab order and focus visibility, the unsaved-preference status, scenario retry, the pre-consent assertion gate and its exit codes, CMP table integrity, report rendering, packaging, and run comparison.
+
+Most checks are offline; the browser-backed ones drive a headless Chromium against in-memory fixtures and still need no network. A live site is required only to validate real CMP behaviour and network conditions.
