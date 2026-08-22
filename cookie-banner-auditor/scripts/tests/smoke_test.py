@@ -1204,6 +1204,67 @@ def test_termly_shape_settings_resolves_via_the_real_attribute(page) -> None:
     ok("a Termly-shaped banner (verified live, 3 deployments) resolves settings via the real data-focus-id attribute")
 
 
+def test_osano_shape_completes_via_settings_toggles_and_save(page) -> None:
+    """First fixture for osano. Verified 2026-08-22 against three live US-region
+    deployments (osano.com, New Relic, JD Supra): none rendered an accept or
+    reject control at all - only 'Manage Preferences', and (after opening it)
+    a Save button. `.osano-cm-button--type_save` was removed from `save`
+    because the live save control never carried that class, only
+    `.osano-cm-save`.
+
+    This shape - no first-layer or second-layer reject, only a settings panel
+    with toggles and a save control - is exactly what the generic
+    toggle-then-save fallback in execute_denial exists for. This fixture
+    proves that path still completes correctly with the corrected, narrower
+    save selector, ending in `preferences_disabled_and_saved` rather than the
+    misleading `manual_required` this whole mechanism was built to avoid."""
+    _serve_cmp_fixture(page, """
+        <!doctype html><html><body>
+        <div class="osano-cm-window">
+          <div role="dialog" aria-label="Cookie Consent Banner"
+               class="osano-cm-window__dialog osano-cm-dialog osano-cm-dialog--type_bar">
+            <p>We use cookies to improve your experience.</p>
+            <button class="osano-cm-manage osano-cm-buttons__button osano-cm-button osano-cm-button--type_manage">
+              Manage Preferences
+            </button>
+          </div>
+        </div>
+        <script>
+          document.querySelector('.osano-cm-manage').addEventListener('click', () => {
+            document.querySelector('.osano-cm-window').innerHTML = `
+              <label><input type="checkbox" checked> Analytics</label>
+              <label><input type="checkbox" checked> Marketing</label>
+              <button class="osano-cm-save osano-cm-view__button osano-cm-button">Save</button>
+            `;
+            document.querySelector('.osano-cm-save').addEventListener('click', () => {
+              document.querySelector('.osano-cm-window').remove();
+              document.cookie = 'osano_consentmanager=denied; path=/';
+            });
+          });
+        </script></body></html>
+    """)
+    match = fingerprint_cmp(page, load_cmp_table())
+    assert match and match["id"] == "osano", match
+    entry = match["entry"]
+
+    # No accept or reject control exists anywhere in this US-shaped fixture,
+    # matching all three live captures.
+    top_reject, _, top_resolution = find_control(page, "reject", entry)
+    assert top_reject is None, "this fixture has no reject control at all, like the live US captures"
+    assert top_resolution["cmp_table_miss"] is True, top_resolution
+
+    # The removed `.osano-cm-button--type_save` selector must not be what
+    # resolves save; only `.osano-cm-save` may.
+    assert entry["save"] == [".osano-cm-save"], entry["save"]
+
+    result = _denial_for(page, entry)
+    assert result["status"] == "preferences_disabled_and_saved", result
+    assert len(result.get("toggle_result", {}).get("disabled", [])) == 2, result
+    assert result["resolution"]["save"]["path"] == "cmp_selector_table", result["resolution"]
+    assert (result.get("verification") or {}).get("verified") is True, result
+    ok("an Osano-shaped US banner (verified live, 3 deployments) completes via settings, toggles, and the corrected save selector")
+
+
 def test_safe_internal_links_refuses_dangerous_and_offsite(page) -> None:
     """This decides what the auditor navigates to on a live site the user owns.
     The skill promises no logout, no account change, no purchase and no
@@ -3279,6 +3340,7 @@ def main() -> int:
             test_didomi_shape_resolves_and_save_stays_specific_to_settings(page)
             test_cookiebot_shape_settings_never_resolves_to_the_category_checkbox(page)
             test_termly_shape_settings_resolves_via_the_real_attribute(page)
+            test_osano_shape_completes_via_settings_toggles_and_save(page)
             test_safe_internal_links_refuses_dangerous_and_offsite(page)
             test_annotate_controls_marks_resolved_controls(page)
             test_annotation_labels_are_painted_above_every_outline(page)
