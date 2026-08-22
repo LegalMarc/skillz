@@ -270,4 +270,13 @@ python scripts/tests/smoke_test.py
 
 Covers control detection (including the bare-label regression that once caused a false critical finding), click verification, validity gating and suppression, transmission classification, Consent Mode parsing, the embedded-identifier and rights-mechanism scans, symmetry measurement including real tab order and focus visibility, the unsaved-preference status, scenario retry, the pre-consent assertion gate and its exit codes, CMP table integrity, report rendering, packaging, and run comparison.
 
-Most checks are offline; the browser-backed ones drive a headless Chromium against in-memory fixtures and still need no network. A live site is required only to validate real CMP behaviour and network conditions.
+Most checks are offline; the browser-backed ones drive a headless Chromium against in-memory fixtures and still need no network.
+
+To see what is *not* covered:
+
+```bash
+python -m pip install coverage
+python -m coverage run --branch --source=lib,. --omit="*/tests/*" tests/smoke_test.py && python -m coverage report -m --sort=cover
+```
+
+Coverage sits around 67%, concentrated where it matters: the pure logic in `checks.py` is the best-covered module and the browser-driving half of `capture.py` the least, which is the intended shape. When adding a check, put the decision in `checks.py` and the driving in `capture.py` — that is what keeps the decision testable. Treat a new uncovered branch in `checks.py` or `analysis.py` as a gap; an uncovered Playwright call path in `capture.py` usually is not. A live site is required only to validate real CMP behaviour and network conditions.

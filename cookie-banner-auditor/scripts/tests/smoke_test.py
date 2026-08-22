@@ -8,6 +8,7 @@ below cover the logic that has silently produced wrong answers before.
 
 from __future__ import annotations
 
+import hashlib
 import json
 import sys
 import tempfile
@@ -52,12 +53,19 @@ from lib.capture import (
     load_transmission_patterns,
     measure_focus_visibility,
     measure_tab_order,
+    safe_internal_links,
     verify_choice_registered,
     viewport_profile,
 )
 from lib.util import (
     build_zip_bundle,
+    create_hash_manifest,
     endpoint_key,
+    redact_storage_state,
+    redacted_value,
+    registrable_domain,
+    same_site,
+    sha256_file,
     discover_browser_executable,
     markdown_to_html,
     read_json,
@@ -692,6 +700,56 @@ def test_measure_tab_order_bounded(page) -> None:
     ok("measure_tab_order bounds its Tab-press budget and reports the cap being hit")
 
 
+def test_safe_internal_links_refuses_dangerous_and_offsite(page) -> None:
+    """This decides what the auditor navigates to on a live site the user owns.
+    The skill promises no logout, no account change, no purchase and no
+    download, and this function is the only thing enforcing it."""
+    page.set_content("""
+        <!doctype html><html><body>
+          <a href="https://fixture.test/about">About us</a>
+          <a href="https://fixture.test/services">Services</a>
+          <a href="https://fixture.test/logout">Log out</a>
+          <a href="https://fixture.test/account/delete">Delete account</a>
+          <a href="https://fixture.test/cart/checkout">Checkout</a>
+          <a href="https://fixture.test/unsubscribe">Unsubscribe</a>
+          <a href="https://fixture.test/sign-in">Sign in</a>
+          <a href="https://fixture.test/brochure.pdf">Brochure</a>
+          <a href="https://fixture.test/installer.dmg">Download</a>
+          <a href="https://other.test/about">Offsite</a>
+          <a href="mailto:x@fixture.test">Email</a>
+          <a href="javascript:doThing()">Script</a>
+          <a href="https://fixture.test/">Home</a>
+          <a href="https://fixture.test/quiet" style="display:none">Hidden</a>
+        </body></html>
+    """)
+    links = safe_internal_links(page, "https://fixture.test/", limit=10)
+
+    for banned in (
+        "https://fixture.test/logout",
+        "https://fixture.test/account/delete",
+        "https://fixture.test/cart/checkout",
+        "https://fixture.test/unsubscribe",
+        "https://fixture.test/sign-in",
+        "https://fixture.test/brochure.pdf",
+        "https://fixture.test/installer.dmg",
+        "https://other.test/about",
+    ):
+        assert banned not in links, f"must never be navigated to: {banned}"
+    assert not any(l.startswith(("mailto:", "javascript:")) for l in links), links
+    # The start page itself is not a second page to visit.
+    assert "https://fixture.test/" not in links, links
+    # An invisible link is not something a user could follow.
+    assert "https://fixture.test/quiet" not in links, links
+
+    assert "https://fixture.test/about" in links, links
+    assert "https://fixture.test/services" in links, links
+
+    # The limit is a hard cap, and limit<=0 means no navigation at all.
+    assert len(safe_internal_links(page, "https://fixture.test/", limit=1)) == 1
+    assert safe_internal_links(page, "https://fixture.test/", limit=0) == []
+    ok("internal-link selection refuses logout, account, purchase, download, and offsite links")
+
+
 def test_annotate_controls_marks_resolved_controls(page) -> None:
     """The pre-flight image must outline what would be clicked, and must skip a
     control with no measurable box rather than drawing it at the origin, where
@@ -1111,6 +1169,198 @@ def test_repeat_stability() -> None:
 # ---------------------------------------------------------------------------
 # B - validity gating
 # ---------------------------------------------------------------------------
+
+class _StubPlaywright:
+    """Enough of the sync_playwright context manager for main() to run with no browser."""
+    def __enter__(self): return self
+    def __exit__(self, *exc): return False
+
+
+class _StubBrowser:
+    version = "stub/0.0"
+    def close(self): pass
+
+
+def test_main_orchestrates_bundles_gates_and_exit_codes() -> None:
+    """main() is ~150 lines of orchestration that no test touched: bundle
+    layout, per-profile metadata, the union of gate signals, and the exit code.
+    It was only ever verified by hand against a live site, so a refactor could
+    silently change which bundle a report lands in or let a clean desktop run
+    mask a broken mobile one."""
+    captured_labels: list[str] = []
+
+    def fake_run_all_scenarios(browser, config, private_dir, share_dir, **kwargs):
+        captured_labels.append(config.viewport_label)
+        # The mobile profile fails its denial; desktop succeeds. A run where
+        # both profiles agree could not detect a union bug.
+        return synthetic_results(denial_completed=(config.viewport_label != "mobile"))
+
+    originals = {
+        name: getattr(audit_site, name)
+        for name in ("sync_playwright", "launch_browser", "run_all_scenarios",
+                     "resolve_egress_region", "render_pdf_from_html")
+    }
+    audit_site.sync_playwright = lambda: _StubPlaywright()
+    audit_site.launch_browser = lambda *a, **k: _StubBrowser()
+    audit_site.run_all_scenarios = fake_run_all_scenarios
+    audit_site.resolve_egress_region = lambda *a, **k: {"resolved": False, "region": None}
+    audit_site.render_pdf_from_html = lambda *a, **k: {"ok": False, "error": "stubbed"}
+
+    def run(argv: list[str]) -> int:
+        original_argv = sys.argv
+        sys.argv = ["audit_site.py", *argv]
+        try:
+            return audit_site.main()
+        finally:
+            sys.argv = original_argv
+
+    try:
+        # --- single profile: the historical flat layout must be preserved ---
+        single = Path(tempfile.mkdtemp()) / "single"
+        code = run(["--url", "https://example.test", "--out", str(single), "--headless",
+                    "--no-zip", "--no-pdf", "--no-geo", "--viewport", "desktop"])
+        assert captured_labels == ["desktop"], captured_labels
+        assert (single / "audit-report.md").exists(), "single-profile runs must stay flat"
+        assert not (single / "desktop").exists(), "a single profile must not create a subdirectory"
+        assert code == 0, f"a fully valid run exits 0, got {code}"
+
+        # --- both profiles: one complete bundle each, never merged ---
+        captured_labels.clear()
+        both = Path(tempfile.mkdtemp()) / "both"
+        code = run(["--url", "https://example.test", "--out", str(both), "--headless",
+                    "--no-zip", "--no-pdf", "--no-geo", "--viewport", "both"])
+        assert captured_labels == ["desktop", "mobile"], captured_labels
+        for label in ("desktop", "mobile"):
+            assert (both / label / "audit-report.md").exists(), f"{label} needs its own report"
+            assert (both / label / "findings.json").exists(), f"{label} needs its own findings"
+        assert not (both / "audit-report.md").exists(), (
+            "there must be no merged top-level report; a mobile and a desktop finding "
+            "must not share one table"
+        )
+        assert (both / "README.txt").exists() and (both / "manifest.sha256").exists()
+
+        # Each profile records its own conditions, and the fingerprints differ
+        # so the two can never be mistaken for repeat runs of the same thing.
+        meta = {label: read_json(both / label / "run-metadata.json") for label in ("desktop", "mobile")}
+        assert meta["desktop"]["viewport"] == "1440x1000", meta["desktop"]["viewport"]
+        assert meta["mobile"]["viewport"] == "412x915", meta["mobile"]["viewport"]
+        assert meta["desktop"]["run_fingerprint"] != meta["mobile"]["run_fingerprint"]
+
+        # The mobile denial failed, so the run is INCOMPLETE overall even though
+        # desktop was clean, and the offending scenario is named by profile.
+        assert code == 4, f"a broken mobile profile must not be masked by a clean desktop one, got {code}"
+        mobile_data = read_json(both / "mobile" / "audit-data.json")
+        assert mobile_data["run_complete"] is False, mobile_data["run_complete"]
+        assert read_json(both / "desktop" / "audit-data.json")["run_complete"] is True
+
+        # --- guard rails that must reject before any capture happens ---
+        captured_labels.clear()
+        assert run(["--url", "ftp://example.test", "--out", str(Path(tempfile.mkdtemp()) / "x"),
+                    "--headless"]) == 2, "a non-http URL must be refused"
+        assert run(["--url", "https://user:pw@example.test", "--out", str(Path(tempfile.mkdtemp()) / "y"),
+                    "--headless"]) == 2, "credentials in the URL must be refused"
+        assert captured_labels == [], "nothing may be captured after a configuration error"
+
+        # A non-empty output directory must not be written over.
+        occupied = Path(tempfile.mkdtemp())
+        (occupied / "existing.txt").write_text("keep me", encoding="utf-8")
+        assert run(["--url", "https://example.test", "--out", str(occupied), "--headless"]) == 2
+        assert (occupied / "existing.txt").read_text(encoding="utf-8") == "keep me"
+    finally:
+        for name, value in originals.items():
+            setattr(audit_site, name, value)
+    ok("main() lays out bundles per profile, unions gate signals, and refuses unsafe configurations")
+
+
+def test_redact_storage_state_does_not_leak_or_mutate() -> None:
+    """redact_storage_state produces what goes into evidence-shareable, so an
+    under-redaction here leaks identifiers to anyone the bundle is sent to. It
+    must also leave its input untouched: mutating in place would redact the RAW
+    private evidence too, destroying the thing the bundle exists to preserve."""
+    state = {
+        "cookies": [{"name": "sid", "value": "super-secret-session", "domain": "a.test", "path": "/"}],
+        "origins": [{
+            "origin": "https://a.test",
+            "localStorage": [
+                {"name": "consent", "value": "granted"},
+                {"name": "ga_client", "value": "1234567890.1234567890"},
+            ],
+            "indexedDB": [{"name": "db", "stores": [{"name": "s", "records": [{"k": "pii@example.com"}, {"k": "x"}]}]}],
+        }],
+    }
+    import copy
+    original = copy.deepcopy(state)
+    redacted = redact_storage_state(state)
+
+    assert state == original, "the caller's state must not be mutated; raw evidence depends on it"
+
+    serialized = json.dumps(redacted)
+    for secret in ("super-secret-session", "1234567890.1234567890", "pii@example.com", "granted"):
+        assert secret not in serialized, f"{secret!r} survived redaction into the shareable bundle"
+
+    stored = redacted["origins"][0]["localStorage"]
+    for item in stored:
+        assert item["value"].startswith("[REDACTED len="), item
+    # The key names survive: which keys exist is the evidence, their contents are not.
+    assert {i["name"] for i in stored} == {"consent", "ga_client"}
+    assert redacted["origins"][0]["indexedDB"][0]["stores"][0]["records"] == "[REDACTED 2 RECORDS]"
+
+    # A same-length value must still be distinguishable, or a reviewer cannot
+    # tell a changed preference from an unchanged one in the redacted view.
+    a = redacted_value("AAAA")
+    b = redacted_value("ZZZZ")
+    assert a != b, "redaction must preserve a content hash, not just a length"
+    assert "len=4" in a and "len=4" in b
+    ok("storage redaction leaks nothing into the shareable bundle and never mutates the raw state")
+
+
+def test_registrable_domain_and_third_party_edges() -> None:
+    """Third-party classification rests on this, and 'third party' drives most
+    findings. A multi-label suffix handled wrong makes a first-party subdomain
+    look like a third-party recipient, or the reverse."""
+    assert registrable_domain("www.example.com") == "example.com"
+    assert registrable_domain("example.com") == "example.com"
+    assert registrable_domain("a.b.c.example.com") == "example.com"
+    # Multi-label public suffixes: .co.uk is not a registrable domain on its own.
+    assert registrable_domain("shop.example.co.uk") == "example.co.uk"
+    assert registrable_domain("example.co.uk") == "example.co.uk"
+    # Degenerate inputs must not raise or silently produce a bogus domain.
+    assert registrable_domain(None) == ""
+    assert registrable_domain("") == ""
+    assert registrable_domain("localhost") == "localhost"
+    assert registrable_domain("127.0.0.1") == "127.0.0.1"
+    assert registrable_domain("EXAMPLE.COM.") == "example.com", "trailing dot and case must normalise"
+
+    assert same_site("www.example.com", "cdn.example.com") is True
+    assert same_site("example.com", "example.co.uk") is False
+    assert same_site("example.com", None) is False
+    ok("registrable-domain derivation handles multi-label suffixes, IPs, and degenerate hosts")
+
+
+def test_hash_manifest_covers_the_bundle() -> None:
+    """The report tells the reader to verify the bundle against manifest.sha256
+    before relying on it, so the manifest must actually cover the files and the
+    hashes must be real."""
+    root = Path(tempfile.mkdtemp())
+    (root / "sub").mkdir()
+    (root / "audit-report.md").write_text("report body", encoding="utf-8")
+    (root / "sub" / "evidence.json").write_text('{"a": 1}', encoding="utf-8")
+    create_hash_manifest(root)
+
+    manifest = (root / "manifest.sha256").read_text(encoding="utf-8")
+    assert "audit-report.md" in manifest, manifest
+    assert "sub/evidence.json" in manifest, manifest
+    # The manifest must not claim to hash itself, which can never verify.
+    assert "manifest.sha256" not in manifest.replace("manifest.sha256\n", ""), manifest
+
+    expected = hashlib.sha256(b"report body").hexdigest()
+    assert expected in manifest, "the recorded digest must be the file's real sha256"
+
+    # A tampered file must no longer match its recorded digest.
+    (root / "audit-report.md").write_text("tampered", encoding="utf-8")
+    assert sha256_file(root / "audit-report.md") != expected
+    ok("the hash manifest covers the bundle's files with real, tamper-detecting digests")
+
 
 def test_time_budget_skips_only_corroborating_work() -> None:
     """The wall-clock ceiling must never drop baseline or denial - the findings
@@ -2160,6 +2410,10 @@ def main() -> int:
     test_issue_matrix_renders_in_report()
     test_cmp_table_integrity()
     test_repeat_stability()
+    test_main_orchestrates_bundles_gates_and_exit_codes()
+    test_redact_storage_state_does_not_leak_or_mutate()
+    test_registrable_domain_and_third_party_edges()
+    test_hash_manifest_covers_the_bundle()
     test_time_budget_skips_only_corroborating_work()
     test_policy_link_selection()
     test_meta_ldu_signal_parsing()
@@ -2202,6 +2456,7 @@ def main() -> int:
             test_measure_tab_order_distinguishes_cap_from_unreachable(page)
             test_execute_denial_measures_focus_visibility_per_control(page)
             test_measure_tab_order_bounded(page)
+            test_safe_internal_links_refuses_dangerous_and_offsite(page)
             test_annotate_controls_marks_resolved_controls(page)
             test_annotation_labels_are_painted_above_every_outline(page)
             test_mobile_emulation_reaches_the_page(page)
