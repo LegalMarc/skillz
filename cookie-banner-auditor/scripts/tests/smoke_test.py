@@ -66,6 +66,7 @@ from lib.util import (
     registrable_domain,
     same_site,
     sha256_file,
+    write_json,
     discover_browser_executable,
     markdown_to_html,
     read_json,
@@ -2408,6 +2409,86 @@ def test_compare_runs() -> None:
     ok("compare_runs diffs findings and endpoints and warns on mismatched conditions")
 
 
+def test_compare_runs_main_writes_outputs_and_never_touches_inputs() -> None:
+    """compare_runs.main was untested end to end - the same gap audit_site.main
+    had. Its docstring promises "Neither input bundle is modified", which is the
+    whole basis for re-running it against archived evidence, so that promise
+    needs a test rather than a comment."""
+    import compare_runs
+
+    def bundle(root: Path, findings: list[dict], fingerprint: str = "abc123", complete: bool = True) -> Path:
+        root.mkdir(parents=True, exist_ok=True)
+        write_json(root / "audit-data.json", {
+            "run_fingerprint": fingerprint,
+            "overall_status": "Review required",
+            "run_complete": complete,
+            "metadata": {"target_url": "https://example.test", "profile": "thorough", "tool_version": "2.0.0"},
+            "findings": findings,
+            "scenario_results": {"baseline": {"events": {"requests": [{"url": "https://a.test/tag.js"}]}}},
+        })
+        return root
+
+    workspace = Path(tempfile.mkdtemp())
+    before = bundle(workspace / "before", [{"id": "F-A", "title": "A", "severity": "high"}])
+    after = bundle(workspace / "after", [])
+    out = workspace / "out"
+
+    before_snapshot = (before / "audit-data.json").read_bytes()
+    after_snapshot = (after / "audit-data.json").read_bytes()
+    before_listing = sorted(p.name for p in before.iterdir())
+
+    def run(argv: list[str]) -> int:
+        original = sys.argv
+        sys.argv = ["compare_runs.py", *argv]
+        try:
+            return compare_runs.main()
+        finally:
+            sys.argv = original
+
+    original_pdf = compare_runs.render_pdf_from_html
+    compare_runs.render_pdf_from_html = lambda *a, **k: {"ok": False, "error": "stubbed"}
+    try:
+        code = run(["--before", str(before), "--after", str(after), "--out", str(out), "--no-pdf"])
+        assert code == 0, code
+        for name in ("comparison-report.md", "comparison-report.html", "comparison-data.json"):
+            assert (out / name).is_file(), f"{name} was not written"
+
+        delta = read_json(out / "comparison-data.json")
+        assert [f["id"] for f in delta["findings"]["resolved"]] == ["F-A"], delta["findings"]
+
+        # The documented promise.
+        assert (before / "audit-data.json").read_bytes() == before_snapshot, "the earlier bundle was modified"
+        assert (after / "audit-data.json").read_bytes() == after_snapshot, "the later bundle was modified"
+        assert sorted(p.name for p in before.iterdir()) == before_listing, (
+            "nothing may be written into an input bundle"
+        )
+
+        # With no --out, the comparison lands in the later bundle. That writes to
+        # `after`, so it is checked after the untouched-inputs assertions above.
+        assert run(["--before", str(before), "--after", str(after), "--no-pdf"]) == 0
+        assert (after / "comparison-report.md").is_file(), "default output goes beside the later bundle"
+
+        # A directory that is not a bundle must be refused, not half-processed.
+        not_a_bundle = workspace / "empty"
+        not_a_bundle.mkdir()
+        assert run(["--before", str(before), "--after", str(not_a_bundle), "--no-pdf"]) == 2
+        assert run(["--before", str(workspace / "missing"), "--after", str(after), "--no-pdf"]) == 2
+
+        # An incomplete run must still compare, but the caller has to be able to
+        # see that an "absent" finding may simply never have been tested.
+        incomplete = bundle(workspace / "incomplete", [], fingerprint="zzz", complete=False)
+        assert run(["--before", str(before), "--after", str(incomplete),
+                    "--out", str(workspace / "out2"), "--no-pdf"]) == 0
+        delta2 = read_json(workspace / "out2" / "comparison-data.json")
+        assert delta2["after_complete"] is False, delta2
+        assert delta2["fingerprints_match"] is False, delta2
+        report = (workspace / "out2" / "comparison-report.md").read_text(encoding="utf-8")
+        assert "Run conditions differ" in report, "a fingerprint mismatch must be visible in the report"
+    finally:
+        compare_runs.render_pdf_from_html = original_pdf
+    ok("compare_runs.main writes its three outputs, refuses non-bundles, and never modifies its inputs")
+
+
 # ---------------------------------------------------------------------------
 # Retry classification - transient transport failures vs. consent findings (#12)
 # ---------------------------------------------------------------------------
@@ -2585,6 +2666,7 @@ def main() -> int:
     test_cookie_inventory_handles_non_scenario_entries()
     test_markdown_to_html()
     test_run_fingerprint()
+    test_compare_runs_main_writes_outputs_and_never_touches_inputs()
     test_scenario_failure_classification()
     test_retry_recovers_from_transient_navigation_failure()
     test_retry_gives_up_after_second_transient_failure()
