@@ -239,6 +239,14 @@ It exits non-zero when advertising, social, or session-replay endpoints are cont
 
 The flag is opt-in, so default runs keep their existing exit behaviour. Exit codes: **5** an assertion hit, **4** a scenario was incomplete, **0** clean. Incompleteness takes precedence — a run that did not finish cannot certify anything, and must never be read as a pass.
 
+## Archive what the site says, separately from what it does
+
+Each run stores the text of the site's linked cookie, privacy, and do-not-sell documents under `evidence-shareable/policies/`, each file carrying its source URL, retrieval timestamp, and a SHA-256 of the text. Counsel's first question about any observed behaviour is what the site claimed it would do, and a policy read six weeks later is not the policy that was live during the capture.
+
+**The tool draws no conclusion from this text and does not compare it to the observed behaviour.** A policy saying one thing while the network log shows another is a question for a reviewer, not a finding the scanner is entitled to assert. Say so when you use it.
+
+Fetches happen in a context of their own, so nothing here touches any scenario's consent state, and robots.txt is honoured per origin. Tracking parameters are stripped before fetching: Google's cross-domain linker decorates outbound policy links with `_gl`, which carries the visitor's GA client id, and retrieving the decorated URL would make the audit itself disclose an identifier to the policy host. Anything behind a login is recorded as skipped rather than archived — a login page saved under the name of a privacy policy is worse than no file. `--no-policy-capture` turns it off.
+
 ## Read supporting material only when needed
 
 - Browser and clean-state setup: `references/browser-setup.md`

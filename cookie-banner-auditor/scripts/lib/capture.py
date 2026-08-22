@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hashlib
 import json
 import re
 import time
@@ -7,6 +8,8 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 from urllib.parse import urljoin, urlsplit
+from urllib.request import urlopen
+from urllib.robotparser import RobotFileParser
 
 from playwright.sync_api import Browser, BrowserContext, Error as PlaywrightError, Frame, Locator, Page, TimeoutError as PlaywrightTimeoutError
 
@@ -14,6 +17,7 @@ from . import checks
 from .util import (
     endpoint_key,
     ensure_dir,
+    slugify,
     origin_from_url,
     read_json,
     redact_storage_state,
@@ -1814,6 +1818,164 @@ def collect_page_links(page: Page) -> list[dict[str, Any]]:
         return []
 
 
+#: Signals that a fetched page is a login wall rather than a public document.
+_AUTH_WALL = re.compile(r"\b(sign in|log in|login|create an account|password)\b", re.I)
+
+
+def _robots_allows(url: str, cache: dict[str, Any], timeout_s: float = 8.0) -> tuple[bool, str]:
+    """May an automated fetcher retrieve `url`?
+
+    Checked per origin and cached. A robots.txt that cannot be fetched is
+    treated as permissive, which is the convention: an origin with no robots
+    policy has not asked anyone to stay out. A robots.txt that *is* served and
+    disallows the path is honoured, even though the same document was already
+    linked from a page the audit loaded in a browser - fetching a document is a
+    different act from following a link a user clicked.
+    """
+    try:
+        parts = urlsplit(url)
+        origin = f"{parts.scheme}://{parts.netloc}"
+    except Exception:
+        return True, "url could not be parsed for a robots check"
+    if origin not in cache:
+        parser = RobotFileParser()
+        try:
+            with urlopen(f"{origin}/robots.txt", timeout=timeout_s) as response:  # noqa: S310
+                body = response.read().decode("utf-8", "replace")
+            parser.parse(body.splitlines())
+            cache[origin] = parser
+        except Exception:
+            cache[origin] = None
+    parser = cache[origin]
+    if parser is None:
+        return True, "no robots.txt served or it could not be read"
+    try:
+        return bool(parser.can_fetch("*", url)), "robots.txt consulted"
+    except Exception:
+        return True, "robots.txt could not be evaluated"
+
+
+def capture_policy_texts(
+    browser: Browser,
+    links: list[dict[str, Any]],
+    share_dir: Path,
+    timeout_ms: int = 30000,
+    limit: int = 6,
+) -> dict[str, Any]:
+    """Archive the text of the site's linked policies (E6).
+
+    Counsel's first question about any observed behaviour is what the site said
+    it would do. Without this, answering that means finding the policy by hand
+    and hoping it has not changed since the capture - so the text is stored
+    beside the behaviour with a retrieval timestamp and a content hash.
+
+    **Capture and store only.** Nothing here compares the text to what was
+    observed or draws any conclusion from it. A policy saying one thing and the
+    network log showing another is a question for a reader, not a finding this
+    tool is entitled to assert.
+
+    Fetched in a context of its own, so nothing here touches the consent state
+    of any scenario. Anything behind a login is recorded as skipped rather than
+    archived: a login page saved under the name of a privacy policy is worse
+    than no file at all.
+    """
+    selections = checks.select_policy_links(links, limit=limit)
+    output_dir = ensure_dir(share_dir / "policies")
+    records: list[dict[str, Any]] = []
+    robots_cache: dict[str, Any] = {}
+
+    context = None
+    try:
+        context = browser.new_context(accept_downloads=False)
+        page = context.new_page()
+        page.set_default_timeout(timeout_ms)
+        for index, selection in enumerate(selections, start=1):
+            record = {
+                "kind": selection["kind"],
+                "url": selection["url"],
+                "link_label": selection["label"],
+                "host": selection["host"],
+                "retrieved_at": utc_now(),
+                "archived": False,
+                "skipped_reason": None,
+            }
+            allowed, robots_note = _robots_allows(selection["url"], robots_cache)
+            record["robots_note"] = robots_note
+            if not allowed:
+                record["skipped_reason"] = "robots.txt disallows automated retrieval of this path"
+                records.append(record)
+                continue
+            try:
+                response = page.goto(selection["url"], wait_until="domcontentloaded", timeout=timeout_ms)
+                record["http_status"] = response.status if response else None
+                content_type = ((response.header_value("content-type") or "") if response else "").lower()
+                record["content_type"] = content_type or None
+                if response is not None and not response.ok:
+                    record["skipped_reason"] = f"fetch returned HTTP {response.status}"
+                    records.append(record)
+                    continue
+                if content_type and "html" not in content_type and "text/plain" not in content_type:
+                    # A PDF policy is common and is genuinely the document, but
+                    # extracting its text is a different job. Record that it
+                    # exists rather than archiving an empty file for it.
+                    record["skipped_reason"] = f"not extractable as text ({content_type})"
+                    records.append(record)
+                    continue
+                text = (page.inner_text("body") or "").strip()
+                record["chars"] = len(text)
+                if _AUTH_WALL.search(text[:2000]) and len(text) < 2500:
+                    record["skipped_reason"] = "the fetched page looks like a login wall, not a public policy"
+                    records.append(record)
+                    continue
+                if len(text) < 200:
+                    record["skipped_reason"] = f"fetched page held too little text to be a policy ({len(text)} chars)"
+                    records.append(record)
+                    continue
+                record["final_url"] = page.url
+                record["sha256"] = hashlib.sha256(text.encode("utf-8")).hexdigest()
+                filename = f"{index:02d}-{selection['kind']}-{slugify(selection['host'])}.txt"
+                header = (
+                    f"Source URL: {selection['url']}\n"
+                    f"Final URL after redirects: {page.url}\n"
+                    f"Retrieved at: {record['retrieved_at']}\n"
+                    f"Link label on the audited page: {selection['label']}\n"
+                    f"SHA-256 of the text below: {record['sha256']}\n"
+                    f"{'-' * 72}\n"
+                    "Archived verbatim for reference. This tool draws no conclusion from this text\n"
+                    "and has not compared it to the observed behaviour.\n"
+                    f"{'-' * 72}\n\n"
+                )
+                write_text(output_dir / filename, header + text)
+                record["path"] = str(output_dir / filename)
+                record["archived"] = True
+            except Exception as error:
+                record["skipped_reason"] = f"fetch failed: {str(error)[:200]}"
+            records.append(record)
+    except Exception as error:
+        return {
+            "attempted": len(selections),
+            "archived": 0,
+            "records": records,
+            "error": str(error)[:300],
+        }
+    finally:
+        if context is not None:
+            try:
+                context.close()
+            except Exception:
+                pass
+
+    return {
+        "attempted": len(selections),
+        "archived": sum(1 for r in records if r.get("archived")),
+        "records": records,
+        "note": (
+            "Policy text is archived as reference material only. No comparison to observed "
+            "behaviour has been performed and no finding is derived from it."
+        ),
+    }
+
+
 def capture_served_html(page: Page) -> str:
     """Rendered HTML, used by the embedded-identifier scan (E2)."""
     try:
@@ -2374,6 +2536,7 @@ def run_all_scenarios(
     include_accept: bool = True,
     baseline_repeats: int = 2,
     include_persistence: bool = True,
+    include_policies: bool = True,
 ) -> dict[str, Any]:
     cmp_table = load_cmp_table()
     results: dict[str, Any] = {}
@@ -2411,6 +2574,17 @@ def run_all_scenarios(
     if repeats:
         results["baseline_repeats"] = repeats
         results["baseline_stability"] = checks.compare_repeat_runs(repeat_sets)
+
+    # E6 - archive the linked policy documents. Uses the baseline scenario's
+    # links, collected before any consent choice, so the policies captured are
+    # the ones every visitor is offered.
+    if include_policies:
+        results["policies"] = capture_policy_texts(
+            browser,
+            (results["baseline"].get("page_scan") or {}).get("links") or [],
+            share_dir,
+            timeout_ms=config.timeout_ms,
+        )
 
     if include_persistence:
         results["persistence"] = run_persistence_check(

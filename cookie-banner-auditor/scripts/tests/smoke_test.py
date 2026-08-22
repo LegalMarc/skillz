@@ -1112,6 +1112,78 @@ def test_repeat_stability() -> None:
 # B - validity gating
 # ---------------------------------------------------------------------------
 
+def test_policy_link_selection() -> None:
+    """E6 selects which policy documents to archive. It must file each link
+    under its most specific kind, treat a fragment as the same document, and
+    refuse application surfaces that merely look like policy links."""
+    links = [
+        {"text": "Cookie Policy", "href": "https://a.test/legal/cookies"},
+        {"text": "Privacy Policy", "href": "https://a.test/legal/privacy#top"},
+        {"text": "Privacy", "href": "https://a.test/legal/privacy"},
+        {"text": "Do Not Sell or Share My Personal Information", "href": "https://a.test/dns"},
+        {"text": "Log in", "href": "https://a.test/account/login?next=/privacy"},
+        {"text": "Privacy settings", "href": "https://a.test/settings/privacy"},
+        {"text": "Home", "href": "https://a.test/"},
+        {"text": "", "href": "https://cdn.other.test/privacy-policy.pdf"},
+        {"text": "Email us", "href": "mailto:privacy@a.test"},
+        {"text": "Privacy", "href": "/relative/privacy"},
+    ]
+    selected = checks.select_policy_links(links)
+    by_url = {s["url"]: s for s in selected}
+
+    assert by_url["https://a.test/legal/cookies"]["kind"] == "cookie_policy"
+    assert by_url["https://a.test/legal/privacy"]["kind"] == "privacy_policy"
+    # Most specific wins: this is an opt-out mechanism, not a generic privacy page.
+    assert by_url["https://a.test/dns"]["kind"] == "sale_share_optout"
+    # A bare URL with no link text is still matched, on the path.
+    assert by_url["https://cdn.other.test/privacy-policy.pdf"]["kind"] == "privacy_policy"
+
+    # /privacy and /privacy#top are one document; archiving both would store it
+    # twice under two names.
+    assert sum(1 for s in selected if s["url"].endswith("/legal/privacy")) == 1
+
+    for rejected in (
+        "https://a.test/account/login?next=/privacy",   # login page, not a policy
+        "https://a.test/settings/privacy",              # a settings widget, not a document
+        "https://a.test/",
+        "mailto:privacy@a.test",
+        "/relative/privacy",                            # not absolute; cannot be fetched as-is
+    ):
+        assert rejected not in by_url, f"must not be selected for archiving: {rejected}"
+
+    # Regression, found on a live site: Google's cross-domain linker decorates
+    # every outbound link with a distinct `_gl` value, so one policy appeared
+    # under four URLs and was archived four times, burning the cap. Worse, `_gl`
+    # and `_ga` carry the visitor's GA client id - fetching the decorated URL
+    # would have the audit transmit that identifier to the policy host as a side
+    # effect of auditing.
+    assert checks.strip_tracking_params("https://a.test/p?_gl=1*x&lang=es&utm_source=n&id=7") == (
+        "https://a.test/p?lang=es&id=7"
+    )
+    decorated = [
+        {"text": "Cookie Policy", "href": "https://l.test/cookie-policy?_gl=1*abc*_gcl_au*A"},
+        {"text": "Privacy Policy", "href": "https://l.test/privacy-policy?_gl=1*def*_gcl_au*B"},
+        {"text": "Privacy", "href": "https://l.test/privacy-policy"},
+        {"text": "Privacy", "href": "https://l.test/privacy-policy?_gl=1*ghi*_ga*C"},
+        {"text": "Cookies", "href": "https://l.test/cookie-policy?_gl=1*jkl*_ga*D"},
+    ]
+    deduped = checks.select_policy_links(decorated)
+    assert len(deduped) == 2, f"linker-decorated duplicates must collapse to two documents: {deduped}"
+    for entry in deduped:
+        assert "_gl" not in entry["url"] and "_ga" not in entry["url"], (
+            f"the archived URL must not carry a GA identifier: {entry['url']}"
+        )
+    # A meaningful parameter is not a tracking parameter and must survive, since
+    # it can select a different document.
+    localised = checks.select_policy_links([{"text": "Privacy", "href": "https://l.test/privacy?lang=es"}])
+    assert localised[0]["url"].endswith("?lang=es"), localised
+
+    # The cap is honoured, so a link farm cannot turn a pre-flight into a crawl.
+    many = [{"text": f"Privacy {i}", "href": f"https://a.test/p{i}"} for i in range(40)]
+    assert len(checks.select_policy_links(many, limit=3)) == 3
+    ok("policy-link selection files each document by kind, dedupes fragments, and skips app surfaces")
+
+
 def test_meta_ldu_signal_parsing() -> None:
     """Meta LDU is a transmission-layer restriction like a denied Consent Mode
     signal, and must be recognised without contaminating the Google-derived
@@ -2038,6 +2110,7 @@ def main() -> int:
     test_issue_matrix_renders_in_report()
     test_cmp_table_integrity()
     test_repeat_stability()
+    test_policy_link_selection()
     test_meta_ldu_signal_parsing()
     test_endpoint_key_is_shared_and_strict()
     test_viewport_profiles()

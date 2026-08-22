@@ -96,6 +96,8 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--no-forms", action="store_true", help="Skip the form-fill exercise entirely")
     parser.add_argument("--no-search", action="store_true", help="Skip the on-site search exercise")
     parser.add_argument("--no-persistence", action="store_true", help="Skip the fresh-context preference-persistence check")
+    parser.add_argument("--no-policy-capture", action="store_true",
+                        help="Skip archiving the text of the site's linked cookie/privacy policies")
     parser.add_argument("--no-geo", action="store_true", help="Do not resolve the public egress region")
     parser.add_argument("--detect-only", action="store_true",
                         help="Load the page, report the detected consent platform and every candidate control, then exit without auditing")
@@ -584,6 +586,7 @@ def main() -> int:
                             include_accept=args.accept_control,
                             baseline_repeats=args.repeat_baseline if thorough else 0,
                             include_persistence=not args.no_persistence,
+                            include_policies=not args.no_policy_capture,
                         ),
                     }
             finally:

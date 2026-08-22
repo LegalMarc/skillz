@@ -45,6 +45,8 @@ One structural safety rule, enforced by a test rather than by review: **a CMP's 
 
 **Checks that were previously manual**: a scan for durable identifiers hardcoded into served markup (a GA cross-domain linker pasted into a CMS republishes one person's client id to every visitor, and the decoder recovers the creation date), a statutory-rights sweep for a sale/share mechanism separate from the banner, and measured symmetry — rendered size, colour, computed WCAG contrast, and the page's *real* keyboard focus order, walked by pressing Tab and reading focus back out across every frame (a control first in markup can still be reached last, or never) plus whether each control shows a focus ring at all — rather than an inference from click counts.
 
+**What the site says, kept beside what it does**: the linked cookie, privacy, and do-not-sell documents are fetched and stored with source URL, retrieval timestamp, and content hash — because the policy you read six weeks later is not the one that was live during the capture. Nothing compares the text to the behaviour; that stays a reviewer's judgement, not the scanner's. Tracking parameters are stripped first, since a linker-decorated policy URL carries the visitor's GA client id and fetching it would make the audit itself leak an identifier.
+
 ## Output
 
 `audit-report.pdf`, `.html`, and `.md` are the same 14-section report rendered from one Markdown source, so they cannot drift. Alongside them: `findings.json`, `suppressed-findings.json` (**read this before concluding anything is clean**), cookie and request inventories as CSV with evidence-strength grading, per-checkpoint screenshots and state, sanitized and raw HAR, and `manifest.sha256`.
@@ -79,7 +81,7 @@ Exit `4` means the run completed but a required interaction did not — findings
 Add `--assert-no-preconsent-tracking` to turn an audit into a release gate: exit `5` when advertising, social, or session-replay endpoints are contacted before any consent choice. It only trips on an observed beacon or a transmitted identifier, never on a bare script load — Consent Mode legitimately produces those, and a gate that cried wolf would be switched off. Incompleteness still wins: a run that didn't finish can't certify anything.
 
 ```bash
-python scripts/tests/smoke_test.py   # 59 tests, no site visits
+python scripts/tests/smoke_test.py   # 68 tests, no site visits
 ```
 
 ## What makes it different from the other skills here

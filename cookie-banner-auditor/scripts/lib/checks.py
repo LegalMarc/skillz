@@ -14,7 +14,7 @@ import math
 import re
 from datetime import datetime, timezone
 from typing import Any, Iterable
-from urllib.parse import parse_qsl, urlsplit
+from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
 
 # --------------------------------------------------------------------------
 # C1 / C5 - request role and evidence strength
@@ -419,6 +419,105 @@ RIGHTS_PHRASES = [
     ("opt_out", re.compile(r"\bopt[-\s]?out\b", re.I)),
     ("gpc_mention", re.compile(r"global\s+privacy\s+control", re.I)),
 ]
+
+
+#: Link kinds worth archiving for E6, most specific first. A link matching more
+#: than one is filed under the first match, so "Cookie Policy" is a cookie
+#: policy rather than being swallowed by the broader privacy pattern.
+POLICY_LINK_KINDS: tuple[tuple[str, Any], ...] = (
+    ("sale_share_optout", re.compile(r"do[-_\s]?not[-_\s]?sell|your[-_\s]privacy[-_\s]choices|limit[-_\s]the[-_\s]use", re.I)),
+    ("cookie_policy", re.compile(r"cookie", re.I)),
+    ("privacy_policy", re.compile(r"privacy|datenschutz|privacidad", re.I)),
+)
+
+#: Paths that look like a policy link but are an application surface, not a
+#: document. Fetching these produces a login page or a settings widget archived
+#: under a name claiming it is the site's privacy policy.
+_POLICY_URL_EXCLUSIONS = re.compile(
+    r"/(login|signin|sign-in|account|preferences|settings|dashboard|admin)(/|$|\?)", re.I
+)
+
+
+#: Query parameters that identify a visitor or a campaign rather than a
+#: document. Google's cross-domain linker decorates outbound links with `_gl`,
+#: so the same policy page appears under several URLs in one page's markup.
+_TRACKING_PARAM = re.compile(
+    r"^(?:_gl|_ga|_gac_.*|_gcl_au|gclid|gbraid|wbraid|dclid|gclsrc|"
+    r"fbclid|msclkid|ttclid|twclid|li_fat_id|igshid|epik|mc_cid|mc_eid|"
+    r"utm_[a-z_]+|ref|referrer)$",
+    re.I,
+)
+
+
+def strip_tracking_params(url: str) -> str:
+    """Remove visitor- and campaign-identifying query parameters from `url`.
+
+    Two reasons, and the second matters more.
+
+    Deduplication: a page commonly links the same policy several times, and
+    Google's linker gives each link a different `_gl` value, so the identical
+    document looks like several distinct URLs and gets archived once per link.
+
+    Hygiene: `_gl` and `_ga` *carry the visitor's Google Analytics client id*.
+    Fetching a policy at the decorated URL would have this tool transmit that
+    identifier to the policy host as a side effect of auditing - the audit
+    creating exactly the kind of disclosure it exists to detect. Always fetch
+    the stripped URL.
+    """
+    try:
+        parts = urlsplit(url)
+    except Exception:
+        return url
+    kept = [(key, value) for key, value in parse_qsl(parts.query, keep_blank_values=True)
+            if not _TRACKING_PARAM.match(key)]
+    return urlunsplit((parts.scheme, parts.netloc, parts.path, urlencode(kept), ""))
+
+
+def select_policy_links(links: list[dict[str, Any]], limit: int = 6) -> list[dict[str, Any]]:
+    """Pick the policy documents worth archiving from a page's links (E6).
+
+    Counsel's first question about any observed behaviour is what the site
+    *said* it would do. Answering it by hand means finding the policy, reading
+    it, and hoping it has not changed since the capture - so the bundle archives
+    the text alongside the behaviour, with a retrieval timestamp.
+
+    Matching is on both label and href, since plenty of sites link a policy from
+    an icon or a bare URL with no useful text. Selection only: this decides what
+    is worth fetching and says nothing about what any of it means.
+    """
+    selected: list[dict[str, Any]] = []
+    seen: set[str] = set()
+    for link in links or []:
+        href = str(link.get("href", "") or "").strip()
+        label = str(link.get("text", "") or "").strip()
+        if not href.lower().startswith(("http://", "https://")):
+            continue
+        try:
+            parts = urlsplit(href)
+        except Exception:
+            continue
+        if not parts.hostname:
+            continue
+        # Drop the fragment and any tracking parameters: /privacy,
+        # /privacy#cookies, and /privacy?_gl=1*abc are one document. Without the
+        # strip, a linker-decorated page archives the same policy once per link
+        # and fetches it at a URL carrying the visitor's GA client id.
+        canonical = strip_tracking_params(
+            urlunsplit((parts.scheme, parts.netloc, parts.path, parts.query, ""))
+        )
+        if canonical in seen:
+            continue
+        if _POLICY_URL_EXCLUSIONS.search(parts.path or ""):
+            continue
+        haystack = f"{label} {parts.path} {parts.query}"
+        for kind, pattern in POLICY_LINK_KINDS:
+            if pattern.search(haystack):
+                seen.add(canonical)
+                selected.append({"kind": kind, "url": canonical, "label": label[:160], "host": parts.hostname.lower()})
+                break
+        if len(selected) >= limit:
+            break
+    return selected
 
 
 def scan_rights_mechanisms(page_text: str, links: list[dict[str, Any]], cmp_state: dict[str, Any] | None = None) -> dict[str, Any]:

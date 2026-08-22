@@ -1267,6 +1267,36 @@ def render_markdown_report(
                 f"| {name} | {assertion.get('cookie_count')} | {assertion.get('local_storage_keys')} | "
                 f"{assertion.get('session_storage_keys')} | {'yes' if assertion.get('clean') else '**no**'} |"
             )
+    policies = results.get("policies") or {}
+    policy_records = policies.get("records") or []
+    if policy_records:
+        lines.extend([
+            "",
+            "### Archived policy documents",
+            "",
+            "The site's own linked policies, retrieved and stored verbatim so that what the site "
+            "*said* can be read beside what it *did*. **No comparison has been made and no finding "
+            "here derives from this text** - reading it against the observed behaviour is a job for "
+            "a reviewer, not for this tool.",
+            "",
+            "| Kind | Source | Retrieved | Archived |",
+            "|---|---|---|---|",
+        ])
+        for record in policy_records:
+            status = "yes" if record.get("archived") else f"no - {record.get('skipped_reason') or 'unknown'}"
+            lines.append(
+                f"| {escape_markdown_cell(str(record.get('kind', '')))} "
+                f"| {escape_markdown_cell(str(record.get('url', ''))[:110])} "
+                f"| {escape_markdown_cell(str(record.get('retrieved_at', '')))} "
+                f"| {escape_markdown_cell(status)} |"
+            )
+        lines.extend([
+            "",
+            f"Archived {policies.get('archived', 0)} of {policies.get('attempted', 0)} candidate documents "
+            "into `evidence-shareable/policies/`. Each file carries its source URL, retrieval timestamp, "
+            "and a SHA-256 of the text.",
+        ])
+
     lines.extend([
         "",
         "### Evidence index",
@@ -1278,6 +1308,7 @@ def render_markdown_report(
         "| `cookie-inventory.csv`, `request-inventory.csv` | Full inventories with evidence strength | Shareable |",
         "| `audit-data.json`, `findings.json` | Structured results | Shareable |",
         "| `suppressed-findings.json` | Findings withheld as unsupported | Shareable |",
+        "| `evidence-shareable/policies/` | Archived text of the site's linked policies | Shareable - reference only, no conclusion drawn |",
         "| `manifest.sha256` | Integrity hashes | Verify before relying on the bundle |",
         "",
         "## 14. Conclusion",
@@ -1532,6 +1563,7 @@ def analyze_and_write(
         "suppressed_findings": suppressed,
         "baseline_stability": results.get("baseline_stability"),
         "persistence_check": {k: v for k, v in (results.get("persistence") or {}).items() if k != "scenario_result"} or None,
+        "policies": results.get("policies"),
         "cookie_count_observations": len(cookie_rows),
         "request_count_observations": len(request_rows),
         "evidence_strength_counts": dict(Counter(str(r.get("evidence_strength")) for r in request_rows)),
