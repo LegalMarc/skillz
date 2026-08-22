@@ -181,7 +181,7 @@
       "settings": ["button[mode='link']"],
       "save": [],
       "consent_storage": ["euconsent-v2", "addtl_consent"],
-      "notes": "Quantcast relies on mode attributes rather than stable ids; positional fallbacks here are deliberately last-resort and should be confirmed against a screenshot. 'save' is empty because the primary-mode button in the preferences layer is the agree control, so mapping it would convert a denial into an acceptance."
+      "notes": "Quantcast relies on mode attributes rather than stable ids; positional fallbacks here are deliberately last-resort and should be confirmed against a screenshot. 'save' is empty because the primary-mode button in the preferences layer is the agree control, so mapping it would convert a denial into an acceptance. Partially checked 2026-08-22 against quantcast.com from a US browser: the `.qc-cmp2-container` fingerprint matched, but `#qc-cmp2-ui` did not, and the rendered UI was the CCPA `qc-cmp2-usp` opt-out modal (a single mode='primary' 'CONFIRM' button, no mode='secondary' at all) rather than the EU consent summary layer these accept/reject selectors target - the same US-region limitation the 2026-08-22 research pass hit on Osano. The mode='primary'/'secondary' accept/reject selectors remain unverified rather than disproved; do not fixture them from this capture."
     },
     {
       "id": "complianz",
