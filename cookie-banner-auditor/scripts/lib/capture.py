@@ -12,6 +12,7 @@ from playwright.sync_api import Browser, BrowserContext, Error as PlaywrightErro
 
 from . import checks
 from .util import (
+    endpoint_key,
     ensure_dir,
     origin_from_url,
     read_json,
@@ -359,6 +360,86 @@ def _control_metadata(locator: Locator, frame: Frame, index: int) -> dict[str, A
         "box": box,
         **(extra or {}),
     }
+
+
+ANNOTATION_LAYER_ID = "__cba_annotations"
+
+_ANNOTATE_JS = r"""
+(payload) => {
+  const {marks, layerId} = payload;
+  const previous = document.getElementById(layerId);
+  if (previous) previous.remove();
+  const layer = document.createElement('div');
+  layer.id = layerId;
+  layer.style.cssText = 'position:fixed;left:0;top:0;right:0;bottom:0;z-index:2147483647;pointer-events:none';
+  const drawable = marks.filter(m => m.box && m.box.width > 0 && m.box.height > 0);
+  // Two passes so that every label sits above every outline. Interleaving them
+  // lets a later control's outline paint over an earlier control's label, which
+  // on a stacked accept/decline pair struck through the very text that says
+  // which button is which.
+  for (const mark of drawable) {
+    const box = mark.box;
+    const outline = document.createElement('div');
+    outline.style.cssText =
+      'position:fixed;box-sizing:border-box;pointer-events:none;' +
+      `left:${box.x}px;top:${box.y}px;width:${box.width}px;height:${box.height}px;` +
+      `border:3px solid ${mark.color};`;
+    layer.appendChild(outline);
+  }
+  for (const mark of drawable) {
+    const box = mark.box;
+    const tag = document.createElement('div');
+    tag.textContent = mark.label;
+    tag.style.cssText =
+      'position:fixed;pointer-events:none;white-space:nowrap;padding:1px 6px;' +
+      'font:bold 12px/16px -apple-system,BlinkMacSystemFont,Segoe UI,sans-serif;color:#fff;' +
+      `left:${box.x}px;top:${Math.max(0, box.y - 18)}px;background:${mark.color};`;
+    layer.appendChild(tag);
+  }
+  const drawn = drawable.length;
+  document.documentElement.appendChild(layer);
+  return drawn;
+}
+"""
+
+
+def annotate_controls(page: Page, marks: list[dict[str, Any]]) -> int:
+    """Overlay labelled outlines on the page for the pre-flight screenshot (A7).
+
+    `locator.bounding_box()` reports main-frame viewport coordinates even for an
+    element inside an iframe, so fixed-position overlays land correctly on
+    iframe-hosted CMPs without walking frame offsets by hand.
+
+    The overlay is drawn into the top document only, is `pointer-events:none`,
+    and is removed on the next call. It exists purely to be photographed - it is
+    never present during a capture scenario, so it cannot influence what the
+    page or its tags observe. Returns how many marks were actually drawn;
+    a control with no measurable box is skipped rather than drawn at the origin,
+    where it would read as a control sitting in the top-left corner.
+    """
+    try:
+        return int(page.evaluate(_ANNOTATE_JS, {"marks": marks, "layerId": ANNOTATION_LAYER_ID}) or 0)
+    except Exception:
+        return 0
+
+
+def annotation_layer_present(page: Page) -> bool:
+    """Is the annotation overlay still attached to the document?
+
+    Observed in the wild on a React site: a framework that reconciles the top
+    document after hydration can remove an element appended to `<html>`,
+    silently and asynchronously. The overlay then vanishes between being drawn
+    and being photographed, and the run reports "annotated screenshot" over an
+    image with no annotations on it - a caption describing something that is
+    not in the picture, which is the defect class this tool exists to avoid.
+    Callers re-draw and re-check rather than trusting the first draw.
+    """
+    try:
+        return bool(page.evaluate(
+            "(id) => Boolean(document.getElementById(id))", ANNOTATION_LAYER_ID
+        ))
+    except Exception:
+        return False
 
 
 def collect_visible_controls(page: Page, max_per_frame: int = 220) -> list[dict[str, Any]]:
@@ -2229,15 +2310,17 @@ def run_scenario_with_retry(
 
 
 def _endpoint_set(scenario_result: dict[str, Any]) -> set[str]:
-    """Distinct third-party host+path pairs seen in a scenario."""
+    """Distinct host+path endpoints seen in a scenario.
+
+    Identity comes from `util.endpoint_key`, shared with compare_runs so the
+    stability check and the run diff cannot drift into counting different
+    things.
+    """
     output: set[str] = set()
     for request in (scenario_result.get("events") or {}).get("requests", []) or []:
-        try:
-            parts = urlsplit(str(request.get("url", "")))
-            if parts.hostname:
-                output.add(f"{parts.hostname}{parts.path}")
-        except Exception:
-            continue
+        key = endpoint_key(str(request.get("url", "")))
+        if key:
+            output.add(key)
     return output
 
 

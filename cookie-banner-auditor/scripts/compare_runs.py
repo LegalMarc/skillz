@@ -21,6 +21,7 @@ if str(SCRIPT_DIR) not in sys.path:
 from lib.capture import render_pdf_from_html
 from lib.util import (
     discover_browser_executable,
+    endpoint_key,
     escape_markdown_cell,
     markdown_to_html,
     read_json,
@@ -50,18 +51,17 @@ def _load_bundle(path: Path) -> dict[str, Any]:
 
 
 def _endpoints(bundle: dict[str, Any]) -> dict[str, dict[str, Any]]:
-    """host+path -> summary, taken from the scenario request logs."""
+    """host+path -> summary, taken from the scenario request logs.
+
+    Identity comes from `util.endpoint_key`, shared with the capture-side
+    stability check so both answer "which endpoints were contacted" the same
+    way.
+    """
     output: dict[str, dict[str, Any]] = {}
     for scenario, result in (bundle.get("scenario_results") or {}).items():
         for request in ((result or {}).get("events") or {}).get("requests", []) or []:
-            url = str(request.get("url", ""))
-            try:
-                from urllib.parse import urlsplit
-                parts = urlsplit(url)
-                key = f"{parts.hostname or ''}{parts.path or ''}"
-            except Exception:
-                continue
-            if not key.strip("/"):
+            key = endpoint_key(str(request.get("url", "")))
+            if not key:
                 continue
             entry = output.setdefault(key, {"key": key, "scenarios": set()})
             entry["scenarios"].add(scenario)

@@ -25,6 +25,8 @@ except ImportError:
 from lib.analysis import analyze_and_write, preconsent_tracking_assertion_hits
 from lib.capture import (
     ScenarioConfig,
+    annotate_controls,
+    annotation_layer_present,
     fingerprint_cmp,
     find_control,
     load_cmp_table,
@@ -119,19 +121,52 @@ def parse_args() -> argparse.Namespace:
     return parser.parse_args()
 
 
-def run_detect_only(target_url: str, executable: str | None, headless: bool, timeout_ms: int) -> int:
+#: Outline colour per control kind in the pre-flight image. Reject is green and
+#: accept red deliberately: the image answers "can the privacy-protective choice
+#: be operated?", so the eye should land on the reject box first.
+DETECT_COLORS = {
+    "reject": "#1a7f37",
+    "accept": "#cf222e",
+    "settings": "#9a6700",
+    "save": "#0969da",
+}
+
+
+def run_detect_only(
+    target_url: str,
+    executable: str | None,
+    headless: bool,
+    timeout_ms: int,
+    viewport_label: str = "desktop",
+    screenshot_path: Path | None = None,
+) -> int:
     """Pre-flight check: what would the scanner click, and why?
 
     Cheap to run and answers the question that matters before committing to a
-    full audit - whether the consent controls are reachable at all.
+    full audit - whether the consent controls are reachable at all. Runs under
+    the same device profile the audit would use, so a mobile pre-flight
+    previews the mobile banner rather than the desktop one.
+
+    Writes an annotated screenshot (A7) outlining what would be clicked. The
+    printed candidate list says what the scanner scored; the image says whether
+    it scored the right element, which is the question a reader can actually
+    answer at a glance.
     """
+    profile = viewport_profile(viewport_label)
     with sync_playwright() as playwright:
         launch_options: dict = {"headless": headless}
         if executable:
             launch_options["executable_path"] = executable
         browser = playwright.chromium.launch(**launch_options)
         try:
-            page = browser.new_context(viewport={"width": 1440, "height": 1000}).new_page()
+            context_options: dict = {"viewport": dict(profile["viewport"])}
+            if profile["is_mobile"]:
+                context_options.update(
+                    is_mobile=True, has_touch=True, device_scale_factor=profile["device_scale_factor"]
+                )
+            if profile["user_agent"]:
+                context_options["user_agent"] = profile["user_agent"]
+            page = browser.new_context(**context_options).new_page()
             page.goto(target_url, wait_until="domcontentloaded", timeout=timeout_ms)
             try:
                 page.wait_for_load_state("networkidle", timeout=8000)
@@ -140,12 +175,14 @@ def run_detect_only(target_url: str, executable: str | None, headless: bool, tim
             table = load_cmp_table()
             match = fingerprint_cmp(page, table)
             print(f"\nTarget: {target_url}")
+            print(f"Device profile: {viewport_label} ({profile['viewport']['width']}x{profile['viewport']['height']})")
             print(f"CMP table entries loaded: {len(table)}")
             if match:
                 print(f"Consent platform detected: {match['name']}  (matched by {match['matched_by']})")
             else:
                 print("Consent platform: not identified; text scoring will be used.")
 
+            marks: list[dict] = []
             for kind in ("reject", "accept", "settings", "save"):
                 control, candidates, resolution = find_control(page, kind, (match or {}).get("entry"))
                 print(f"\n[{kind}] resolved via: {resolution.get('path')}")
@@ -161,6 +198,44 @@ def run_detect_only(target_url: str, executable: str | None, headless: bool, tim
                     )
                 if control:
                     print(f"  WOULD CLICK: {control.get('text', '')[:60]!r} (id={control.get('id', '')!r})")
+                    marks.append({
+                        "box": control.get("box"),
+                        "color": DETECT_COLORS.get(kind, "#57606a"),
+                        "label": f"{kind}: {str(control.get('text', ''))[:28]}",
+                    })
+
+            if screenshot_path is not None:
+                # Draw, then confirm the overlay survived to the moment of the
+                # screenshot. A framework reconciling the top document after
+                # hydration can remove it asynchronously, which would otherwise
+                # produce an image with no annotations captioned as annotated.
+                drawn = 0
+                annotated = False
+                for _ in range(3):
+                    drawn = annotate_controls(page, marks)
+                    if not marks or annotation_layer_present(page):
+                        annotated = True
+                        break
+                try:
+                    page.screenshot(path=str(screenshot_path), full_page=False, animations="disabled")
+                    still_there = annotation_layer_present(page)
+                    label = "Annotated screenshot" if (annotated and still_there) or not marks else "Screenshot"
+                    print(f"\n{label}: {screenshot_path}")
+                    if marks and not (annotated and still_there):
+                        print(
+                            "  NOTE: the page removed the annotation overlay before the image was "
+                            "captured, so the controls are NOT outlined in it. The [kind] listings "
+                            "above still state what would be clicked."
+                        )
+                    elif drawn < len(marks):
+                        print(
+                            f"  NOTE: {len(marks) - drawn} resolved control(s) had no measurable box "
+                            "and are not outlined in the image."
+                        )
+                    if not marks:
+                        print("  NOTE: nothing was outlined - no control resolved above the threshold.")
+                except Exception as error:
+                    print(f"Screenshot failed: {error}", file=sys.stderr)
             print("\nNo audit was performed. Remove --detect-only to run the full capture.\n")
         finally:
             browser.close()
@@ -298,7 +373,14 @@ def main() -> int:
         except FileNotFoundError as error:
             print(f"Configuration error: {error}", file=sys.stderr)
             return 2
-        return run_detect_only(target_url, explicit, headless, args.timeout_ms)
+        # --viewport both is meaningless for a pre-flight: it is a look at one
+        # rendering, so preview the mobile profile when both were asked for
+        # (the desktop banner is the one already familiar from a normal run).
+        detect_label = "mobile" if args.viewport == "both" else args.viewport
+        detect_dir = Path(args.out).expanduser().resolve() if args.out else Path.cwd()
+        ensure_dir(detect_dir)
+        shot = detect_dir / f"detect-only-{slugify(host_from_url(target_url))}-{detect_label}.png"
+        return run_detect_only(target_url, explicit, headless, args.timeout_ms, detect_label, shot)
 
     if args.submit_forms:
         print(

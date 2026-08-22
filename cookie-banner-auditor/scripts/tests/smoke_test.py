@@ -32,12 +32,15 @@ from lib.analysis import (
     scenario_validity_map,
 )
 from lib.capture import (
+    ANNOTATION_LAYER_ID,
     COMPLETED_DENIAL_STATUSES,
     SCORE_THRESHOLD,
     UNSAVED_PREFERENCE_STATUS,
     VIEWPORT_PROFILES,
     ScenarioConfig,
     _scenario_validity,
+    annotate_controls,
+    annotation_layer_present,
     build_context_options,
     consent_snapshot,
     execute_denial,
@@ -54,6 +57,7 @@ from lib.capture import (
 )
 from lib.util import (
     build_zip_bundle,
+    endpoint_key,
     discover_browser_executable,
     markdown_to_html,
     read_json,
@@ -688,6 +692,86 @@ def test_measure_tab_order_bounded(page) -> None:
     ok("measure_tab_order bounds its Tab-press budget and reports the cap being hit")
 
 
+def test_annotate_controls_marks_resolved_controls(page) -> None:
+    """The pre-flight image must outline what would be clicked, and must skip a
+    control with no measurable box rather than drawing it at the origin, where
+    it would read as a control sitting in the top-left corner."""
+    page.set_content("""
+        <!doctype html><html><body>
+        <div style="position:fixed;bottom:0;padding:20px">
+          <p>We use cookies for analytics and advertising on this site.</p>
+          <button id="accept">Accept All</button>
+          <button id="reject">Reject All</button>
+        </div>
+        </body></html>
+    """)
+    reject_box = page.locator("#reject").bounding_box()
+    drawn = annotate_controls(page, [
+        {"box": reject_box, "color": "#1a7f37", "label": "reject: Reject All"},
+        {"box": None, "color": "#cf222e", "label": "accept: unmeasurable"},
+        {"box": {"x": 0, "y": 0, "width": 0, "height": 0}, "color": "#0969da", "label": "save: zero-size"},
+    ])
+    assert drawn == 1, "only the one control with a real box may be outlined"
+
+    layer = page.evaluate(
+        "(id) => { const el = document.getElementById(id);"
+        " return el ? {children: el.children.length, pointer: getComputedStyle(el).pointerEvents} : null; }",
+        ANNOTATION_LAYER_ID,
+    )
+    assert layer is not None, "the annotation layer must be attached"
+    assert layer["children"] == 2, f"one outline plus one text label expected: {layer}"
+    # It sits over a live page during pre-flight; it must never intercept a click.
+    assert layer["pointer"] == "none", layer
+
+    # Re-annotating replaces rather than stacking, so a second call cannot leave
+    # stale outlines from the first pointing at the wrong elements.
+    annotate_controls(page, [{"box": reject_box, "color": "#1a7f37", "label": "reject"}])
+    count = page.evaluate(
+        "(id) => document.querySelectorAll('#' + CSS.escape(id)).length", ANNOTATION_LAYER_ID
+    )
+    assert count == 1, f"a second annotation pass must replace the layer, not stack: {count}"
+
+    # Observed on a real React site: the page's own framework can remove an
+    # element appended to <html> after hydration. The caller must be able to
+    # detect that, or it captions an unannotated image as annotated.
+    assert annotation_layer_present(page) is True
+    page.evaluate("(id) => document.getElementById(id).remove()", ANNOTATION_LAYER_ID)
+    assert annotation_layer_present(page) is False, (
+        "a removed overlay must be detectable, not assumed still present"
+    )
+    assert annotate_controls(page, [{"box": reject_box, "color": "#1a7f37", "label": "reject"}]) == 1
+    assert annotation_layer_present(page) is True, "re-drawing must restore the overlay"
+    ok("the pre-flight overlay marks resolved controls, skips unmeasurable ones, and replaces itself")
+
+
+def test_annotation_labels_are_painted_above_every_outline(page) -> None:
+    """With stacked controls, a later outline must not paint over an earlier
+    label — on an accept/decline pair that struck through the very text saying
+    which button is which."""
+    page.set_content("""
+        <!doctype html><html><body>
+        <div style="position:fixed;bottom:0;padding:20px">
+          <button id="accept" style="display:block;width:200px">Accept All</button>
+          <button id="reject" style="display:block;width:200px">Reject All</button>
+        </div>
+        </body></html>
+    """)
+    marks = [
+        {"box": page.locator("#accept").bounding_box(), "color": "#cf222e", "label": "accept: Accept All"},
+        {"box": page.locator("#reject").bounding_box(), "color": "#1a7f37", "label": "reject: Reject All"},
+    ]
+    assert annotate_controls(page, marks) == 2
+    kinds = page.evaluate(
+        "(id) => Array.from(document.getElementById(id).children)"
+        ".map(el => el.textContent ? 'label' : 'outline')",
+        ANNOTATION_LAYER_ID,
+    )
+    assert kinds == ["outline", "outline", "label", "label"], (
+        f"all outlines must be appended before any label so labels stay legible: {kinds}"
+    )
+    ok("annotation labels are painted above every outline, not interleaved")
+
+
 def test_mobile_emulation_reaches_the_page(page) -> None:
     """End-to-end proof that the mobile profile changes what the page observes.
 
@@ -1027,6 +1111,34 @@ def test_repeat_stability() -> None:
 # ---------------------------------------------------------------------------
 # B - validity gating
 # ---------------------------------------------------------------------------
+
+def test_endpoint_key_is_shared_and_strict() -> None:
+    """One definition of endpoint identity, used by both the stability check and
+    the run diff. They previously disagreed at the edges, so a URL could count
+    as an endpoint in one answer and not the other."""
+    assert endpoint_key("https://cdn.example.com/tag.js?cb=123") == "cdn.example.com/tag.js"
+    assert endpoint_key("https://example.com") == "example.com"
+    assert endpoint_key("https://example.com/") == "example.com/"
+
+    # The query string is excluded on purpose: cache busters and per-request
+    # identifiers would make every run look entirely different from every other.
+    assert endpoint_key("https://a.test/p?x=1") == endpoint_key("https://a.test/p?x=2")
+
+    # Not network endpoints, and must not appear in either answer.
+    for url in ("data:text/html,<p>hi", "about:blank", "blob:https://a.test/abc", ""):
+        assert endpoint_key(url) is None, url
+
+    # The capture-side helper must go through it.
+    scenario = {"events": {"requests": [
+        {"url": "https://a.test/one"},
+        {"url": "https://a.test/one?cb=9"},
+        {"url": "data:text/html,x"},
+        {"url": "https://b.test/two"},
+    ]}}
+    from lib import capture
+    assert capture._endpoint_set(scenario) == {"a.test/one", "b.test/two"}
+    ok("endpoint identity has one definition, shared by the stability check and the run diff")
+
 
 def test_viewport_profiles() -> None:
     """The mobile profile must carry touch and a mobile user agent, not just a
@@ -1877,6 +1989,7 @@ def main() -> int:
     test_issue_matrix_renders_in_report()
     test_cmp_table_integrity()
     test_repeat_stability()
+    test_endpoint_key_is_shared_and_strict()
     test_viewport_profiles()
     test_context_options_device_emulation()
     test_merge_invalid_scenarios()
@@ -1915,6 +2028,8 @@ def main() -> int:
             test_measure_tab_order_distinguishes_cap_from_unreachable(page)
             test_execute_denial_measures_focus_visibility_per_control(page)
             test_measure_tab_order_bounded(page)
+            test_annotate_controls_marks_resolved_controls(page)
+            test_annotation_labels_are_painted_above_every_outline(page)
             test_mobile_emulation_reaches_the_page(page)
             test_form_exercise_does_not_submit(page)
         finally:
