@@ -39,9 +39,11 @@ from lib.capture import (
     UNSAVED_PREFERENCE_STATUS,
     VIEWPORT_PROFILES,
     ScenarioConfig,
+    _robots_allows,
     _scenario_validity,
     annotate_controls,
     annotation_layer_present,
+    assert_clean_context,
     build_context_options,
     capture_checkpoint,
     consent_snapshot,
@@ -57,6 +59,7 @@ from lib.capture import (
     measure_focus_visibility,
     SYNTHETIC_VALUES,
     measure_tab_order,
+    run_scenario,
     safe_internal_links,
     verify_choice_registered,
     viewport_profile,
@@ -312,6 +315,84 @@ def test_verify_choice_registered_unit() -> None:
     dismissed = {"cookies": {"a|x": "h1"}, "local_storage": {}, "cmp_api": {}, "banner_visible": False}
     assert verify_choice_registered(before, dismissed)["banner_dismissed"] is True
     ok("verify_choice_registered distinguishes real changes from no-ops")
+
+
+def test_robots_allows_respects_disallow() -> None:
+    """_robots_allows is the gate keeping E6 policy-capture from fetching a path
+    a site's robots.txt asks automated clients to stay out of. Its fetch, cache,
+    disallow, and fail-open branches were never exercised."""
+    from lib import capture
+
+    robots_bodies = {
+        "https://blocked.test/robots.txt": "User-agent: *\nDisallow: /policies/private\n",
+    }
+    calls: list[str] = []
+
+    class _FakeResponse:
+        def __init__(self, body: str) -> None:
+            self._body = body.encode("utf-8")
+
+        def read(self) -> bytes:
+            return self._body
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *args) -> bool:
+            return False
+
+    def fake_urlopen(url, timeout=8.0):
+        calls.append(url)
+        if url not in robots_bodies:
+            raise OSError("no robots.txt at this origin")
+        return _FakeResponse(robots_bodies[url])
+
+    original = capture.urlopen
+    capture.urlopen = fake_urlopen
+    try:
+        cache: dict = {}
+        disallowed, note = _robots_allows("https://blocked.test/policies/private/notice", cache)
+        assert disallowed is False, note
+
+        allowed, _ = _robots_allows("https://blocked.test/privacy", cache)
+        assert allowed is True, allowed
+
+        # Cached per origin: the second lookup against the same origin must not refetch.
+        assert calls.count("https://blocked.test/robots.txt") == 1, calls
+
+        # An origin serving no robots.txt at all fails open.
+        open_allowed, open_note = _robots_allows("https://open.test/privacy", cache)
+        assert open_allowed is True, open_note
+        assert "no robots.txt" in open_note, open_note
+    finally:
+        capture.urlopen = original
+    ok("_robots_allows honours a real Disallow, caches per origin, and fails open with no robots.txt")
+
+
+def test_collect_consent_mode_extracts_signals_from_request_log() -> None:
+    """_collect_consent_mode is the seam between the raw request log a scenario
+    captures and the pure parsing/summarising logic in checks.py - the
+    requests -> signals extraction and phase/time tagging were never exercised
+    on their own, only the parsing functions they call."""
+    from lib import capture
+
+    events = {
+        "requests": [
+            {"url": "https://www.google-analytics.com/g/collect?v=2&gcs=G100&tid=G-X", "phase": "pre_interaction", "time": "t1"},
+            {"url": "https://example.test/logo.png", "phase": "pre_interaction", "time": "t1"},
+            {"url": "https://www.facebook.com/tr/?id=1&dpo=LDU", "phase": "post_denial", "time": "t2"},
+        ],
+        "responses": [],
+        "request_failures": [],
+        "console": [],
+    }
+    result = capture._collect_consent_mode(events)
+    assert len(result["signals"]) == 2, result
+    assert result["signals"][0]["phase"] == "pre_interaction" and result["signals"][0]["time"] == "t1", result
+    assert result["signals"][1]["vendor"] == "meta", result
+    assert result["summary"]["all_signals_denied"] is True, result
+    assert result["summary"]["meta_ldu_active"] is True, result
+    ok("_collect_consent_mode tags each parsed signal with its capture phase and time")
 
 
 def test_cmp_observational_noise_ignored() -> None:
@@ -1234,6 +1315,100 @@ def test_exercise_search_no_input_present(page) -> None:
     assert record["attempted"] is False
     assert "selector" not in record
     ok("exercise_search is a no-op when no search input is present")
+
+
+def test_assert_clean_context_detects_dirty_state(page) -> None:
+    """assert_clean_context (B5) is the evidence that persistence findings rely
+    on - 'the context started with nothing' - rather than an assumption. Its
+    cookie/localStorage/sessionStorage checks, and the case where it correctly
+    reports the context as NOT clean, were never exercised."""
+    context = page.context.browser.new_context()
+    try:
+        fresh_page = context.new_page()
+
+        def handler(route) -> None:
+            route.fulfill(status=200, content_type="text/html", body="<!doctype html><html><body>fixture</body></html>")
+
+        fresh_page.route("**/*", handler)
+        fresh_page.goto("https://clean-context.test/")
+
+        clean = assert_clean_context(context, fresh_page)
+        assert clean["clean"] is True, clean
+        assert clean["cookie_count"] == 0, clean
+
+        context.add_cookies([{"name": "sid", "value": "x", "url": "https://clean-context.test/"}])
+        fresh_page.evaluate("() => localStorage.setItem('k', 'v')")
+        dirty = assert_clean_context(context, fresh_page)
+        assert dirty["clean"] is False, dirty
+        assert dirty["cookie_count"] == 1, dirty
+        assert dirty["local_storage_keys"] == 1, dirty
+    finally:
+        context.close()
+    ok("assert_clean_context reports a fresh context as clean and a seeded one as not")
+
+
+def test_run_scenario_end_to_end(browser) -> None:
+    """run_scenario is the orchestrator wiring together nearly every other
+    function in this module - checkpoints, exercises, event capture, HAR
+    sanitization, validity gating - and none of that wiring was exercised end
+    to end, only its pieces in isolation."""
+    import threading
+    from http.server import BaseHTTPRequestHandler, HTTPServer
+
+    class _Handler(BaseHTTPRequestHandler):
+        def log_message(self, *args) -> None:
+            pass
+
+        def do_GET(self) -> None:
+            body = HUBSPOT_BANNER.encode("utf-8")
+            self.send_response(200)
+            self.send_header("Content-Type", "text/html")
+            self.send_header("Content-Length", str(len(body)))
+            self.end_headers()
+            self.wfile.write(body)
+
+    with HTTPServer(("127.0.0.1", 0), _Handler) as server:
+        port = server.server_port
+        thread = threading.Thread(target=server.serve_forever, daemon=True)
+        thread.start()
+        try:
+            url = f"http://127.0.0.1:{port}/"
+            config = ScenarioConfig(
+                url=url, wait_ms=50, timeout_ms=8000, pages=0,
+                thorough=True, dwell_ms=100, scroll_stages=1,
+            )
+            with tempfile.TemporaryDirectory(prefix="cookie-auditor-scenario-") as temp:
+                temp_path = Path(temp)
+                result = run_scenario(
+                    browser=browser, scenario="denial", config=config,
+                    private_dir=temp_path / "private", share_dir=temp_path / "share",
+                    action="deny", cmp_table=load_cmp_table(),
+                )
+
+                assert result["scenario"] == "denial"
+                assert result["action_result"]["status"] == "direct_reject_clicked", result["action_result"]
+                assert result["validity"]["valid"] is True, result["validity"]
+                assert result["cmp"] and result["cmp"]["id"] == "hubspot", result["cmp"]
+                checkpoint_names = [c["checkpoint"] for c in result["checkpoints"]]
+                assert checkpoint_names == [
+                    "01-pre-interaction", "02-post-denial", "03-after-refresh", "09-post-exercise",
+                ], checkpoint_names
+                assert result["isolation_assertion"]["clean"] is True, result["isolation_assertion"]
+                assert result["errors"] == [], result["errors"]
+                assert result["consent_mode"]["summary"]["present"] is False, result["consent_mode"]
+
+                private_scenario = temp_path / "private" / "denial"
+                share_scenario = temp_path / "share" / "denial"
+                assert (private_scenario / "denial-result.raw.json").exists()
+                assert (share_scenario / "denial-result.json").exists()
+                assert (private_scenario / "denial-events.raw.json").exists()
+                assert (share_scenario / "denial-events.json").exists()
+
+                written = json.loads((share_scenario / "denial-result.json").read_text())
+                assert "final_storage_state" not in written, "the share copy must not carry final_storage_state"
+        finally:
+            server.shutdown()
+    ok("run_scenario wires checkpoints, exercises, event capture, and validity gating end to end")
 
 
 # ---------------------------------------------------------------------------
@@ -2811,6 +2986,8 @@ def main() -> int:
     test_retry_recovers_from_transient_navigation_failure()
     test_retry_gives_up_after_second_transient_failure()
     test_retry_never_fires_for_a_failed_consent_interaction()
+    test_robots_allows_respects_disallow()
+    test_collect_consent_mode_extracts_signals_from_request_log()
 
     print("\nBrowser-backed checks")
     executable = discover_browser_executable(None)
@@ -2849,6 +3026,8 @@ def main() -> int:
             test_dwell_and_nudge_skips_scrolling_when_not_thorough(page)
             test_exercise_search_fills_and_submits(page)
             test_exercise_search_no_input_present(page)
+            test_assert_clean_context_detects_dirty_state(page)
+            test_run_scenario_end_to_end(browser)
         finally:
             browser.close()
 
