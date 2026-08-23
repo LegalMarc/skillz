@@ -1,15 +1,6 @@
 ---
 name: workflow-loop
-description: >
-  Turn a goal into self-contained GitHub issues, then autonomously grind through
-  them AFK with a multi-agent loop that gives every ticket clean context: a coder
-  implements and stages, an independent reviewer adversarially verifies, a
-  committer lands — and blocked tickets are parked with findings posted to the
-  issue so the loop keeps going without human intervention. Use when the user
-  wants to break work into tickets and solve them automatically, run an
-  AFK/autonomous/overnight/unattended build loop, grind a ticket queue with
-  fresh context per ticket, or says "create issues and solve them". Model-
-  agnostic: roles are defined by capability tier and effort, not model names.
+description: Turn a goal into self-contained GitHub issues, then autonomously solve them with a multi-agent workflow that gives each ticket clean context (coder → independent reviewer → land). Use when the user wants to break work into tickets and grind through them automatically, run an AFK/autonomous build loop, advance a ticket queue with fresh context per ticket, or "create issues and solve them".
 ---
 
 # Workflow Loop
@@ -17,29 +8,17 @@ description: >
 A two-phase pattern for shipping a body of work autonomously:
 
 1. **Decompose** the goal into GitHub issues that are *self-contained* — each carries its own acceptance criteria AND the exact commands that prove it's done.
-2. **Loop** over eligible issues with a deterministic multi-agent workflow. Every ticket gets a **fresh agent (clean context)**: a coder implements and stages, an **independent reviewer** adversarially checks the staged diff, a committer lands it. Blocked tickets are **parked** — work stashed, findings posted to the issue, triage label applied — and the loop grinds on. After each landing the loop **re-discovers** — tickets unblocked by the landing join the queue in the same run.
+2. **Loop** over eligible issues with a deterministic multi-agent workflow. Every ticket gets a **fresh agent (clean context)**: a coder (Sonnet) implements and stages, an **independent reviewer (Opus)** adversarially checks the staged diff, a committer lands it. After each landing the loop **re-discovers** — tickets unblocked by the landing join the queue in the same run.
 
 The load-bearing idea: **the solver agent has zero prior context.** It only knows what the issue body says. The loop's quality is decided in Phase 1 — an issue without its own verification commands cannot self-verify, and the loop will drift. Spend the effort making issues self-contained.
 
 ## When to use
 
-- "Break this into tickets and solve them automatically." / "Run an AFK build loop overnight."
+- "Break this into tickets and solve them automatically." / "Run an AFK build loop."
 - "Advance the queue, fresh context per ticket."
-- You have a plan/PRD and want it turned into agent-grabbable issues *and* executed unattended.
+- You have a plan/PRD and want it turned into agent-grabbable issues *and* executed.
 
 For decomposition only (no execution), prefer `to-issues`. This skill adds the autonomous solver loop.
-
-## Model policy (model-agnostic by design)
-
-Roles are capability tiers, not model names. Resolve them **at invoke time** from whatever models the runtime offers:
-
-| Role | Intelligence tier | Effort | How to configure |
-|---|---|---|---|
-| Reviewer (supervisor) | **Highest available** | high (`reviewerEffort: "xhigh"` default) | Leave `reviewerModel` empty to inherit the session model — correct when the session runs a frontier model; set it explicitly only if the session model is NOT the strongest available |
-| Coder | **Mid tier** | high (`coderEffort: "high"` default) | Set `coderModel` to the runtime's cheaper capable tier if one exists; otherwise leave empty to inherit |
-| Discovery / land / park | inherits coder model | medium (fixed) | Mechanical git/gh work — no configuration needed |
-
-Never write model names into issues, and never hardcode them in the script — the asymmetry that matters is *reviewer thinks harder than coder*, and that survives every model generation.
 
 ## Prerequisites
 
@@ -58,7 +37,7 @@ Work from the conversation context (plan, PRD, prose). Then:
 
 **1b. Order by dependency.** Record dependencies explicitly in each issue body (`## Dependencies` / "needs #N") so the loop computes eligibility from GitHub state alone. An issue is *eligible* only when all its deps are CLOSED.
 
-**1c. Use the self-contained template.** Every issue MUST include a **Required verification** section with copy-pasteable commands — runnable from the repo root, deterministic (no live network, no manual steps). Non-negotiable: it is how a cold solver and reviewer prove the work. If a change constrains a layer the unit suite bypasses (migrations, infra, external seams), the verification must include the integration command that exercises that layer.
+**1c. Use the self-contained template.** Every issue MUST include a **Required verification** section with copy-pasteable commands — runnable from the repo root, deterministic (no live network, no manual steps). Non-negotiable: it is how a cold solver and reviewer prove the work.
 
 ```markdown
 ## Goal
@@ -73,11 +52,6 @@ One paragraph: the end-to-end behavior this slice delivers.
 ## Out of scope
 - What this slice deliberately does NOT touch.
 
-## Automation
-- `afk` — one line on what makes it runnable unattended.
-  (or) ATTENDED, rung 3 — why no CLI/API/browser/computer-control path exists,
-  and the single click or paste the human performs.
-
 ## Acceptance criteria
 - Observable, testable statements; each maps to a verification command below.
 
@@ -90,49 +64,29 @@ One paragraph: the end-to-end behavior this slice delivers.
   "read file X §Y", prior decisions. The solver will not infer these.
 ```
 
-**1d. Run the AFK ladder over every ticket. This is what decides the label.**
+**1c-bis. Write acceptance criteria that can fail.** The dominant coder failure mode is not broken logic — it is **assertions that were already green before the diff existed**: a "no X in the output" check scoped to a container X never occupied, a test comparing the implementation against the very constant the implementation reads, a claim to have met an earlier ticket's standard without running that standard's check. None of these are visible to any gate, because they *pass*, and coverage counts them as covered.
 
-A ticket the loop cannot grind is a place the queue stalls waiting on a human. **Attended is a last resort you argue for, not a default you fall back to.** For each ticket, climb until it stops:
+So write the AC as the mutation, not as the outcome:
 
-| Rung | Question | If yes |
-|---|---|---|
-| **0** | Does it already run unattended from a clean checkout? | Label `afk`. Done. |
-| **1** | Is it blocked only by a **missing input** — a credential, an ID, an endpoint, a choice between two designs? | Not a real blocker. Collect the question for 1e, inline the answer into `## Notes`, then `afk`. |
-| **2** | Is it blocked only because nobody looked for a **programmatic path**? | Escalate in order: **CLI** (install it if that is what it takes) → **HTTP API** → **browser automation** → **computer control**. It only leaves this rung after all four have actually been tried. |
-| **3** | Is the human act itself the irreducible content — a consent screen that detects automation, a physical action, a signature, a legally-personal click? | Attended. Go to 1f. |
+- ✗ "The id no longer appears on the finished panel."
+- ✓ "The id no longer appears on the finished panel — **assert at panel level, and prove the assertion fails against today's code before fixing it.**"
 
-Record the rung in the issue's `## Automation` field. A rung-3 ticket must say *why*, so a later pass can re-attack it when a CLI ships or a policy changes.
+For a "zero" or "absent" result, require a positive control: *"inject the failure, watch the detector fire, remove it, watch it clear — a zero is only evidence if the detector was shown able to report non-zero."* For an opaque artifact (generated bytes, base64, a binary fixture), require that something inspects the artifact's **content**, not merely that it equals itself.
 
-⚠ **Rung 2 is where attended tickets get created by mistake.** "There is no CLI for that" is a claim to verify, not an assumption to make. Check the vendor's own CLI, the `gh`/`aws`/`gcloud`-class tool, the HTTP API sitting behind the web UI, and a headless browser driver — in that order — before conceding. Installing a tool is cheaper than a permanent hole in the queue.
+Two AC hygiene rules worth stating explicitly, both learned the hard way:
 
-**1e. Ask every unblocking question at once, as multiple choice.**
+- **Scope the AC no wider than the Scope section.** An AC written unqualified ("no such obligation remains anywhere") against a Scope naming one file is unsatisfiable as scoped, and burns a review round discovering that.
+- **Don't hand the coder a verification command narrower than the AC.** A grep over `src/` will miss a shipped `public/` asset, and the AC then lands violated.
 
-Rung-1 tickets are blocked only until the user answers. Collect every such question across the **whole batch** and ask them in **one** interaction — multiple choice, recommended option first, each naming the ticket it unblocks and what changes based on the answer. Never drip-feed one question per ticket, and never ask open prose the user has to compose an answer to.
+**1d. Confirm before publishing.** Present the breakdown (title · blocked-by) and iterate with the user. Publish in dependency order via `gh issue create`, applying the loop label (default `afk`).
 
-After the answers land, inline them into the relevant `## Notes` and relabel those tickets `afk`.
-
-> The measure of success for this step: **afterwards, no ticket in the queue is waiting on information.**
-
-**1f. For genuine rung-3 tickets, reduce the human's part to a single action.**
-
-Never hand over a procedure. Hand over exactly one of:
-
-- **One approval click** — the URL, already scoped, naming the exact control to click.
-- **One copy-paste block** — a single fenced command with every value already substituted. No placeholders, no "replace `<X>` with your…", no multi-step sequence.
-
-Everything around that one action is yours: pre-create what can be pre-created, prepare the payload, and write the verification that will confirm the human's action landed. Their job is to click or paste, nothing else.
-
-Create these **without** the loop label so the queue never blocks on them — but keep their `## Required verification` section, because an attended session still has to prove it did the right thing.
-
-**1g. Confirm before publishing.** Present the breakdown (title · rung · blocked-by) and iterate with the user. Publish in dependency order via `gh issue create`, applying the loop label (default `afk`) to everything that cleared rungs 0-2.
-
-> Existing issues? Skip to Phase 2 — but first confirm they carry **Required verification** sections, and run the ladder (1d) over any that are unlabelled or attended; a queue inherited from an earlier pass is exactly where stale rung-3 calls hide.
+> Existing issues? Skip to Phase 2 — but first confirm they carry **Required verification** sections; add them if missing.
 
 ---
 
 ## Phase 2 — Run the autonomous loop
 
-`assets/workflow-loop.js` is a parameterized `Workflow` script. Repo-agnostic and model-agnostic: configure via `args`, never edit per project.
+`assets/workflow-loop.js` is a parameterized `Workflow` script. Repo-agnostic: configure via `args`, never edit per project.
 
 ### Invoke
 
@@ -145,184 +99,162 @@ Workflow({
     branch: "main",
     checkCommand: "bash scripts/check.sh",
     setupCommand: "source .venv/bin/activate",  // or ""
-    coderModel: "",                  // "" = inherit session model; or the runtime's mid tier
-    coderEffort: "high",
-    reviewerAgentType: "general-purpose",  // or a project reviewer subagent, e.g. "backend-reviewer"
-    reviewerModel: "",               // "" = inherit session model (use the strongest available)
-    reviewerEffort: "xhigh",
-    onBlocked: "skip",               // "skip" = park & grind on (AFK default); "halt" = stop at first block
-    blockedLabel: "afk-blocked",     // triage label for parked tickets
-    reportIssue: "auto",             // run journal + end report: "auto" = create/reuse "AFK run log" issue; N = issue number; 0 = off
-    autoRecover: false,              // restart flows ONLY — stash a crashed run's dirty tree and proceed (see Overnight resilience)
+    coderModel: "sonnet",            // implements, fixes, lands (default)
+    reviewerAgentType: "general-purpose",  // or a project reviewer, e.g. "skull-reviewer"
+    reviewerModel: "opus",           // default
     commitPrefix: "",                // optional subject convention
     maxTickets: 0,                   // 0 = all eligible
     maxReviewIterations: 3,
-    coderNote: "",                   // project invariants for every coder prompt (see Adapting)
-    referenceMode: false,            // mine per-ticket reference branches (adapt, don't copy)
-    referenceNote: "",               // project specifics for referenceMode
-    dryRun: false                    // true = preview the eligible queue, change nothing
+    dryRun: false,                   // true = preview the eligible queue, change nothing
+    priority: [],                    // issue numbers to prefer first (tie-break only)
+
+    // ── Measure first ──
+    shadowFootprints: false,         // sequential run + scores write-set prediction
+
+    // ── Parallel mode (opt-in; omit for the sequential loop) ──
+    workers: 1,                      // tickets coded+reviewed CONCURRENTLY
+    workerSetupCommand: "",          // provision each worker slot; $WL_MAIN, $WL_WORKSPACE
+    worktreeRoot: "",                // default: ../.wl-worktrees
+    branchPrefix: "wl",              // per-ticket branches: wl/<issue>
+    onBlocked: "quarantine"          // or "halt"; defaults to halt when workers === 1
   }
 })
 ```
 
-Runs in the background; watch with `/workflows`. Tip: run once with `dryRun: true` to sanity-check the queue, dependency parsing, and lint findings before spending tokens — dryRun is strictly read-only (no comments, no labels, no stashes, no journal). If the user set a token target ("+500k"), the loop honors it — it stops cleanly *between* tickets when the budget nears exhaustion.
+Runs in the background; watch with `/workflows`. Tip: run once with `dryRun: true` to sanity-check the queue and dependency parsing before spending tokens. If the user set a token target ("+500k"), the loop honors it — it stops cleanly *between* tickets when the budget nears exhaustion.
 
 ### Shape of a run
 
 ```
 Round:
-  Discover →  sync gate (fetch; abort if behind, ahead, or dirty — ahead means a
-              prior land likely committed but failed to push; autoRecover stashes
-              a dirty tree instead) + eligible open `label` issues (all deps CLOSED, not
-              parked) + LINT GATE: issues without runnable Required-verification
-              commands are commented, labeled, excluded. HEAD-BLOCKER GUARD:
-              reads the run journal for a ticket marked "Started" with no later
-              "Landed"/"Parked"/"Halted" entry — a coder-and-park-agent double death — and
-              parks it before it starves the rest of the queue (needs reportIssue;
-              see Head-blocker guard below). Topological order. First live round
-              also opens the run journal (reportIssue) and reports pendingCount:
-              open, label-matching issues NOT yet eligible, WITH the specific
-              tickets blocking them — so a later "drained" report can say why.
+  Discover →  sync gate (fetch; abort if behind or dirty) + eligible open `label`
+              issues (all deps CLOSED), topologically ordered
   For each eligible issue (FRESH AGENT, no shared memory):
-    Coder    →  posts a "Started #N" journal marker first (if reportIssue is on),
-                then reads issue, plans, implements, runs the issue's Required
-                verification + checkCommand (one bounded retry per flaky
-                command, disclosed), git diff --check, stages. Sees the RUN
-                LEDGER: ≤5 factual lessons from this run's earlier rejections.
-    Review   →  independent agent re-runs verification on the staged diff
-                → APPROVE | REQUEST_CHANGES (numbered file:line findings,
-                  plus a one-line lesson for the ledger)
-                  ↳ coder fixes, re-stages, re-review (max N rounds);
-                    the FINAL fix round escalates to reviewer-tier model/effort
-                  ↳ exhausted: PARK (skip mode) or stop (halt mode)
-    Land     →  commit ("Refs #N" — no auto-close keywords), PUSH
-                (ff-only retry once, NEVER merge/rebase), gh issue close with
-                SHA + evidence, then a "Landed #N" journal marker (closes out
-                the Started marker so this ticket doesn't look dangling).
-    Park     →  (blocked tickets, skip mode) stash work, post findings as an
-                issue comment, apply `blockedLabel`, post a "Parked #N" journal
-                marker, continue to next ticket
-    Halt     →  (loop-level stop on THIS ticket, without landing or parking it:
-                coder failure, halt-mode block, halt-mode review exhaustion,
-                landing failure) post a "⏹️ Halted #N" journal marker closing
-                out its "Started" entry — a clean, reported stop, not a crash,
-                so the head-blocker guard doesn't misread it on the next resume.
-                Distinct from the end-of-run marker below, which reports the
-                WHOLE RUN, not one ticket.
+    Coder (sonnet)  →  read issue, plan, implement, run the issue's Required
+                       verification + checkCommand, git diff --check, stage
+    Review (opus)   →  independent agent re-runs verification on the staged diff
+                       → APPROVE | REQUEST_CHANGES (numbered file:line findings)
+                         ↳ coder fixes, re-stages, re-review (max N rounds)
+                         ↳ exhausted: stop loop, work left STAGED for inspection
+    Land (sonnet)   →  commit ("Refs #N" — no auto-close keywords), PUSH
+                       (ff-only retry once, NEVER merge/rebase), then
+                       gh issue close with SHA + evidence
   Re-discover if this round landed work and issues remain dep-blocked
-  (a landing may have unblocked them). Else done — logged as either "nothing
-  pending" or "drained but #A, #B still blocked", never the same message.
-End of run → one marker comment on the journal issue, posted even if nothing
-             landed or parked: "🔴 Run ended" (finished cleanly) or "⏸ HALTED"
-             (stopped mid-run — budget floor, maxTickets, a loop-level failure)
-             naming the reason. This comment is the durable external record an
-             overnight resume depends on — see Overnight resilience. Reporting
-             never affects outcomes.
+  (a landing may have unblocked them). Else done.
 ```
 
-**AFK grinding (`onBlocked: "skip"`, the default):** a blocked ticket never stops the queue. Its work is stashed (recoverable via `git stash list`), the reviewer's findings land on the issue as a comment, and the `blockedLabel` marks it for morning triage. Dependents of a parked ticket stay ineligible automatically (the issue stays open). Loop-level problems still halt — behind-origin, ahead-of-origin, dirty tree, push rejection, or a failed park — because continuing would contaminate every subsequent ticket.
+The loop **stops at the first blocked/failed ticket** — same discipline as a human running one ticket per `/clear`. By default it is sequential: one shared tree, one branch.
 
-**Head-blocker guard (needs `reportIssue`):** the dangerous failure mode isn't a ticket that parks cleanly — it's one where the session dies mid-ticket and takes the park agent down with it, so the ticket's own issue shows no comment and no `blockedLabel`; it looks untouched and gets served first on every restart, starving the queue. The script has no shell access — only agents call `gh` — so this has to be caught at discovery, and it can only be caught reliably if there is a run journal to read: the coder posts a "Started #N" marker before doing anything else, and land/park/halt each close it out with "Landed #N" / "Parked #N" / "⏹️ Halted #N" (the last one for a clean loop-level stop that neither lands nor parks the ticket — see the Halt row in "Shape of a run"). Discovery treats a "Started" with no matching close as proof a window was already spent on that ticket and parks it as a head-blocker. **Without `reportIssue` enabled, this guard has no journal to read and cannot detect this case** — it falls back to weaker signals (a stash, or a comment on the ticket's own issue) that miss exactly the scenario that matters most, the one where nothing was ever written.
+### Parallel mode (`workers: N`)
 
-**Attended runs (`onBlocked: "halt"`):** stops at the first blocked ticket with work left staged for inspection — same discipline as a human running one ticket per `/clear`.
+The bottleneck in this loop is **model latency, not local CPU** — a coder averages ~10–35 min and a reviewer ~7–20 min, while the test gate is often ~1 core. `workers: N` overlaps those waits. `workers: 1` (default) is the sequential loop above, unchanged.
 
-The loop is sequential by design: one shared tree, one branch; parallel landings invite merge races.
+```
+Round:
+  Discover  →  as above
+  Partition →  one cheap agent per ticket predicts its WRITE-SET
+  Prep      →  N reusable WORKER SLOTS (git worktrees), each provisioned via
+               workerSetupCommand and PROVEN able to run the gate. Once, not per ticket.
+  Build     →  WORK-STEALING POOL, not waves. The moment a slot frees it takes the next
+               queued ticket whose write-set collides with nothing IN FLIGHT. Queue order
+               is preserved; a ticket is skipped only on a real conflict. Unknown
+               write-set ⇒ runs ALONE. Nobody fetches, pushes, merges, or touches <branch>.
+  Integrate →  BATCH FIRST: merge every approved branch, run the gate ONCE, push, close.
+               On red or conflict ⇒ back the whole thing out and re-integrate
+               ONE AT A TIME to find the culprit. Each fallback merge re-runs the gate;
+               red ⇒ reset --hard, branch preserved, ticket re-runs against the new base.
+```
+
+**Why a pool and not waves.** A wave is a barrier: it ends when its slowest member does, so pairing a 10-minute ticket with a 35-minute one idles a worker for 25 minutes. The pool has no barrier.
+
+**Why the batch merge.** The gate is the expensive *serial* step. Gating after every merge costs N gate runs — Amdahl's law eating the win. Merging all N and gating once costs one, and most batches are green. The one-at-a-time path still exists; it is now the *fallback*, and doubles as the bisect that identifies the culprit.
+
+**Why integration re-verifies at all.** Each branch was built and reviewed against `origin/<branch>` as it stood *before* its siblings landed. Per-branch green is not evidence the *combination* is green — two tickets can each pass alone and break together. That gate run is the only place the combination is ever tested, and it is what pays for the parallelism. Do not remove it.
+
+### Measure before you parallelise
+
+**Prediction accuracy *is* the parallelism.** One confidently-wrong write-set lets two colliding tickets run together, costing a full coder+reviewer pass — which at width 3 can exceed everything the parallelism saved. Do not guess at it:
+
+```
+Workflow({ scriptPath, args: { ...cfg, shadowFootprints: true } })
+```
+
+That runs the ordinary **sequential** loop, predicts each ticket's write-set *before* the coder starts, and scores it against what was actually staged. It changes nothing about execution. Read the report at the end:
+
+- **`missed`** — files the ticket really wrote that the prediction omitted. This is the dangerous half; each one is a collision that would have happened.
+- **`extra`** — over-prediction. Costs a little parallelism, nothing else.
+- **`safeRate`** — of the predictions you'd actually have scheduled on, the fraction with no miss.
+
+If `safeRate` is not near 1.0, tighten the file lists in the issue bodies (Partition grounds itself in what the issue names) before setting `workers > 1`.
+
+**Sizing.** The reviewer re-runs the gate too, so N workers means up to 2N concurrent gate runs — measure the gate's core usage before going wide. 2–3 is usually the knee. Below ~8–10 queued tickets the setup cost and conflict risk generally exceed the saving: stay at `workers: 1`.
+
+**`workerSetupCommand` is not optional in practice.** A worktree is a checkout, not a copy — no `node_modules`, no virtualenv, no build cache. Symlink them from `$WL_MAIN` into `$WL_WORKSPACE`, e.g. `ln -sfn $WL_MAIN/.venv $WL_WORKSPACE/.venv`. Prep proves a slot can run the gate before any ticket starts; if it can't, the run aborts rather than failing every ticket for reasons unrelated to their code.
+
+**Blocked tickets are quarantined, not fatal.** In parallel mode `onBlocked` defaults to `quarantine`: a blocked ticket is recorded, its siblings still land, re-discovery still runs, and everything unresolved is listed in the final summary with its branch preserved. Halting is right *sequentially* — the next ticket would inherit a tree you haven't inspected — but in parallel it discards the concurrent progress of tickets that have nothing to do with the failure. Set `onBlocked: "halt"` to restore the old behaviour.
+
+### Related
+
+`references/prospector.md` — a proposed phase that makes the loop find its own work. The loop verifies tickets, so it cannot find defects no ticket asked about; the prospector files them. Design only, not implemented.
 
 ### Hygiene rules (encoded in the template — do not weaken)
 
-- **Sync before picking**; refuse to act if behind or ahead of the remote, or if the tree is dirty — ahead means a prior land committed without a successful push, and re-serving that ticket would let a later push ship it silently, unreviewed and with its issue never closed.
+- **Sync before picking**; refuse to act if behind the remote or the tree is dirty.
+- **ONE writer to `branch`, always.** Sequentially that's the single tree; in parallel mode it's the serialized Integrate phase. Concurrent pushes to `branch` are never allowed.
 - **Push after every commit**; a closed issue must cite a SHA reachable from the remote.
 - **Never merge/rebase on push rejection** — ff-only retry once, else stop.
-- **One loop per repo.** Never start a second concurrently.
+- **One loop per repo.** Never start a second concurrently. (Parallel mode is *within* one loop — it is not a licence to run two.)
 - **Independent review, always**; the reviewer re-runs verification itself and never edits.
-- **Parked work is stashed, never discarded**; every park leaves findings on the issue.
-- **Flaky retries are bounded and disclosed** — one re-run per failing command, ever; a retry-pass must say "passed on retry — possible flake" so nothing is silently masked (the reviewer re-runs it anyway).
-- **Attended is a last resort with a stated reason** — every ticket created without the loop label names the rung it stopped at and what would unblock it. "No CLI exists" is a verified claim, not an assumption; a ticket parked as attended without that reasoning is a defect in the decomposition, not a property of the work.
-- **The run ledger stays factual and bounded** — max 5 one-line lessons distilled from actual reviewer findings; never speculation, never project lore (that belongs in `coderNote`).
+- **In parallel mode, re-run the full gate after every merge.** Never trust per-branch green.
 
 ## Adapting
 
-Keep the four-role spine and the hygiene rules; layer project specifics through args, never by editing the script:
-
-- **`coderNote`** — invariants every coder must know. Example: *"The unit suite builds the schema directly, NOT via migrations — always run the ticket's integration verification too; a NOT NULL column whose writers aren't updated passes unit tests and breaks in prod."*
-- **`reviewerAgentType`** — point at a project reviewer subagent that encodes repo rules.
-- **`referenceMode` + `referenceNote`** — when per-ticket reference branches exist (e.g. from a prior implementation pass), the coder mines each ticket's branch as a guide; `referenceNote` carries what changed since (refactors, migration renumbering, already-landed schema).
-- Front-load invariants into each issue's `## Notes` — the solver reads nothing else.
-
-## Overnight resilience (resuming after usage-limit exhaustion)
-
-A usage window (e.g., an hours-long session limit, or a longer weekly reset) can kill the
-session mid-run: agents die, the loop halts, and — because the harness kills the whole
-process — the script gets no chance to react. All loop *state* lives in GitHub (labels,
-closed issues, stashes), so **any fresh session can resume with the same args**. The open
-question is only ever "how does anything find out the run stopped and needs resuming."
-
-**The primary mechanism is the durable marker, not the cron.** Invoke the loop with
-`reportIssue: "auto"` so it keeps a journal on the "AFK run log" issue: a start comment
-when the run begins, a "Started #N" / "Landed #N" / "Parked #N" / "⏹️ Halted #N" marker around each ticket,
-and — critically — an end-of-run comment that fires even when nothing landed: "🔴 Run
-ended" if it finished cleanly, or "⏸ HALTED — <reason>" if it stopped mid-run (budget
-floor, a loop-level failure, `maxTickets`). That comment is a plain GitHub comment: it
-exists whether the session that posted it is still running, asleep, or long gone. Whoever
-or whatever checks in next — a human glancing at the issue, a scheduled job, the next
-morning's standup — reads one line and knows whether to resume, and with what.
-
-**A cron/scheduled-task relauncher is a convenience layered on top, not a substitute.**
-Scheduled tasks inside a session fire only while that session is idle-but-alive; a session
-that has ended, or that the runtime has put to sleep, never fires them — **a cron alone is
-not a resume mechanism across a multi-day gap.** In one observed run, a loop halted by a
-weekly limit reset sat idle roughly nine hours past the reset with no cron ever firing;
-what actually resumed it was a person reading the "⏸ HALTED" marker already sitting on the
-run-log issue and relaunching by hand. If the runtime offers a scheduled task that keeps
-firing regardless of session lifecycle (a real system cron, a hosted scheduler, anything
-external to this session), point it at the recipe below; if it doesn't, the marker is still
-there for a human (or the next session) to act on — treat that as the expected path, not a
-fallback.
-
-If you do have an always-on scheduler available, an hourly, self-canceling task with a
-self-contained prompt like this is a reasonable relauncher:
-
-```text
-You are the overnight relauncher for a workflow-loop run on OWNER/REPO.
-1. LIVENESS: read the newest comments on the open "AFK run log" issue. If the latest
-   comment is a "🔴 Run ended" or "⏸ HALTED" marker, the run has already stopped — go to
-   step 2. If neither marker is present yet and commits are still landing, exit — the run
-   is still alive.
-2. DRAINED-BUT-BLOCKED CHECK: read that SAME latest marker's first line, not just its
-   presence. If it is a "🔴 Run ended" line containing "resuming will not find new work"
-   (the pendingCount > 0 case — every remaining ticket is transitively blocked, not
-   finished), do NOT resume: relaunching would re-discover nothing new and repost an
-   identical marker, hourly, forever. Instead post a comment on the journal issue —
-   "⚠️ Relauncher: queue is transitively blocked (see marker above) — needs human triage,
-   not another run." — then DELETE this scheduled task. A human (or a fresh trigger, once
-   the blocker is fixed or parked) must re-enable it; go no further.
-3. WORK CHECK: gh issue list --repo OWNER/REPO --label <label> --state open,
-   excluding issues labeled <blockedLabel>. If none remain, confirm the journal shows a
-   "🔴 Run ended" (not "⏸ HALTED") and does NOT match step 2's phrase, then DELETE this
-   scheduled task. Done.
-4. RESUME: invoke the Workflow tool with <skill path>/assets/workflow-loop.js
-   and the ORIGINAL args verbatim, plus autoRecover: true and
-   reportIssue: "auto". Do not change any other arg.
-```
-
-While the account is rate-limited, a firing simply fails or does nothing — harmless. But
-its silence is not informative either way: absence of a resume attempt tells you nothing
-about whether the scheduler is still alive to try. The journal marker is what tells you
-that. Treat the cron as best-effort automation for the case where the session happens to
-stay alive across a short reset, and the marker as the thing that actually has to work.
-
-**Honest caveat:** `autoRecover: true` belongs **only** in restart flows — it stashes a
-crashed run's leftovers (`afk-crash-recovery` stash, recoverable) instead of refusing on a
-dirty tree. Attended runs keep the strict gate so a human inspects crashed state.
+Keep the four-phase spine and the hygiene rules; layer project specifics by:
+- appending steps to the prompt builders (e.g. an Ansible syntax-check),
+- pointing `reviewerAgentType` at a project reviewer subagent that encodes repo rules,
+- front-loading invariants into each issue's `## Notes`.
 
 ## Failure modes & recovery
 
-- **"behind origin" / "ahead of origin" / "dirty tree"** → aborts at the sync gate. "Ahead" usually means a prior land committed but its push failed — inspect with `git log origin/<branch>..HEAD`, then push by hand or reset if abandoned. Fix by hand, re-run (or see *Overnight resilience* for unattended flows).
-- **Parked tickets** (skip mode) → triage by label: `gh issue list --label afk-blocked`. Findings are in the issue comments; stashed work via `git stash list`; the run journal issue has the full landed/parked/failed report. Fix or refine the issue, remove the label, re-run.
-- **Lint-gate exclusions** → same label and triage path as parks; the comment says exactly which section is missing. Add the verification commands, remove the label, re-run.
-- **Head-blocker exclusions** → same label and triage path; the comment says "head-blocker: already consumed a window" plus the evidence (a dangling journal "Started" marker, or the fallback signals). Retry it on its own dedicated window, ideally attended, then remove the label.
-- **Coder blocked / review exhausted** (halt mode) → loop stops with the reason; work is **staged, not committed**. Inspect, fix or refine, re-run; closed issues drop out automatically.
-- **Landing failed** → always halts (loop-level). Resolve the push problem by hand.
-- **"Queue drained" reads as "finished" but isn't** → check `pendingCount`/`blocked` in the result (or the log line right above it). `pendingCount: 0` means genuinely nothing left. `pendingCount > 0` means the remaining tickets are transitively blocked — the result's `blocked` array (and the log line) names which tickets and by what; that is not the same as done, and relaunching won't find new work until the blocker itself lands or is parked.
-- **`journalIssue: 0` in the result** → looks like a crash but usually isn't. It only means `reportIssue` was off, or discovery exited before ever reaching the "open the journal" step (e.g. it blocked at the sync gate, or the queue was empty on round 1). Check `reason` for the actual cause; don't treat `journalIssue: 0` alone as a malfunction.
-- **Resume** → invoke again (discovery recomputes from GitHub), or `Workflow({scriptPath, resumeFromRunId})` to reuse the prior run's cached agent results.
+- **"behind origin" / "dirty tree"** → aborts at the sync gate. Fix by hand, re-run.
+- **Agent killed mid-run** (`agent terminated (skipped or API error)`, e.g. a spend or rate limit) → the commonest failure in long runs. The tree holds whatever that agent had done. **Read the next section before touching it** — what is safe to do depends entirely on *which* agent died.
+- **Coder blocked** → loop stops with the reason. If the blocker is a **decision the issue reserves to the owner** (a schema shape, a data-integrity call), do not resolve it in the coder's place and do not just re-run — the loop halts at the first blocked ticket, so it will stop there again on *every* relaunch and the rest of the queue never moves. Remove the loop label from that one issue with a comment saying what decision is owed, and relaunch; restore the label when it's answered.
+- **Review exhausted** → stops with the last findings; work is **staged, not committed**. The staged diff is the attempt a reviewer **rejected** — treat it as a reference, not a candidate. See below.
+- **Resume** → invoke again (discovery recomputes from GitHub), or `Workflow({scriptPath, resumeFromRunId})` to reuse the prior run's cached agent results. Resume is **same-session only**: once the launching session is gone, cached results are unreachable and a fresh launch re-runs everything. Resume also preserves the working tree, so it is the cheap recovery from a mid-ticket kill — a fresh launch discards that work.
+
+### What the tree means after a kill — check before you land anything
+
+A killed run leaves a dirty tree, and the same tree state means opposite things depending on which stage died. Read `workflowProgress[]` in the run's state file (or the journal, below) and pair each agent's `state` with its `resultPreview` before deciding.
+
+| Which agent died | What the tree holds | Safe action |
+|---|---|---|
+| **Coder**, mid-work | partial, unstaged, **never reviewed** | Park it (`wip/<ticket>-partial`, pushed), relaunch clean. **Do not land it**, however green its own tests are. |
+| **Fix round**, after a REQUEST_CHANGES | **staged** = the *rejected* attempt; **unstaged** = a half-written fix on top | Park **both layers as two commits** so the boundary survives. Landing the staged half ships code a review explicitly failed. |
+| **Reviewer** | staged, complete, **unreviewed** | Resume so the review actually runs. Do not hand-land. |
+| **Land**, after an APPROVE | staged, complete, **already approved** | The **only** safe hand-land: re-run the gate yourself, then commit/push/close. No review was skipped — only the mechanical step. |
+
+The trap is pattern-matching "loop died → salvage the staged diff → land it." That is right only in the last row. A gate passing is not evidence the diff is good; that is what the independent review is for.
+
+### Watching a live run
+
+`~/.claude/projects/<project>/<session>/workflows/<runId>.json` **only exists once the run has ended**. It is a terminal-state artifact, so a missing file is not a missing run, and a monitor keyed on that path emits nothing for a run's entire life — including if it dies. For a run in progress, use:
+
+- `<session>/subagents/workflows/<runId>/journal.jsonl` — one appended line per agent completion; the milestone stream (discover → coder → review → land).
+- `<session>/subagents/workflows/<runId>/agent-*.jsonl` — growing per-agent transcripts. Newest mtime vs now is the real alive-or-stalled check.
+- New commits on `<branch>` — a landing.
+
+**Recovering a dead run's work.** The state file truncates each agent's `resultPreview` to ~400 chars, so a long review verdict looks lost. It is not: `journal.jsonl` stores each agent's complete return value under `result`, **already parsed as a dict** (do not try to `literal_eval` it). Mine it before paying for a re-review — a full multi-finding review recovered this way can be posted onto the ticket so the next attempt inherits it instead of rediscovering it.
+
+### `checkCommand` is global, but tickets are not
+
+One `checkCommand` runs for every ticket, so a fast variant chosen for throughput (e.g. skipping slow infra/synth tests) is **blind to whole classes of regression** on the tickets that touch those files. The loop will not notice; the coder will report green. Either pass the full gate and accept the wall-clock, or state the stronger gate in the affected issue's own `## Required verification` so the coder and reviewer run it for that ticket.
+
+Related: a repo's "authoritative gate" may not cover its own CI. Check for test files that the gate's discovery pattern misses (e.g. `lint-*.py` when it globs `test_*.py`) and job steps that live outside the test directory entirely. Those gates are invisible locally and red `main` after the merge.
+
+Parallel mode only:
+
+- **Worktree prep failed** → the run aborts before any ticket starts. Usually `workerSetupCommand` didn't provision what the gate needs; fix it and re-run. Nothing was landed, nothing to clean up but the worktrees.
+- **Batch merge red** → two individually-green tickets broke in combination. The whole batch was backed out and re-integrated one at a time to find the culprit; the innocent ones land, the culprit is quarantined with its branch **preserved**. Re-run: it rebuilds against the new base. If the same pair keeps colliding, their write-sets were mispredicted — name the shared file in one issue's body so Partition separates them.
+- **`conflict` at integration** → merge aborted, branch preserved, ticket re-runs against the new base. Never hand-resolve: a resolved merge has been reviewed by nobody.
+- **Leftover worktrees** → `git worktree list`, then `git worktree remove --force <path> && git worktree prune`. Prep also clears stale slot paths before recreating them.
+- **Quarantined tickets** → listed in the final summary and in `result.quarantined`. A run that drained the queue with quarantined tickets reports `done: false` — it is not a success.
