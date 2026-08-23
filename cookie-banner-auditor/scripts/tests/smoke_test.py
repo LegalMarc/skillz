@@ -56,7 +56,6 @@ from lib.capture import (
     fingerprint_cmp,
     inspect_banner,
     load_cmp_table,
-    load_transmission_patterns,
     measure_focus_visibility,
     SYNTHETIC_VALUES,
     measure_tab_order,
@@ -68,7 +67,6 @@ from lib.capture import (
 from lib.util import (
     build_zip_bundle,
     create_hash_manifest,
-    endpoint_key,
     redact_storage_state,
     redacted_value,
     registrable_domain,
@@ -2072,7 +2070,10 @@ def test_run_detect_only_reports_and_annotates_a_real_control() -> None:
 # ---------------------------------------------------------------------------
 
 def test_transmission_classification() -> None:
-    patterns = load_transmission_patterns()
+    # Read the same way production does (audit_site.py loads this file's
+    # "transmission_patterns" key directly) rather than through a loader.
+    vendor_patterns = read_json(SCRIPT_DIR.parent / "references" / "vendor-patterns.json")
+    patterns = vendor_patterns["transmission_patterns"]
     assert patterns, "transmission patterns should load"
 
     loader = checks.classify_request("https://connect.facebook.net/en_US/fbevents.js", "script", transmission_patterns=patterns)
@@ -3080,28 +3081,42 @@ def test_endpoint_key_is_shared_and_strict() -> None:
     """One definition of endpoint identity, used by both the stability check and
     the run diff. They previously disagreed at the edges, so a URL could count
     as an endpoint in one answer and not the other."""
-    assert endpoint_key("https://cdn.example.com/tag.js?cb=123") == "cdn.example.com/tag.js"
-    assert endpoint_key("https://example.com") == "example.com"
-    assert endpoint_key("https://example.com/") == "example.com/"
+    assert checks.endpoint_key("https://cdn.example.com/tag.js?cb=123") == "cdn.example.com/tag.js"
+    assert checks.endpoint_key("https://example.com") == "example.com"
+    assert checks.endpoint_key("https://example.com/") == "example.com/"
 
     # The query string is excluded on purpose: cache busters and per-request
     # identifiers would make every run look entirely different from every other.
-    assert endpoint_key("https://a.test/p?x=1") == endpoint_key("https://a.test/p?x=2")
+    assert checks.endpoint_key("https://a.test/p?x=1") == checks.endpoint_key("https://a.test/p?x=2")
 
     # Not network endpoints, and must not appear in either answer.
     for url in ("data:text/html,<p>hi", "about:blank", "blob:https://a.test/abc", ""):
-        assert endpoint_key(url) is None, url
+        assert checks.endpoint_key(url) is None, url
 
-    # The capture-side helper must go through it.
+    # The capture-side helper and the compare_runs-side helper must both go
+    # through the same definition and land on identical keys for the same
+    # requests - the drift this test guards against was exactly this pair
+    # disagreeing at the edges.
     scenario = {"events": {"requests": [
         {"url": "https://a.test/one"},
         {"url": "https://a.test/one?cb=9"},
         {"url": "data:text/html,x"},
         {"url": "https://b.test/two"},
+        {"url": "https://example.test/page"},
     ]}}
     from lib import capture
-    assert capture._endpoint_set(scenario) == {"a.test/one", "b.test/two"}
-    ok("endpoint identity has one definition, shared by the stability check and the run diff")
+    import compare_runs
+    expected = {"a.test/one", "b.test/two", "example.test/page"}
+    # First-party endpoints (example.test is the audited site itself) are
+    # counted on purpose, not filtered out - both helpers answer "which
+    # endpoints were contacted", not "which third parties were contacted".
+    assert capture._endpoint_set(scenario) == expected
+    bundle = {
+        "metadata": {"target_url": "https://example.test"},
+        "scenario_results": {"only": scenario},
+    }
+    assert set(compare_runs._endpoints(bundle)) == expected
+    ok("endpoint identity has one definition, shared by the stability check and the run diff, and counts first-party endpoints too")
 
 
 def test_viewport_profiles() -> None:

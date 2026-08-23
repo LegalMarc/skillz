@@ -417,32 +417,6 @@ def origin_from_url(url: str) -> str:
     return f"{parts.scheme}://{parts.hostname}{port}"
 
 
-def endpoint_key(url: str) -> str | None:
-    """The `host+path` identity of one request, or None if there is no endpoint.
-
-    Single definition shared by the repeat-baseline stability check
-    (`capture._endpoint_set`) and the run comparison (`compare_runs._endpoints`).
-    Those two previously extracted this independently and disagreed at the
-    edges - one required a hostname, the other only a non-empty key - so a URL
-    could count as an endpoint when deciding whether a tag was unstable but not
-    when diffing two runs, or the reverse. Both questions are "which network
-    endpoints were contacted", so they must count the same things.
-
-    A hostname is required: a `data:`, `blob:`, or `file:` URL is not a network
-    endpoint and must not appear in either answer. The query string is
-    deliberately excluded, since cache busters and per-request identifiers
-    would otherwise make every run look entirely different from every other.
-    """
-    try:
-        parts = urlsplit(str(url))
-    except Exception:
-        return None
-    if not parts.hostname:
-        return None
-    key = f"{parts.hostname}{parts.path or ''}"
-    return key if key.strip("/") else None
-
-
 def escape_markdown_cell(value: Any) -> str:
     return str(value if value is not None else "").replace("|", "\\|").replace("\n", " ")
 

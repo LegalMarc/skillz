@@ -30,7 +30,6 @@ from lib.capture import (
     fingerprint_cmp,
     find_control,
     load_cmp_table,
-    load_transmission_patterns,
     render_pdf_from_html,
     resolve_egress_region,
     run_all_scenarios,
@@ -565,7 +564,6 @@ def main() -> int:
             exercise_forms=thorough and not args.no_forms,
             submit_forms=bool(args.submit_forms),
             exercise_search=thorough and not args.no_search,
-            transmission_patterns=load_transmission_patterns(),
         )
 
     captures: dict[str, dict] = {}

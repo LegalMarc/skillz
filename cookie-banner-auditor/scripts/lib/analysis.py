@@ -3,7 +3,7 @@ from __future__ import annotations
 import html
 import json
 import re
-from collections import Counter, defaultdict
+from collections import Counter
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
@@ -20,7 +20,6 @@ from .util import (
     escape_markdown_cell,
     markdown_to_html,
     read_json,
-    registrable_domain,
     same_site,
     sanitize_event_log,
     sanitize_url,

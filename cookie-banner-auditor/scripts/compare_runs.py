@@ -19,9 +19,9 @@ if str(SCRIPT_DIR) not in sys.path:
     sys.path.insert(0, str(SCRIPT_DIR))
 
 from lib.capture import render_pdf_from_html
+from lib.checks import endpoint_key
 from lib.util import (
     discover_browser_executable,
-    endpoint_key,
     escape_markdown_cell,
     markdown_to_html,
     read_json,
@@ -53,7 +53,7 @@ def _load_bundle(path: Path) -> dict[str, Any]:
 def _endpoints(bundle: dict[str, Any]) -> dict[str, dict[str, Any]]:
     """host+path -> summary, taken from the scenario request logs.
 
-    Identity comes from `util.endpoint_key`, shared with the capture-side
+    Identity comes from `checks.endpoint_key`, shared with the capture-side
     stability check so both answer "which endpoints were contacted" the same
     way.
     """

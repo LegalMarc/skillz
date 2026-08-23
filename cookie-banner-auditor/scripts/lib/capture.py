@@ -11,11 +11,10 @@ from urllib.parse import urljoin, urlsplit
 from urllib.request import urlopen
 from urllib.robotparser import RobotFileParser
 
-from playwright.sync_api import Browser, BrowserContext, Error as PlaywrightError, Frame, Locator, Page, TimeoutError as PlaywrightTimeoutError
+from playwright.sync_api import Browser, BrowserContext, Frame, Locator, Page
 
 from . import checks
 from .util import (
-    endpoint_key,
     ensure_dir,
     slugify,
     origin_from_url,
@@ -122,7 +121,6 @@ class ScenarioConfig:
     exercise_forms: bool = True
     submit_forms: bool = False
     exercise_search: bool = True
-    transmission_patterns: list[dict[str, Any]] = field(default_factory=list)
 
     def settle_ms(self) -> int:
         """How long to wait after a load before capturing."""
@@ -209,16 +207,6 @@ def load_cmp_table(path: Path | None = None) -> list[dict[str, Any]]:
     except Exception:
         return []
 
-
-def load_transmission_patterns(path: Path | None = None) -> list[dict[str, Any]]:
-    """Load known collection endpoints used to tell a beacon from a script load."""
-    target = path or (REFERENCES_DIR / "vendor-patterns.json")
-    try:
-        data = read_json(target)
-        entries = data.get("transmission_patterns") if isinstance(data, dict) else None
-        return entries if isinstance(entries, list) else []
-    except Exception:
-        return []
 
 BANNER_KEYWORDS = re.compile(r"\b(cookie|cookies|consent|privacy|tracking|personal information|sell or share)\b", re.I)
 OPTIONAL_CATEGORY = re.compile(
@@ -2531,13 +2519,13 @@ def run_scenario_with_retry(
 def _endpoint_set(scenario_result: dict[str, Any]) -> set[str]:
     """Distinct host+path endpoints seen in a scenario.
 
-    Identity comes from `util.endpoint_key`, shared with compare_runs so the
+    Identity comes from `checks.endpoint_key`, shared with compare_runs so the
     stability check and the run diff cannot drift into counting different
     things.
     """
     output: set[str] = set()
     for request in (scenario_result.get("events") or {}).get("requests", []) or []:
-        key = endpoint_key(str(request.get("url", "")))
+        key = checks.endpoint_key(str(request.get("url", "")))
         if key:
             output.add(key)
     return output
