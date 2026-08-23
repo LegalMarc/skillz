@@ -19,6 +19,7 @@ import re
 import sys
 import tempfile
 import zipfile
+from contextlib import contextmanager
 from pathlib import Path
 
 SCRIPT_DIR = Path(__file__).resolve().parents[1]
@@ -790,19 +791,35 @@ def test_measure_tab_order_bounded(page) -> None:
     ok("measure_tab_order bounds its Tab-press budget and reports the cap being hit")
 
 
-def _serve_cmp_fixture(page, html: str, url: str = "https://cmp-fixture.test/") -> None:
-    """Serve `html` at a real https origin and navigate to it.
+@contextmanager
+def _serve_cmp_fixture(page, html: str, url: str = "https://cmp-fixture.test/"):
+    """Serve `html` at a real https origin, navigate to it, and clean up on exit.
 
     `set_content` leaves the page on about:blank, where `document.cookie` is
     silently dropped - so a denial that really did record a choice still looks
     unverified, and the fixture would be testing the wrong thing. These CMP
     tests assert the *verification* result, so they need an origin where
-    consent state can actually be written. serve_fixture registers the newest
-    route first, so this also shadows any route a previous test left behind.
+    consent state can actually be written.
+
+    This is a context manager, not a plain setup call, because the shared
+    `page`/`context` outlive any single CMP test: a denial click here can set
+    a real cookie on `url`'s origin, and the `page.route("**/*")` handler
+    registered to serve `html` stays registered on the page until removed. On
+    exit (even on failure) this unroutes the handler and clears the context's
+    cookies, so neither the route nor the cookie survives to be seen by
+    whichever test runs next on this same `page` - including a later CMP
+    fixture (route matching is newest-handler-first, which used to paper over
+    the leak) and, worse, a later non-CMP test that never expects to see a
+    `page.route` handler or cookie at all.
     """
     serve_fixture(page, {"html": html}, url=url)
     page.goto(url)
     page.context.clear_cookies()
+    try:
+        yield
+    finally:
+        page.unroute("**/*")
+        page.context.clear_cookies()
 
 
 def _denial_for(page, cmp_entry: dict | None = None) -> dict:
@@ -825,7 +842,7 @@ def test_onetrust_shape_uses_the_second_layer_reject(page) -> None:
     Also the first non-HubSpot CMP fixture, so it is the first test that proves
     a second entry in cmp-selectors.json actually resolves against markup shaped
     like the real thing."""
-    _serve_cmp_fixture(page, """
+    with _serve_cmp_fixture(page, """
         <!doctype html><html><body>
         <div id="onetrust-consent-sdk">
           <div id="onetrust-banner-sdk" style="position:fixed;bottom:0;padding:24px;background:#fff">
@@ -848,34 +865,34 @@ def test_onetrust_shape_uses_the_second_layer_reject(page) -> None:
             document.cookie = 'OptanonConsent=groups=C0001:1,C0002:0; path=/';
           });
         </script></body></html>
-    """)
-    match = fingerprint_cmp(page, load_cmp_table())
-    assert match and match["id"] == "onetrust", match
-    assert match["matched_by"].startswith("selector:"), match
+    """):
+        match = fingerprint_cmp(page, load_cmp_table())
+        assert match and match["id"] == "onetrust", match
+        assert match["matched_by"].startswith("selector:"), match
 
-    entry = match["entry"]
-    # No top-level reject exists, and that must read as absence rather than as
-    # the scanner failing to look.
-    top_level, _, reject_resolution = find_control(page, "reject", entry)
-    assert top_level is None, "this fixture deliberately has no first-layer reject"
-    assert reject_resolution["path"] == "none", reject_resolution
-    assert reject_resolution.get("cmp_table_miss") is True, reject_resolution
+        entry = match["entry"]
+        # No top-level reject exists, and that must read as absence rather than as
+        # the scanner failing to look.
+        top_level, _, reject_resolution = find_control(page, "reject", entry)
+        assert top_level is None, "this fixture deliberately has no first-layer reject"
+        assert reject_resolution["path"] == "none", reject_resolution
+        assert reject_resolution.get("cmp_table_miss") is True, reject_resolution
 
-    result = _denial_for(page, entry)
-    assert result["status"] == "second_layer_reject_clicked", result
-    assert result["click_count"] == 2, f"settings + reject is two interactions: {result['click_count']}"
-    assert (result.get("verification") or {}).get("verified") is True, result
-    assert result["resolution"]["second_layer_reject"]["path"] == "cmp_selector_table", result["resolution"]
-    validity = _scenario_validity("deny", result, [])
-    assert validity["valid"] is True, validity
-    ok("a OneTrust-shaped banner with no first-layer reject completes via the second layer")
+        result = _denial_for(page, entry)
+        assert result["status"] == "second_layer_reject_clicked", result
+        assert result["click_count"] == 2, f"settings + reject is two interactions: {result['click_count']}"
+        assert (result.get("verification") or {}).get("verified") is True, result
+        assert result["resolution"]["second_layer_reject"]["path"] == "cmp_selector_table", result["resolution"]
+        validity = _scenario_validity("deny", result, [])
+        assert validity["valid"] is True, validity
+        ok("a OneTrust-shaped banner with no first-layer reject completes via the second layer")
 
 
 def test_usercentrics_shape_resolves_inside_a_shadow_root(page) -> None:
     """Usercentrics renders its controls inside a shadow root; its table entry is
     flagged shadow_dom. If control collection ever stopped piercing shadow DOM,
     every Usercentrics site would silently become 'no denial control found'."""
-    _serve_cmp_fixture(page, """
+    with _serve_cmp_fixture(page, """
         <!doctype html><html><body>
         <div id="usercentrics-root"></div>
         <script>
@@ -892,19 +909,19 @@ def test_usercentrics_shape_resolves_inside_a_shadow_root(page) -> None:
             localStorage.setItem('uc_settings', '{"consent":"denied"}');
           });
         </script></body></html>
-    """)
-    match = fingerprint_cmp(page, load_cmp_table())
-    assert match and match["id"] == "usercentrics", match
+    """):
+        match = fingerprint_cmp(page, load_cmp_table())
+        assert match and match["id"] == "usercentrics", match
 
-    control, _, resolution = find_control(page, "reject", match["entry"])
-    assert control is not None, "the deny control lives in a shadow root and must still resolve"
-    assert resolution["path"] == "cmp_selector_table", resolution
+        control, _, resolution = find_control(page, "reject", match["entry"])
+        assert control is not None, "the deny control lives in a shadow root and must still resolve"
+        assert resolution["path"] == "cmp_selector_table", resolution
 
-    result = _denial_for(page, match["entry"])
-    assert result["status"] == "direct_reject_clicked", result
-    assert result["resolution"]["reject"]["path"] == "cmp_selector_table", result["resolution"]
-    assert (result.get("verification") or {}).get("verified") is True, result
-    ok("a Usercentrics-shaped banner resolves and completes inside an open shadow root")
+        result = _denial_for(page, match["entry"])
+        assert result["status"] == "direct_reject_clicked", result
+        assert result["resolution"]["reject"]["path"] == "cmp_selector_table", result["resolution"]
+        assert (result.get("verification") or {}).get("verified") is True, result
+        ok("a Usercentrics-shaped banner resolves and completes inside an open shadow root")
 
 
 def test_sourcepoint_shape_resolves_inside_an_iframe(page) -> None:
@@ -925,26 +942,26 @@ def test_sourcepoint_shape_resolves_inside_an_iframe(page) -> None:
           </script>
         </body></html>
     """
-    _serve_cmp_fixture(page, f"""
+    with _serve_cmp_fixture(page, f"""
         <!doctype html><html><body>
         <iframe id="sp_message_iframe_12345" srcdoc="{inner.replace('"', "&quot;")}"
                 style="position:fixed;bottom:0;width:500px;height:220px;border:0"></iframe>
         </body></html>
-    """)
-    match = fingerprint_cmp(page, load_cmp_table())
-    assert match and match["id"] == "sourcepoint", match
+    """):
+        match = fingerprint_cmp(page, load_cmp_table())
+        assert match and match["id"] == "sourcepoint", match
 
-    control, _, resolution = find_control(page, "reject", match["entry"])
-    assert control is not None, "the reject control is inside the iframe and must still resolve"
-    assert resolution["path"] == "cmp_selector_table", resolution
-    # It must have been found in a child frame, not the top document.
-    assert control["frame"] != page.main_frame, "the control must be located in the CMP's iframe"
+        control, _, resolution = find_control(page, "reject", match["entry"])
+        assert control is not None, "the reject control is inside the iframe and must still resolve"
+        assert resolution["path"] == "cmp_selector_table", resolution
+        # It must have been found in a child frame, not the top document.
+        assert control["frame"] != page.main_frame, "the control must be located in the CMP's iframe"
 
-    result = _denial_for(page, match["entry"])
-    assert result["status"] == "direct_reject_clicked", result
-    assert result["resolution"]["reject"]["path"] == "cmp_selector_table", result["resolution"]
-    assert (result.get("verification") or {}).get("verified") is True, result
-    ok("a Sourcepoint-shaped banner resolves and completes inside its iframe")
+        result = _denial_for(page, match["entry"])
+        assert result["status"] == "direct_reject_clicked", result
+        assert result["resolution"]["reject"]["path"] == "cmp_selector_table", result["resolution"]
+        assert (result.get("verification") or {}).get("verified") is True, result
+        ok("a Sourcepoint-shaped banner resolves and completes inside its iframe")
 
 
 def test_didomi_shape_resolves_and_save_stays_specific_to_settings(page) -> None:
@@ -961,7 +978,7 @@ def test_didomi_shape_resolves_and_save_stays_specific_to_settings(page) -> None
     unambiguous. `save` was also corrected to the real `#btn-toggle-save` id,
     which localizes (the old aria-label-substring approach did not: French
     Planity's save button reads "Enregistrer", not "Save")."""
-    _serve_cmp_fixture(page, """
+    with _serve_cmp_fixture(page, """
         <!doctype html><html><body>
         <div id="didomi-host">
           <div id="didomi-popup" class="didomi-popup-backdrop didomi-notice-popup didomi-popup__backdrop">
@@ -993,66 +1010,66 @@ def test_didomi_shape_resolves_and_save_stays_specific_to_settings(page) -> None
             document.cookie = 'didomi_token=denied; path=/';
           });
         </script></body></html>
-    """)
-    match = fingerprint_cmp(page, load_cmp_table())
-    assert match and match["id"] == "didomi", match
+    """):
+        match = fingerprint_cmp(page, load_cmp_table())
+        assert match and match["id"] == "didomi", match
 
-    # Before the settings panel opens, "save" must not resolve at all - the
-    # first-layer agree/disagree buttons share its base class, and if the
-    # selector were too broad it would match one of them here.
-    premature_save, _, premature_resolution = find_control(page, "save", match["entry"])
-    assert premature_save is None, premature_resolution
+        # Before the settings panel opens, "save" must not resolve at all - the
+        # first-layer agree/disagree buttons share its base class, and if the
+        # selector were too broad it would match one of them here.
+        premature_save, _, premature_resolution = find_control(page, "save", match["entry"])
+        assert premature_save is None, premature_resolution
 
-    page.click("#didomi-notice-learn-more-button")
+        page.click("#didomi-notice-learn-more-button")
 
-    # Now the real save control must resolve, and must resolve to itself - not
-    # to either first-layer button that shares its base class.
-    save_control, _, save_resolution = find_control(page, "save", match["entry"])
-    assert save_control is not None, save_resolution
-    assert save_resolution["path"] == "cmp_selector_table", save_resolution
-    assert save_control["id"] == "btn-toggle-save", (
-        f"save must resolve to the real save control, not a first-layer button "
-        f"sharing its base class: {save_control.get('id')!r}"
-    )
+        # Now the real save control must resolve, and must resolve to itself - not
+        # to either first-layer button that shares its base class.
+        save_control, _, save_resolution = find_control(page, "save", match["entry"])
+        assert save_control is not None, save_resolution
+        assert save_resolution["path"] == "cmp_selector_table", save_resolution
+        assert save_control["id"] == "btn-toggle-save", (
+            f"save must resolve to the real save control, not a first-layer button "
+            f"sharing its base class: {save_control.get('id')!r}"
+        )
 
-    # Structural guard against reintroduction: _locate_by_selectors returns
-    # the first visible match in list order, so if the buggy fallback were
-    # ever added back *behind* the correct id, find_control would still
-    # resolve correctly and the mutation check below (which replaces the
-    # list wholesale) would not catch it. Assert directly against the table.
-    assert "button.didomi-components-button--color[aria-label*='Agree' i]" not in match["entry"]["accept"], (
-        "the historically buggy accept fallback (matches both agree and disagree) must not return to the table"
-    )
+        # Structural guard against reintroduction: _locate_by_selectors returns
+        # the first visible match in list order, so if the buggy fallback were
+        # ever added back *behind* the correct id, find_control would still
+        # resolve correctly and the mutation check below (which replaces the
+        # list wholesale) would not catch it. Assert directly against the table.
+        assert "button.didomi-components-button--color[aria-label*='Agree' i]" not in match["entry"]["accept"], (
+            "the historically buggy accept fallback (matches both agree and disagree) must not return to the table"
+        )
 
-    # The current table's accept resolves to the real agree button, and only
-    # that. Checked before the denial click below, which removes the host
-    # element entirely.
-    accept_control, _, accept_resolution = find_control(page, "accept", match["entry"])
-    assert accept_control is not None, accept_resolution
-    assert accept_control["id"] == "didomi-notice-agree-button", accept_control
+        # The current table's accept resolves to the real agree button, and only
+        # that. Checked before the denial click below, which removes the host
+        # element entirely.
+        accept_control, _, accept_resolution = find_control(page, "accept", match["entry"])
+        assert accept_control is not None, accept_resolution
+        assert accept_control["id"] == "didomi-notice-agree-button", accept_control
 
-    # Mutation check: the fallback this entry used to carry -
-    # `button.didomi-components-button--color[aria-label*='Agree' i]` - is
-    # proven here to have been a live bug, not a defensive selector removed
-    # out of caution. "disagree" contains "agree" as a substring, so the old
-    # selector matched BOTH buttons; which one `.first` returned was an
-    # accident of DOM order, not a guarantee of the right one.
-    buggy_entry = dict(match["entry"])
-    buggy_entry["accept"] = ["button.didomi-components-button--color[aria-label*='Agree' i]"]
-    buggy_control, _, _ = find_control(page, "accept", buggy_entry)
-    assert buggy_control is not None, "the old selector should still match something"
-    assert buggy_control["id"] == "didomi-notice-disagree-button", (
-        "this pins the actual historical bug: the removed accept fallback resolved "
-        f"to the DISAGREE button first, not agree - got {buggy_control.get('id')!r}. "
-        "If this ever stops reproducing, the fixture's DOM order changed, not the bug."
-    )
-    ok("the removed Didomi accept fallback is confirmed to have matched 'I disagree', not just suspected to")
+        # Mutation check: the fallback this entry used to carry -
+        # `button.didomi-components-button--color[aria-label*='Agree' i]` - is
+        # proven here to have been a live bug, not a defensive selector removed
+        # out of caution. "disagree" contains "agree" as a substring, so the old
+        # selector matched BOTH buttons; which one `.first` returned was an
+        # accident of DOM order, not a guarantee of the right one.
+        buggy_entry = dict(match["entry"])
+        buggy_entry["accept"] = ["button.didomi-components-button--color[aria-label*='Agree' i]"]
+        buggy_control, _, _ = find_control(page, "accept", buggy_entry)
+        assert buggy_control is not None, "the old selector should still match something"
+        assert buggy_control["id"] == "didomi-notice-disagree-button", (
+            "this pins the actual historical bug: the removed accept fallback resolved "
+            f"to the DISAGREE button first, not agree - got {buggy_control.get('id')!r}. "
+            "If this ever stops reproducing, the fixture's DOM order changed, not the bug."
+        )
+        ok("the removed Didomi accept fallback is confirmed to have matched 'I disagree', not just suspected to")
 
-    result = _denial_for(page, match["entry"])
-    assert result["status"] == "direct_reject_clicked", result
-    assert result["resolution"]["reject"]["path"] == "cmp_selector_table", result["resolution"]
-    assert (result.get("verification") or {}).get("verified") is True, result
-    ok("a Didomi-shaped banner (verified against didomi.io) resolves reject directly and save stays scoped to the settings panel")
+        result = _denial_for(page, match["entry"])
+        assert result["status"] == "direct_reject_clicked", result
+        assert result["resolution"]["reject"]["path"] == "cmp_selector_table", result["resolution"]
+        assert (result.get("verification") or {}).get("verified") is True, result
+        ok("a Didomi-shaped banner (verified against didomi.io) resolves reject directly and save stays scoped to the settings panel")
 
 
 def test_axeptio_shape_accept_fallback_no_longer_collides_with_dismiss(page) -> None:
@@ -1073,7 +1090,7 @@ def test_axeptio_shape_accept_fallback_no_longer_collides_with_dismiss(page) -> 
     button in DOM order, the same mechanical failure as Didomi's
     'agree'/'disagree'. The fallback was removed; `#axeptio_btn_acceptAll`
     alone is Axeptio's stable element id and is sufficient on its own."""
-    _serve_cmp_fixture(page, """
+    with _serve_cmp_fixture(page, """
         <!doctype html><html><body>
         <div id="axeptio_overlay" class="axeptio_mount" data-project-id="000000000000000000000000">
           <div id="axeptio-shadow-host"></div>
@@ -1093,49 +1110,49 @@ def test_axeptio_shape_accept_fallback_no_longer_collides_with_dismiss(page) -> 
             document.cookie = 'axeptio_cookies={}; path=/';
           });
         </script></body></html>
-    """)
-    match = fingerprint_cmp(page, load_cmp_table())
-    assert match and match["id"] == "axeptio", match
-    entry = match["entry"]
+    """):
+        match = fingerprint_cmp(page, load_cmp_table())
+        assert match and match["id"] == "axeptio", match
+        entry = match["entry"]
 
-    # Structural guard against reintroduction: _locate_by_selectors returns
-    # the first visible match in list order, so if the buggy fallback were
-    # ever added back *behind* the correct id, find_control would still
-    # resolve correctly and the mutation check below (which replaces the
-    # list wholesale) would not catch it. Assert directly against the table.
-    assert "button[aria-label*='Accept' i]" not in entry["accept"], (
-        "the historically buggy accept fallback (matches the dismiss button too) must not return to the table"
-    )
+        # Structural guard against reintroduction: _locate_by_selectors returns
+        # the first visible match in list order, so if the buggy fallback were
+        # ever added back *behind* the correct id, find_control would still
+        # resolve correctly and the mutation check below (which replaces the
+        # list wholesale) would not catch it. Assert directly against the table.
+        assert "button[aria-label*='Accept' i]" not in entry["accept"], (
+            "the historically buggy accept fallback (matches the dismiss button too) must not return to the table"
+        )
 
-    # The current table's accept resolves to the real accept-all button, and
-    # only that. Checked before the denial click below, which removes the
-    # overlay entirely.
-    accept_control, _, accept_resolution = find_control(page, "accept", entry)
-    assert accept_control is not None, accept_resolution
-    assert accept_control["id"] == "axeptio_btn_acceptAll", accept_control
+        # The current table's accept resolves to the real accept-all button, and
+        # only that. Checked before the denial click below, which removes the
+        # overlay entirely.
+        accept_control, _, accept_resolution = find_control(page, "accept", entry)
+        assert accept_control is not None, accept_resolution
+        assert accept_control["id"] == "axeptio_btn_acceptAll", accept_control
 
-    # Mutation check: the fallback this entry used to carry -
-    # `button[aria-label*='Accept' i]` - is proven here to have been a live
-    # bug against real Axeptio markup, not a defensive selector removed out
-    # of caution. "Close without accepting cookies" contains "accepting",
-    # which contains "Accept" as a case-insensitive substring, so the old
-    # selector matched the DISMISS button first (DOM order), not acceptAll.
-    buggy_entry = dict(entry)
-    buggy_entry["accept"] = ["button[aria-label*='Accept' i]"]
-    buggy_control, _, _ = find_control(page, "accept", buggy_entry)
-    assert buggy_control is not None, "the old selector should still match something"
-    assert buggy_control["id"] == "axeptio_btn_dismiss", (
-        "this pins the actual historical bug: the removed accept fallback resolved "
-        f"to the DISMISS button first, not acceptAll - got {buggy_control.get('id')!r}. "
-        "If this ever stops reproducing, the fixture's DOM order changed, not the bug."
-    )
-    ok("the removed Axeptio accept fallback is confirmed to have matched the dismiss button, not just suspected to")
+        # Mutation check: the fallback this entry used to carry -
+        # `button[aria-label*='Accept' i]` - is proven here to have been a live
+        # bug against real Axeptio markup, not a defensive selector removed out
+        # of caution. "Close without accepting cookies" contains "accepting",
+        # which contains "Accept" as a case-insensitive substring, so the old
+        # selector matched the DISMISS button first (DOM order), not acceptAll.
+        buggy_entry = dict(entry)
+        buggy_entry["accept"] = ["button[aria-label*='Accept' i]"]
+        buggy_control, _, _ = find_control(page, "accept", buggy_entry)
+        assert buggy_control is not None, "the old selector should still match something"
+        assert buggy_control["id"] == "axeptio_btn_dismiss", (
+            "this pins the actual historical bug: the removed accept fallback resolved "
+            f"to the DISMISS button first, not acceptAll - got {buggy_control.get('id')!r}. "
+            "If this ever stops reproducing, the fixture's DOM order changed, not the bug."
+        )
+        ok("the removed Axeptio accept fallback is confirmed to have matched the dismiss button, not just suspected to")
 
-    result = _denial_for(page, entry)
-    assert result["status"] == "direct_reject_clicked", result
-    assert result["resolution"]["reject"]["path"] == "cmp_selector_table", result["resolution"]
-    assert (result.get("verification") or {}).get("verified") is True, result
-    ok("an Axeptio-shaped banner (verified against axept.io) resolves accept and reject to distinct controls")
+        result = _denial_for(page, entry)
+        assert result["status"] == "direct_reject_clicked", result
+        assert result["resolution"]["reject"]["path"] == "cmp_selector_table", result["resolution"]
+        assert (result.get("verification") or {}).get("verified") is True, result
+        ok("an Axeptio-shaped banner (verified against axept.io) resolves accept and reject to distinct controls")
 
 
 def test_cookiebot_shape_settings_never_resolves_to_the_category_checkbox(page) -> None:
@@ -1152,7 +1169,7 @@ def test_cookiebot_shape_settings_never_resolves_to_the_category_checkbox(page) 
     opening the preference panel. Removed from the table; this fixture
     reproduces the real markup (checkbox present, same naming pattern) and
     proves settings resolves past it to the real button."""
-    _serve_cmp_fixture(page, """
+    with _serve_cmp_fixture(page, """
         <!doctype html><html><body>
         <div id="CybotCookiebotDialog" role="dialog" data-template="overlay">
           <p>We use cookies to analyze traffic and personalize content.</p>
@@ -1180,52 +1197,52 @@ def test_cookiebot_shape_settings_never_resolves_to_the_category_checkbox(page) 
             document.cookie = 'CookieConsent=%7Bnecessary%3Atrue%2Cpreferences%3Afalse%7D; path=/';
           });
         </script></body></html>
-    """)
-    match = fingerprint_cmp(page, load_cmp_table())
-    assert match and match["id"] == "cookiebot", match
-    entry = match["entry"]
+    """):
+        match = fingerprint_cmp(page, load_cmp_table())
+        assert match and match["id"] == "cookiebot", match
+        entry = match["entry"]
 
-    settings_control, _, settings_resolution = find_control(page, "settings", entry)
-    assert settings_control is not None, settings_resolution
-    assert settings_control["id"] == "CybotCookiebotDialogBodyLevelButtonCustomize", (
-        f"settings must resolve to the real launcher, not the category-toggle checkbox: {settings_control}"
-    )
+        settings_control, _, settings_resolution = find_control(page, "settings", entry)
+        assert settings_control is not None, settings_resolution
+        assert settings_control["id"] == "CybotCookiebotDialogBodyLevelButtonCustomize", (
+            f"settings must resolve to the real launcher, not the category-toggle checkbox: {settings_control}"
+        )
 
-    # Structural guard against reintroduction: _locate_by_selectors returns
-    # the first visible match in list order, so if this checkbox selector
-    # were ever added back *behind* the real launcher, find_control would
-    # still resolve correctly and the mutation check below (which replaces
-    # the list wholesale) would not catch it. Assert directly against the
-    # table entry itself.
-    assert "#CybotCookiebotDialogBodyLevelButtonPreferences" not in entry["settings"], (
-        "the category-toggle checkbox (a role=switch input, not a settings launcher) must not return to the table"
-    )
+        # Structural guard against reintroduction: _locate_by_selectors returns
+        # the first visible match in list order, so if this checkbox selector
+        # were ever added back *behind* the real launcher, find_control would
+        # still resolve correctly and the mutation check below (which replaces
+        # the list wholesale) would not catch it. Assert directly against the
+        # table entry itself.
+        assert "#CybotCookiebotDialogBodyLevelButtonPreferences" not in entry["settings"], (
+            "the category-toggle checkbox (a role=switch input, not a settings launcher) must not return to the table"
+        )
 
-    # Mutation check, before anything below removes the fixture from the DOM:
-    # the removed checkbox selector is proven to have been a real hazard, not
-    # a defensive removal - it resolves and reports itself as a switch, which
-    # execute_denial's settings step would have clicked as if it were "open
-    # preferences".
-    buggy_entry = dict(entry)
-    buggy_entry["settings"] = ["#CybotCookiebotDialogBodyLevelButtonPreferences"]
-    buggy_control, _, _ = find_control(page, "settings", buggy_entry)
-    assert buggy_control is not None, "the removed selector should still match something"
-    assert buggy_control["tag"] == "input" and buggy_control.get("role") == "switch", (
-        f"this confirms the removed selector resolved to the category-toggle checkbox, not a launcher: {buggy_control}"
-    )
+        # Mutation check, before anything below removes the fixture from the DOM:
+        # the removed checkbox selector is proven to have been a real hazard, not
+        # a defensive removal - it resolves and reports itself as a switch, which
+        # execute_denial's settings step would have clicked as if it were "open
+        # preferences".
+        buggy_entry = dict(entry)
+        buggy_entry["settings"] = ["#CybotCookiebotDialogBodyLevelButtonPreferences"]
+        buggy_control, _, _ = find_control(page, "settings", buggy_entry)
+        assert buggy_control is not None, "the removed selector should still match something"
+        assert buggy_control["tag"] == "input" and buggy_control.get("role") == "switch", (
+            f"this confirms the removed selector resolved to the category-toggle checkbox, not a launcher: {buggy_control}"
+        )
 
-    # Deny is hidden until Customize is opened (the UoPeople quirk); the
-    # top-level reject lookup must reflect that rather than reporting a false
-    # "no reject exists" or matching a hidden element.
-    top_level, _, top_resolution = find_control(page, "reject", entry)
-    assert top_level is None, "this fixture's Deny button starts hidden, like UoPeople's"
-    assert top_resolution["cmp_table_miss"] is True, top_resolution
+        # Deny is hidden until Customize is opened (the UoPeople quirk); the
+        # top-level reject lookup must reflect that rather than reporting a false
+        # "no reject exists" or matching a hidden element.
+        top_level, _, top_resolution = find_control(page, "reject", entry)
+        assert top_level is None, "this fixture's Deny button starts hidden, like UoPeople's"
+        assert top_resolution["cmp_table_miss"] is True, top_resolution
 
-    result = _denial_for(page, entry)
-    assert result["status"] == "second_layer_reject_clicked", result
-    assert result["resolution"]["second_layer_reject"]["path"] == "cmp_selector_table", result["resolution"]
-    assert (result.get("verification") or {}).get("verified") is True, result
-    ok("a Cookiebot-shaped banner (verified live, 3 deployments) keeps settings off the category-toggle checkbox")
+        result = _denial_for(page, entry)
+        assert result["status"] == "second_layer_reject_clicked", result
+        assert result["resolution"]["second_layer_reject"]["path"] == "cmp_selector_table", result["resolution"]
+        assert (result.get("verification") or {}).get("verified") is True, result
+        ok("a Cookiebot-shaped banner (verified live, 3 deployments) keeps settings off the category-toggle checkbox")
 
 
 def test_termly_shape_settings_resolves_via_the_real_attribute(page) -> None:
@@ -1241,7 +1258,7 @@ def test_termly_shape_settings_resolves_via_the_real_attribute(page) -> None:
     preferences modal, injected dynamically rather than merely hidden), and
     that modal has no save control at all in any of the three captures -
     `save: []` is a fact about this runtime, not a placeholder for a gap."""
-    _serve_cmp_fixture(page, """
+    with _serve_cmp_fixture(page, """
         <!doctype html><html><body>
         <div id="termly-code-snippet-support" class="termly-ready">
           <div aria-label="Cookie Consent Prompt" data-termly-part="consent-banner"
@@ -1269,45 +1286,45 @@ def test_termly_shape_settings_resolves_via_the_real_attribute(page) -> None:
             });
           });
         </script></body></html>
-    """)
-    match = fingerprint_cmp(page, load_cmp_table())
-    assert match and match["id"] == "termly", match
-    entry = match["entry"]
+    """):
+        match = fingerprint_cmp(page, load_cmp_table())
+        assert match and match["id"] == "termly", match
+        entry = match["entry"]
 
-    settings_control, _, settings_resolution = find_control(page, "settings", entry)
-    assert settings_control is not None, settings_resolution
+        settings_control, _, settings_resolution = find_control(page, "settings", entry)
+        assert settings_control is not None, settings_resolution
 
-    # Pin the specific fix rather than relying on `.t-preference-button` (kept
-    # in the table and also present in this fixture) to carry the match by
-    # list order: the removed `data-tid` selector must never resolve via the
-    # CMP table itself against real markup (generic text-scoring still finds
-    # the button by its label - that fallback existing is fine; the table
-    # entry being wrong is the thing being checked here), and the added
-    # `data-focus-id` selector must resolve through the table alone.
-    old_entry = dict(entry, settings=["[data-tid='banner-preferences']"])
-    _, _, old_resolution = find_control(page, "settings", old_entry)
-    assert old_resolution["cmp_table_miss"] is True, old_resolution
-    assert old_resolution["path"] != "cmp_selector_table", old_resolution
+        # Pin the specific fix rather than relying on `.t-preference-button` (kept
+        # in the table and also present in this fixture) to carry the match by
+        # list order: the removed `data-tid` selector must never resolve via the
+        # CMP table itself against real markup (generic text-scoring still finds
+        # the button by its label - that fallback existing is fine; the table
+        # entry being wrong is the thing being checked here), and the added
+        # `data-focus-id` selector must resolve through the table alone.
+        old_entry = dict(entry, settings=["[data-tid='banner-preferences']"])
+        _, _, old_resolution = find_control(page, "settings", old_entry)
+        assert old_resolution["cmp_table_miss"] is True, old_resolution
+        assert old_resolution["path"] != "cmp_selector_table", old_resolution
 
-    new_entry = dict(entry, settings=["[data-focus-id='preferences-button']"])
-    new_control, _, new_resolution = find_control(page, "settings", new_entry)
-    assert new_control is not None, new_resolution
-    assert new_resolution["path"] == "cmp_selector_table", new_resolution
+        new_entry = dict(entry, settings=["[data-focus-id='preferences-button']"])
+        new_control, _, new_resolution = find_control(page, "settings", new_entry)
+        assert new_control is not None, new_resolution
+        assert new_resolution["path"] == "cmp_selector_table", new_resolution
 
-    # Reject does not exist until the preferences modal is created - this is
-    # the second-layer-only shape confirmed on all three live deployments.
-    top_level, _, top_resolution = find_control(page, "reject", entry)
-    assert top_level is None, "this fixture's Decline All does not exist until Preferences is opened"
-    assert top_resolution["cmp_table_miss"] is True, top_resolution
+        # Reject does not exist until the preferences modal is created - this is
+        # the second-layer-only shape confirmed on all three live deployments.
+        top_level, _, top_resolution = find_control(page, "reject", entry)
+        assert top_level is None, "this fixture's Decline All does not exist until Preferences is opened"
+        assert top_resolution["cmp_table_miss"] is True, top_resolution
 
-    # save: [] is correct for the current runtime, not an oversight.
-    assert entry["save"] == [], entry["save"]
+        # save: [] is correct for the current runtime, not an oversight.
+        assert entry["save"] == [], entry["save"]
 
-    result = _denial_for(page, entry)
-    assert result["status"] == "second_layer_reject_clicked", result
-    assert result["resolution"]["second_layer_reject"]["path"] == "cmp_selector_table", result["resolution"]
-    assert (result.get("verification") or {}).get("verified") is True, result
-    ok("a Termly-shaped banner (verified live, 3 deployments) resolves settings via the real data-focus-id attribute")
+        result = _denial_for(page, entry)
+        assert result["status"] == "second_layer_reject_clicked", result
+        assert result["resolution"]["second_layer_reject"]["path"] == "cmp_selector_table", result["resolution"]
+        assert (result.get("verification") or {}).get("verified") is True, result
+        ok("a Termly-shaped banner (verified live, 3 deployments) resolves settings via the real data-focus-id attribute")
 
 
 def test_osano_shape_completes_via_settings_toggles_and_save(page) -> None:
@@ -1324,7 +1341,7 @@ def test_osano_shape_completes_via_settings_toggles_and_save(page) -> None:
     proves that path still completes correctly with the corrected, narrower
     save selector, ending in `preferences_disabled_and_saved` rather than the
     misleading `manual_required` this whole mechanism was built to avoid."""
-    _serve_cmp_fixture(page, """
+    with _serve_cmp_fixture(page, """
         <!doctype html><html><body>
         <div class="osano-cm-window">
           <div role="dialog" aria-label="Cookie Consent Banner"
@@ -1348,27 +1365,27 @@ def test_osano_shape_completes_via_settings_toggles_and_save(page) -> None:
             });
           });
         </script></body></html>
-    """)
-    match = fingerprint_cmp(page, load_cmp_table())
-    assert match and match["id"] == "osano", match
-    entry = match["entry"]
+    """):
+        match = fingerprint_cmp(page, load_cmp_table())
+        assert match and match["id"] == "osano", match
+        entry = match["entry"]
 
-    # No accept or reject control exists anywhere in this US-shaped fixture,
-    # matching all three live captures.
-    top_reject, _, top_resolution = find_control(page, "reject", entry)
-    assert top_reject is None, "this fixture has no reject control at all, like the live US captures"
-    assert top_resolution["cmp_table_miss"] is True, top_resolution
+        # No accept or reject control exists anywhere in this US-shaped fixture,
+        # matching all three live captures.
+        top_reject, _, top_resolution = find_control(page, "reject", entry)
+        assert top_reject is None, "this fixture has no reject control at all, like the live US captures"
+        assert top_resolution["cmp_table_miss"] is True, top_resolution
 
-    # The removed `.osano-cm-button--type_save` selector must not be what
-    # resolves save; only `.osano-cm-save` may.
-    assert entry["save"] == [".osano-cm-save"], entry["save"]
+        # The removed `.osano-cm-button--type_save` selector must not be what
+        # resolves save; only `.osano-cm-save` may.
+        assert entry["save"] == [".osano-cm-save"], entry["save"]
 
-    result = _denial_for(page, entry)
-    assert result["status"] == "preferences_disabled_and_saved", result
-    assert len(result.get("toggle_result", {}).get("disabled", [])) == 2, result
-    assert result["resolution"]["save"]["path"] == "cmp_selector_table", result["resolution"]
-    assert (result.get("verification") or {}).get("verified") is True, result
-    ok("an Osano-shaped US banner (verified live, 3 deployments) completes via settings, toggles, and the corrected save selector")
+        result = _denial_for(page, entry)
+        assert result["status"] == "preferences_disabled_and_saved", result
+        assert len(result.get("toggle_result", {}).get("disabled", [])) == 2, result
+        assert result["resolution"]["save"]["path"] == "cmp_selector_table", result["resolution"]
+        assert (result.get("verification") or {}).get("verified") is True, result
+        ok("an Osano-shaped US banner (verified live, 3 deployments) completes via settings, toggles, and the corrected save selector")
 
 
 def test_cookieyes_shape_scopes_to_the_visible_layer(page) -> None:
@@ -1387,7 +1404,7 @@ def test_cookieyes_shape_scopes_to_the_visible_layer(page) -> None:
     visible, so this exact fixture used to fall through to text scoring
     (`cmp_table_miss: True`) with a passing-but-vacuous assertion. It now
     checks every match in order, so the CMP table itself must resolve this."""
-    _serve_cmp_fixture(page, """
+    with _serve_cmp_fixture(page, """
         <!doctype html><html><body>
         <div class="cky-modal" hidden>
           <div class="cky-preference-center" id="ckyPreferenceCenter">
@@ -1408,31 +1425,31 @@ def test_cookieyes_shape_scopes_to_the_visible_layer(page) -> None:
             document.cookie = 'cookieyes-consent=no,no,no; path=/';
           });
         </script></body></html>
-    """)
-    match = fingerprint_cmp(page, load_cmp_table())
-    assert match and match["id"] == "cookieyes", match
-    entry = match["entry"]
+    """):
+        match = fingerprint_cmp(page, load_cmp_table())
+        assert match and match["id"] == "cookieyes", match
+        entry = match["entry"]
 
-    # Two elements match the accept selector at once, the hidden one first in
-    # DOM order; resolution must still land on the CMP table, on the visible
-    # instance - not fall through to text scoring because the first match
-    # happened to be hidden.
-    accept_control, _, accept_resolution = find_control(page, "accept", entry)
-    assert accept_control is not None, accept_resolution
-    assert accept_resolution["path"] == "cmp_selector_table", (
-        f"a hidden first match must not make the whole selector miss and fall back to text scoring: {accept_resolution}"
-    )
-    assert accept_control["frame_url"] == page.main_frame.url
-    box = accept_control.get("box") or {}
-    assert box.get("width", 0) > 0 and box.get("height", 0) > 0, (
-        f"the resolved accept control must be the visible one, not the hidden modal copy listed first in the DOM: {accept_control}"
-    )
+        # Two elements match the accept selector at once, the hidden one first in
+        # DOM order; resolution must still land on the CMP table, on the visible
+        # instance - not fall through to text scoring because the first match
+        # happened to be hidden.
+        accept_control, _, accept_resolution = find_control(page, "accept", entry)
+        assert accept_control is not None, accept_resolution
+        assert accept_resolution["path"] == "cmp_selector_table", (
+            f"a hidden first match must not make the whole selector miss and fall back to text scoring: {accept_resolution}"
+        )
+        assert accept_control["frame_url"] == page.main_frame.url
+        box = accept_control.get("box") or {}
+        assert box.get("width", 0) > 0 and box.get("height", 0) > 0, (
+            f"the resolved accept control must be the visible one, not the hidden modal copy listed first in the DOM: {accept_control}"
+        )
 
-    result = _denial_for(page, entry)
-    assert result["status"] == "direct_reject_clicked", result
-    assert result["resolution"]["reject"]["path"] == "cmp_selector_table", result["resolution"]
-    assert (result.get("verification") or {}).get("verified") is True, result
-    ok("a CookieYes-shaped banner (verified live) scopes accept to the visible layer despite a duplicate hidden copy")
+        result = _denial_for(page, entry)
+        assert result["status"] == "direct_reject_clicked", result
+        assert result["resolution"]["reject"]["path"] == "cmp_selector_table", result["resolution"]
+        assert (result.get("verification") or {}).get("verified") is True, result
+        ok("a CookieYes-shaped banner (verified live) scopes accept to the visible layer despite a duplicate hidden copy")
 
 
 def test_trustarc_shape_resolves_accept_and_reject_directly(page) -> None:
@@ -1445,7 +1462,7 @@ def test_trustarc_shape_resolves_accept_and_reject_directly(page) -> None:
     consent.trustarc.com iframe here, so the iframe/preference-manager
     behaviour is documented as unverified on this deployment rather than
     fixtured as if it were confirmed."""
-    _serve_cmp_fixture(page, """
+    with _serve_cmp_fixture(page, """
         <!doctype html><html><body>
         <div id="truste-consent-track" class="tc-track ta-show ta-display-block" role="banner">
           <div id="truste-consent-content" class="tc-content">
@@ -1461,20 +1478,20 @@ def test_trustarc_shape_resolves_accept_and_reject_directly(page) -> None:
             document.cookie = 'notice_gdpr_prefs=0::; path=/';
           });
         </script></body></html>
-    """)
-    match = fingerprint_cmp(page, load_cmp_table())
-    assert match and match["id"] == "trustarc", match
-    entry = match["entry"]
+    """):
+        match = fingerprint_cmp(page, load_cmp_table())
+        assert match and match["id"] == "trustarc", match
+        entry = match["entry"]
 
-    accept_control, _, accept_resolution = find_control(page, "accept", entry)
-    assert accept_control is not None, accept_resolution
-    assert accept_resolution["path"] == "cmp_selector_table", accept_resolution
+        accept_control, _, accept_resolution = find_control(page, "accept", entry)
+        assert accept_control is not None, accept_resolution
+        assert accept_resolution["path"] == "cmp_selector_table", accept_resolution
 
-    result = _denial_for(page, entry)
-    assert result["status"] == "direct_reject_clicked", result
-    assert result["resolution"]["reject"]["path"] == "cmp_selector_table", result["resolution"]
-    assert (result.get("verification") or {}).get("verified") is True, result
-    ok("a TrustArc-shaped banner (verified live against trustarc.com) resolves accept and reject directly")
+        result = _denial_for(page, entry)
+        assert result["status"] == "direct_reject_clicked", result
+        assert result["resolution"]["reject"]["path"] == "cmp_selector_table", result["resolution"]
+        assert (result.get("verification") or {}).get("verified") is True, result
+        ok("a TrustArc-shaped banner (verified live against trustarc.com) resolves accept and reject directly")
 
 
 def test_safe_internal_links_refuses_dangerous_and_offsite(page) -> None:
@@ -1787,7 +1804,11 @@ def test_capture_checkpoint_writes_state_and_screenshots(page) -> None:
 
         assert result["scenario"] == "baseline"
         assert result["checkpoint"] == "before"
-        assert isinstance(result["cookies"], list)
+        # This fixture is loaded via set_content (no navigation, no CMP click),
+        # so the context must hold zero cookies here. A bare isinstance check
+        # would pass even with a cookie leaked from an earlier CMP fixture
+        # test sharing this same page/context - this catches that leak.
+        assert result["cookies"] == [], result["cookies"]
         assert "storage_state" in result
         assert result["banner"]["containers"], "the HubSpot banner container should be detected"
 
