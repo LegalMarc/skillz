@@ -488,7 +488,13 @@ def generate_findings(results: dict[str, Any], cookie_rows: list[dict[str, Any]]
                 findings.append(_finding(
                     "denial-autosave-discarded",
                     "Optional categories were switched off but a reload showed the CMP discarded the choice",
-                    "critical",
+                    # `high`, not `critical`, for the same reason
+                    # `denial-autosave-unconfirmed` is: the tool did not observe
+                    # tracking continuing after a denial. It observed that the
+                    # choice was not kept, which is a stronger *certainty* than
+                    # the unconfirmed case - hence `certainty="high"` below -
+                    # but not a more severe observed harm.
+                    "high",
                     (
                         f"The scanner opened the preferences layer and switched {len(disabled)} "
                         "optional-category toggle(s) off. A subsequent reload read at least one toggle "
@@ -496,13 +502,15 @@ def generate_findings(results: dict[str, Any], cookie_rows: list[dict[str, Any]]
                         f"this path and discarded the choice. {autosave_verification.get('note', '')}"
                     ),
                     (
-                        "Fails the conservative baseline: the reload read-back is affirmative evidence "
-                        "that the denial was not persisted, not merely unconfirmed evidence."
+                        "Fails the persistence limb of the conservative baseline: the reload read-back is "
+                        "affirmative evidence that the denial was not kept, rather than merely unconfirmed."
                     ),
                     (
-                        "A choice the interface lets a user make but silently discards on reload is a "
-                        "strong FTC Section 5 deception fact pattern, because the consumer is told the "
-                        "toggle has an effect it does not have."
+                        "No legal inference should be drawn here. The observation - that the interface "
+                        "let a choice be made and a reload showed it had not been kept - is recorded as "
+                        "an interface fact; whether it supports any legal theory is decided by the "
+                        "issue matrix from the full set of findings, not asserted by this finding. "
+                        "Confirm by hand before treating it as anything more than a scanner observation."
                     ),
                     [autosave_verification] + disabled[:10],
                     (

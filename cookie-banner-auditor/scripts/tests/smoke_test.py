@@ -4532,6 +4532,64 @@ def test_autosave_no_controls_examined_does_not_claim_a_mutation() -> None:
     ok("no_controls_examined does not claim toggles were switched off or page state mutated")
 
 
+#: Names of statutes, regulators and doctrines that only `ISSUE_MATRIX_AUTHORITIES`
+#: may introduce. A finding states what was observed; deciding which authority
+#: that observation bears on is the matrix's job, made from the whole finding
+#: set rather than from one check in isolation.
+_LEGAL_AUTHORITY_TERMS = (
+    "ftc", "section 5", "s5", "ccpa", "cpra", "gdpr", "vcdpa", "cpa", "unfair",
+    "deception", "deceptive", "unlawful", "illegal", "violation", "violates",
+)
+
+
+def test_autosave_findings_draw_no_legal_conclusions() -> None:
+    """#8's autosave findings report observations, never legal conclusions.
+
+    `ISSUE_MATRIX_AUTHORITIES` deliberately leaves both autosave check types
+    unmapped, so they contribute no authority row - but that is worth nothing
+    if a finding simply writes the conclusion into its own prose instead, which
+    is how the first implementation of `denial-autosave-discarded` shipped
+    ("a strong FTC Section 5 deception fact pattern", at `critical`). The
+    matrix's silence and the finding's wording have to agree, or the tool
+    overstates in exactly the register it is least able to back up: it never
+    reads the banner or policy language a deception theory would turn on.
+
+    Severity is checked here too. Neither finding may exceed `high`: in both
+    cases the tool observed that it could not confirm a recorded choice, not
+    tracking continuing after a denial.
+    """
+    bases = ("reload_reverted", "no_controls_examined", "unconfirmed", "namespaced_storage_write")
+    checked = 0
+    for basis in bases:
+        results = {"denial": {"action_result": {
+            "status": checks.AUTOSAVE_NO_SAVE_CONTROL,
+            "toggle_result": {"disabled": [{"label": "Analytics"}], "examined": [{"label": "Analytics"}]},
+            "verification": {"basis": basis, "verified": False, "note": "observed note"},
+        }, "checkpoints": []}}
+        for finding in generate_findings(results, [], []):
+            if not finding["check_type"].startswith("denial-autosave"):
+                continue
+            checked += 1
+            assert finding["severity"] != "critical", (basis, finding["check_type"], finding["severity"])
+            prose = " ".join(str(finding.get(field, "")) for field in (
+                "observation", "strict_us_composite_baseline", "potential_legal_relevance", "title",
+            )).lower()
+            for term in _LEGAL_AUTHORITY_TERMS:
+                # "No legal inference should be drawn" is the disclaimer, not a
+                # conclusion, so allow the word `legal` itself and match only
+                # the authority and doctrine names.
+                assert term not in prose, (
+                    f"{finding['check_type']} (basis {basis}) names {term!r} in its own prose; "
+                    "authorities belong to ISSUE_MATRIX_AUTHORITIES, which leaves this check type "
+                    "deliberately unmapped"
+                )
+    assert checked >= len(bases), (
+        f"only {checked} autosave findings were inspected across {len(bases)} bases - the scan is "
+        "no longer reaching the findings it exists to police"
+    )
+    ok("autosave findings state observations only, naming no authority and never exceeding severity high")
+
+
 def test_autosave_reload_reverted_reports_a_confirmed_discard() -> None:
     """`classify_autosave_denial`'s `reload_reverted` basis is affirmative
     evidence the CMP discarded the choice - a reload read at least one toggle
@@ -5720,6 +5778,7 @@ def main() -> int:
     test_denial_control_unresolved_excludes_autosave_status()
     test_autosave_no_controls_examined_does_not_claim_a_mutation()
     test_autosave_reload_reverted_reports_a_confirmed_discard()
+    test_autosave_findings_draw_no_legal_conclusions()
     test_autosave_status_emits_exactly_one_check_type()
     test_verified_autosave_statuses_emit_neither_unconfirmed_nor_not_registered()
     test_asymmetric_choice_fires_for_manual_required_regression_and_now_autosave()

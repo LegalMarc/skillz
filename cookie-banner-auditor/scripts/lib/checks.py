@@ -710,10 +710,15 @@ def measure_symmetry(accept: dict[str, Any] | None, reject: dict[str, Any] | Non
 # `unstable-tag-behaviour`, `insecure-auth-cookie`, and `unresolved-purposes`.
 # Each of those findings says explicitly that no legal inference should be
 # drawn from it (tooling gaps, security hygiene, or an unresolved research
-# item), so they contribute no row here even when present. An unrecognised
-# `check_type` - including a future `denial-autosave-unconfirmed` - behaves
-# the same way: it matches no topic and is silently skipped rather than
-# raising or producing a bogus authority row.
+# item), so they contribute no row here even when present. `denial-autosave-
+# unconfirmed` and `denial-autosave-discarded` (#8) join that list deliberately:
+# the first says the tool cannot tell whether the choice was recorded, and the
+# second is an interface observation whose legal weight depends on banner and
+# policy language this tool never reads. Neither may assert an authority in its
+# own `potential_legal_relevance` text either - `test_autosave_findings_draw_no
+# _legal_conclusions` enforces that. An unrecognised `check_type` behaves the
+# same way: it matches no topic and is silently skipped rather than raising or
+# producing a bogus authority row.
 ISSUE_MATRIX_AUTHORITIES: list[dict[str, Any]] = [
     {
         "authority": "FTC Act s5 (deception)",
