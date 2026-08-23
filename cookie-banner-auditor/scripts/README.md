@@ -76,7 +76,7 @@ Writes `comparison-report.md`, `.html`, and `.pdf`. Neither input bundle is modi
 python scripts/tests/smoke_test.py
 ```
 
-Runs offline. Covers control detection (including the bare-label regression that once produced a false critical finding), click verification, validity gating, transmission classification, Consent Mode parsing, embedded-identifier and rights-mechanism scans, symmetry measurement, CMP table integrity, report rendering, packaging, and comparison. A live site is still needed to validate real CMP behaviour.
+99 test functions, 110 checks total. Most are pure-function checks against in-process data; the browser-backed ones launch a real headless Chromium against in-memory fixtures — so the suite is not purely offline, but it never contacts an external site or the network. Covers control detection (including the bare-label regression that once produced a false critical finding), click verification, validity gating, transmission classification, Consent Mode parsing, embedded-identifier and rights-mechanism scans, symmetry measurement, CMP table integrity, report rendering, packaging, and comparison. A live site is still needed to validate real CMP behaviour.
 
 ## Safety
 

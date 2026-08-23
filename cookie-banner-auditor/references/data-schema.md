@@ -21,6 +21,10 @@
 | `evidence_strength_counts` | object | Count of request observations per strength. |
 | `scenario_results` | object | Per-scenario checkpoints, events, CMP, exercises, consent mode. |
 | `classification_reference_version` | string | `vendor-patterns.json` version. A change here can alter classifications without the site changing. |
+| `classification_notice` | string or null | `vendor-patterns.json`'s own disclosure that classification is heuristic and needs confirmation against vendor docs, configuration, and actual payloads. |
+| `policies` | object or null | Archived text of linked cookie/privacy policies. `null` when `--no-policy-capture` was used or the step was skipped for time budget. See below. |
+| `cookie_count_observations`, `request_count_observations` | int | Row counts in `cookie-inventory.csv` / `request-inventory.csv`, for a quick completeness check without opening either file. |
+| `evidence_strength_notice` | string | Standing caveat explaining what each `evidence_strength` value does and does not establish. |
 
 ## `metadata`
 
@@ -47,6 +51,14 @@ Also recorded: `dwell_ms`, `baseline_repeats`, `forms_exercised`, `forms_submitt
 | `evidence_strength_label`, `evidence_strength_caveat` | Human-readable form and the standing caveat. |
 
 Suppressed findings additionally carry `suppressed`, `suppression_reason`, and `blocking_scenarios`.
+
+## `policies`
+
+`{"attempted": int, "archived": int, "records": [...], "note" or "error": string}`. Each record carries `kind` (`sale_share_optout` / `cookie_policy` / `privacy_policy`), `url`, `link_label`, `host`, `retrieved_at`, `robots_note`, `archived` (bool), and either the archived file's `sha256`/`chars`/`path`/`final_url`, or a `skipped_reason` (robots-disallowed, non-text content type, apparent login wall, or too little text). **Capture and store only** — nothing here compares the archived text to observed behaviour or draws a conclusion from it.
+
+## Cookie inventory columns
+
+`scenario`, `checkpoint`, `observed_at`, `page_url`, `name`, `domain`, `path`, `expires`, `http_only`, `secure`, `same_site`, `partition_key`, `vendor`, `category`, `necessity`, `confidence`, `third_party`.
 
 ## Request inventory columns
 

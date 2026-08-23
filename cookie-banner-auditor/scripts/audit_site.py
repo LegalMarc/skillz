@@ -421,15 +421,19 @@ def main() -> int:
     }
 
     bundle_contents = (
-        "audit-report-draft.html  Open locally for a visual report with screenshots.\n"
-        "audit-report-draft.md    Editable report draft.\n"
-        "audit-data.json          Structured shareable audit data.\n"
-        "findings.json            Machine-readable findings.\n"
-        "cookie-inventory.csv     Every cookie observation by scenario/checkpoint.\n"
-        "request-inventory.csv    Every observed request with heuristic classification.\n"
-        "research-queue.md        Unknown cookies/endpoints requiring research.\n"
-        "evidence-shareable/      Sanitized HAR, redacted state, screenshots, logs.\n"
-        "evidence-private/        RAW SENSITIVE HAR/state; do not share casually.\n"
+        "audit-report.html         Open locally for a visual report with screenshots.\n"
+        "audit-report.md           Same report in Markdown; edit before sharing.\n"
+        "audit-report.pdf          Same report as PDF (skipped when the run used --no-pdf).\n"
+        "audit-data.json           Structured shareable audit data.\n"
+        "findings.json             Machine-readable findings.\n"
+        "suppressed-findings.json  Findings withheld as unsupported; written even when empty.\n"
+        "legal-applicability-questionnaire.md  Route findings into the right legal framework.\n"
+        "cookie-inventory.csv      Every cookie observation by scenario/checkpoint.\n"
+        "request-inventory.csv     Every observed request with heuristic classification.\n"
+        "research-queue.md         Unknown cookies/endpoints requiring research.\n"
+        "run-metadata.json         Parameters and timing for this run.\n"
+        "evidence-shareable/       Sanitized HAR, redacted state, screenshots, logs.\n"
+        "evidence-private/         RAW SENSITIVE HAR/state; do not share casually.\n"
     )
     for label, bundle_root in bundle_roots.items():
         write_text(
@@ -459,7 +463,8 @@ def main() -> int:
             "Cookie Banner Auditor evidence bundle - two device profiles\n\n"
             "desktop/   Full bundle captured at 1440x1000.\n"
             "mobile/    Full bundle captured at 412x915 with touch and a mobile user agent.\n"
-            "manifest.sha256  Integrity hashes covering both bundles.\n\n"
+            "manifest.sha256  Integrity hashes covering both bundles.\n"
+            "*.zip      A zip archive of this whole bundle (skipped when the run used --no-zip).\n\n"
             "Each directory holds its own report, findings, and inventories. Read them separately.\n"
             "CMPs frequently ship a different banner on small screens, so symmetry, click count,\n"
             "and even which controls exist can differ between the two. A difference is evidence\n"
@@ -471,7 +476,8 @@ def main() -> int:
             root / "README.txt",
             "Cookie Banner Auditor evidence bundle\n\n"
             + bundle_contents
-            + "manifest.sha256          Integrity hashes for the evidence bundle.\n\n"
+            + "manifest.sha256           Integrity hashes for the evidence bundle.\n"
+            + "*.zip                     A zip archive of this bundle (skipped when the run used --no-zip).\n\n"
             "This is a point-in-time technical audit and issue-spotting work product, not a legal opinion or certification.\n",
         )
 

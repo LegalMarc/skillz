@@ -1,9 +1,13 @@
 #!/usr/bin/env python3
-"""Offline regression tests for the cookie-banner auditor.
+"""Regression tests for the cookie-banner auditor.
 
-Every test here runs without visiting an external site. A live site is still
-needed to validate real CMP behaviour and network conditions, but the checks
-below cover the logic that has silently produced wrong answers before.
+Most checks here are pure-function tests against in-process data. The
+"Browser-backed checks" and "Reporting and packaging" sections launch a real
+(headless) Chromium against in-memory fixtures served from local routes, so
+this suite is not purely offline — but it never contacts an external site or
+the network. A live site is still needed to validate real CMP behaviour and
+network conditions; the checks below cover the logic that has silently
+produced wrong answers before.
 """
 
 from __future__ import annotations
@@ -11,6 +15,7 @@ from __future__ import annotations
 import hashlib
 import json
 import os
+import re
 import sys
 import tempfile
 import zipfile
@@ -2672,6 +2677,109 @@ def test_main_orchestrates_bundles_gates_and_exit_codes() -> None:
     ok("main() lays out bundles per profile, unions gate signals, and refuses unsafe configurations")
 
 
+def _assert_readme_matches_directory(directory: Path, *, label: str) -> None:
+    """Both directions of the README.txt <-> directory-contents claim, against
+    one real directory on disk. Forward: every name README.txt lists is
+    something that directory actually holds (a stale or misspelled entry).
+    Reverse: every top-level entry that directory actually holds (other than
+    README.txt itself and the timestamped *.zip, whose presence is already
+    checked separately) is named in README.txt (an omission - the defect this
+    test exists for: a future output file added to a writer and never added
+    to the README template would otherwise go uncaught)."""
+
+    readme = (directory / "README.txt").read_text(encoding="utf-8")
+    produced_top_level = {p.name for p in directory.iterdir()}
+    # Every "name<spaces>description" line names something a reader would go
+    # looking for. A trailing "/" marks a directory; "*.zip" is the one entry
+    # whose exact name is only known at run time (host + timestamp).
+    named = sorted(set(re.findall(r"^([A-Za-z0-9_.*-]+/?)  +\S", readme, flags=re.MULTILINE)))
+    assert len(named) >= 4, f"[{label}] expected README.txt to name the directory's files, found: {named}"
+
+    for name in named:
+        if name == "*.zip":
+            assert any(p.suffix == ".zip" for p in directory.iterdir()), (
+                f"[{label}] README.txt promises a zip archive but the directory does not hold one"
+            )
+            continue
+        assert name.rstrip("/") in produced_top_level, (
+            f"[{label}] README.txt names {name!r}, which the directory does not hold. "
+            f"Actually holds: {sorted(produced_top_level)}"
+        )
+
+    for actual in produced_top_level:
+        if actual == "README.txt" or actual.endswith(".zip"):
+            continue
+        expected = actual + "/" if (directory / actual).is_dir() else actual
+        assert expected in named, (
+            f"[{label}] directory holds {actual!r}, which README.txt does not name. "
+            f"README.txt names: {named}"
+        )
+
+
+def test_readme_txt_lists_only_files_the_run_actually_writes() -> None:
+    """The bundle `README.txt` is a reader's map of the evidence: every name it
+    lists must be something the run actually wrote, and everything the run
+    wrote must be named. A renamed or misspelled entry sends someone looking
+    for a file that was never produced; an omitted one (like
+    `suppressed-findings.json`) lets a reader miss evidence that matters -
+    and an omission would also hide a future output file that a writer
+    starts producing without the README template being updated to match, so
+    both directions are checked, against real bundles on disk rather than
+    eyeballing the template string. Runs both a single-profile bundle (with
+    PDF and zip packaging both enabled, unlike the orchestration test above
+    which disables them, so those two conditional lines are checked too) and
+    a `--viewport both` two-profile bundle, since the two-profile root
+    README.txt and the per-profile README.txt are different templates
+    (audit_site.py's `bundle_contents` block vs. the two-profile summary)
+    that could each independently drift from what main() actually writes."""
+
+    def fake_run_all_scenarios(browser, config, private_dir, share_dir, **kwargs):
+        return synthetic_results(denial_completed=True)
+
+    def fake_render_pdf_from_html(html_path, pdf_path, executable=None):
+        Path(pdf_path).write_bytes(b"%PDF-1.4 fake\n")
+        return {"ok": True}
+
+    originals = {
+        name: getattr(audit_site, name)
+        for name in ("sync_playwright", "launch_browser", "run_all_scenarios",
+                     "resolve_egress_region", "render_pdf_from_html")
+    }
+    audit_site.sync_playwright = lambda: _StubPlaywright()
+    audit_site.launch_browser = lambda *a, **k: _StubBrowser()
+    audit_site.run_all_scenarios = fake_run_all_scenarios
+    audit_site.resolve_egress_region = lambda *a, **k: {"resolved": False, "region": None}
+    audit_site.render_pdf_from_html = fake_render_pdf_from_html
+
+    def run(argv: list[str]) -> int:
+        original_argv = sys.argv
+        sys.argv = ["audit_site.py", *argv]
+        try:
+            return audit_site.main()
+        finally:
+            sys.argv = original_argv
+
+    try:
+        out = Path(tempfile.mkdtemp()) / "bundle"
+        code = run(["--url", "https://example.test", "--out", str(out), "--headless", "--no-geo"])
+        assert code == 0, f"expected a clean run, got exit {code}"
+        _assert_readme_matches_directory(out, label="single-profile")
+
+        out_both = Path(tempfile.mkdtemp()) / "bundle-both"
+        code = run([
+            "--url", "https://example.test", "--out", str(out_both),
+            "--headless", "--no-geo", "--viewport", "both",
+        ])
+        assert code == 0, f"expected a clean --viewport both run, got exit {code}"
+        _assert_readme_matches_directory(out_both, label="two-profile root")
+        _assert_readme_matches_directory(out_both / "desktop", label="desktop profile")
+    finally:
+        for name, value in originals.items():
+            setattr(audit_site, name, value)
+    ok("bundle README.txt names exactly the files the run actually wrote, in both directions, "
+       "for single-profile and --viewport both (root and per-profile) bundles")
+
+
 def test_main_validates_manual_flag_and_wires_detect_only() -> None:
     """--manual has two preconditions main() must enforce before anything runs
     (a visible browser, an interactive terminal) - a scenario that blocks on
@@ -4223,6 +4331,7 @@ def main() -> int:
     test_classify_autosave_denial_truth_table()
     test_repeat_stability()
     test_main_orchestrates_bundles_gates_and_exit_codes()
+    test_readme_txt_lists_only_files_the_run_actually_writes()
     test_main_validates_manual_flag_and_wires_detect_only()
     test_main_handles_fatal_errors_and_writes_real_artifacts()
     test_redact_storage_state_does_not_leak_or_mutate()
@@ -4322,7 +4431,13 @@ def main() -> int:
     test_zip_bundle()
     test_compare_runs()
 
-    print(f"\nAll {len(PASSED)} cookie-banner-auditor smoke tests passed.")
+    test_function_count = sum(
+        1 for name, value in globals().items() if name.startswith("test_") and callable(value)
+    )
+    print(
+        f"\nAll {len(PASSED)} checks passed across {test_function_count} cookie-banner-auditor "
+        "smoke test functions."
+    )
     return 0
 
 

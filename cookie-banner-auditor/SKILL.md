@@ -107,9 +107,7 @@ Treat a `Do Not Sell or Share` mechanism as a separate statutory-rights control 
 
 When automation cannot identify a reliable denial control, use manual mode, let the user make the visible denial choice, record that manual intervention, and continue. Never guess-click an ambiguous control.
 
-## Operate the banner conservatively, and prove the click worked
-
-Controls resolve in this order: the known-CMP selector table (`references/cmp-selectors.json`), then text scoring, then — in headed mode with a real terminal — a human. A CMP fingerprint match is preferred because vendors ship stable element ids while button labels vary by site, language, and configuration.
+Prove the click worked. Controls resolve in this order: the known-CMP selector table (`references/cmp-selectors.json`), then text scoring, then — in headed mode with a real terminal — a human. A CMP fingerprint match is preferred because vendors ship stable element ids while button labels vary by site, language, and configuration.
 
 After any consent click, the runner diffs cookies, local storage, CMP API state, and banner visibility. A click Playwright reports as successful but which changes nothing is not a completed denial: it invalidates the scenario and raises `denial-not-registered`.
 
