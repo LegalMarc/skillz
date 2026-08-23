@@ -38,6 +38,7 @@ Also recorded: `dwell_ms`, `baseline_repeats`, `forms_exercised`, `forms_submitt
 |---|---|
 | `id` | Stable, derived from `check_type` (plus host/scenario where relevant) — **not** emission order, so the same issue keeps its id across runs. |
 | `check_type` | Kebab-case slug, e.g. `post-denial-tracking`. |
+| `title` | One-line human-readable headline for the finding. |
 | `severity` | `critical` / `high` / `medium` / `low` / `informational`. |
 | `certainty` | `high` / `medium` / `low`. |
 | `observation` | Evidence-backed statement of fact. |
@@ -45,6 +46,7 @@ Also recorded: `dwell_ms`, `baseline_repeats`, `forms_exercised`, `forms_submitt
 | `potential_legal_relevance` | Theory and assumptions. Never a conclusion. |
 | `applicability_needed` | Facts required before any legal conclusion. |
 | `evidence` | Bundle-relative references and sample rows. |
+| `all_evidence` | The **complete, untruncated** row set behind the finding; `evidence` may be shortened for display. A consumer that must not miss rows past the display cutoff — a CI assertion gate, for instance — has to read this one, not `evidence`. Defaults to the same list when there is nothing longer to offer. |
 | `recommendation` | Change, owner, and retest criterion. |
 | `depends_on_scenarios` | Scenarios this finding rests on. Drives suppression. |
 | `evidence_strength` | `script_loaded_only` / `beacon_observed` / `identifier_transmitted`. |

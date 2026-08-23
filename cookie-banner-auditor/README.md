@@ -81,7 +81,7 @@ Exit `4` means the run completed but a required interaction did not — findings
 Add `--assert-no-preconsent-tracking` to turn an audit into a release gate: exit `5` when advertising, social, or session-replay endpoints are contacted before any consent choice. It only trips on an observed beacon or a transmitted identifier, never on a bare script load — Consent Mode legitimately produces those, and a gate that cried wolf would be switched off. Incompleteness still wins: a run that didn't finish can't certify anything.
 
 ```bash
-python scripts/tests/smoke_test.py   # 121 test functions, 150 checks; launches a real Chromium locally, no external site visits
+python scripts/tests/smoke_test.py   # 122 test functions, 151 checks; launches a real Chromium locally, no external site visits
 ```
 
 ## What makes it different from the other skills here

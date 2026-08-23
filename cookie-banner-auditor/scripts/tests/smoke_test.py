@@ -5182,6 +5182,70 @@ def _metadata() -> dict:
     return meta
 
 
+def _schema_doc_fields(doc: str, heading: str) -> list[str]:
+    """Backtick-quoted field names from the markdown table under `heading`."""
+    body = doc.split(heading, 1)[1].split("\n## ", 1)[0]
+    names: list[str] = []
+    for line in body.splitlines():
+        match = re.match(r"^\|\s*`([^|]+?)`\s*\|", line)
+        if match:
+            names.extend(part.strip("` ") for part in match.group(1).split("`, `"))
+    return names
+
+
+def test_data_schema_doc_matches_the_real_output() -> None:
+    """`references/data-schema.md` is a contract, so hold it to one.
+
+    The doc calls itself "the contract `compare_runs.py` relies on", and a
+    lawyer reading a bundle has nothing else to go on. But nothing connected it
+    to the code, and it had already drifted: `title` and `all_evidence` were
+    live fields on every finding and documented nowhere. `all_evidence` is the
+    one that matters - it is the untruncated row set, and a CI gate that reads
+    `evidence` instead silently misses everything past the display cutoff.
+
+    Checked in both directions. An undocumented field is the drift that just
+    happened; a documented-but-absent field is a consumer being promised
+    something that is not there, which is worse.
+    """
+    doc = (SCRIPT_DIR.parent / "references" / "data-schema.md").read_text(encoding="utf-8")
+
+    with tempfile.TemporaryDirectory(prefix="cookie-auditor-schema-") as temp:
+        root = Path(temp)
+        analyze_and_write(root, "https://example.test/", synthetic_results(True), _metadata(),
+                          SCRIPT_DIR.parent / "references" / "vendor-patterns.json")
+        data = read_json(root / "audit-data.json")
+        headers = {
+            name: (root / name).read_text(encoding="utf-8").splitlines()[0].split(",")
+            for name in ("cookie-inventory.csv", "request-inventory.csv")
+        }
+
+    documented_top = set(_schema_doc_fields(doc, "## Top level"))
+    assert documented_top, "the Top level table stopped parsing; fix this check or the doc"
+    assert documented_top == set(data), (
+        f"undocumented: {sorted(set(data) - documented_top)}; "
+        f"documented but absent: {sorted(documented_top - set(data))}"
+    )
+
+    documented_finding = set(_schema_doc_fields(doc, "## Finding object"))
+    assert documented_finding, "the Finding object table stopped parsing"
+    assert data["findings"], "the synthetic fixture produced no findings to check the schema against"
+    for finding in data["findings"]:
+        assert documented_finding == set(finding), (
+            f"{finding['id']}: undocumented {sorted(set(finding) - documented_finding)}; "
+            f"documented but absent {sorted(documented_finding - set(finding))}"
+        )
+
+    # Column order is part of the contract too - a CSV consumer reading by
+    # index breaks on a reorder that a set comparison would wave through.
+    for name, heading in (("cookie-inventory.csv", "## Cookie inventory columns"),
+                          ("request-inventory.csv", "## Request inventory columns")):
+        body = doc.split(heading, 1)[1].split("\n## ", 1)[0]
+        documented = [c.strip(" `") for c in re.findall(r"`([^`]+)`", body) if "(" not in c]
+        assert documented == headers[name], (name, documented, headers[name])
+
+    ok("data-schema.md matches the bundle it documents, field for field and column for column")
+
+
 def test_analysis_outputs() -> None:
     with tempfile.TemporaryDirectory(prefix="cookie-auditor-test-") as temp:
         root = Path(temp)
@@ -6064,6 +6128,7 @@ def main() -> int:
 
     print("\nReporting and packaging")
     test_analysis_outputs()
+    test_data_schema_doc_matches_the_real_output()
     test_incomplete_run_suppresses_and_flags()
     test_preconsent_tracking_assertion_positive_control()
     test_preconsent_tracking_assertion_clean_baseline()
