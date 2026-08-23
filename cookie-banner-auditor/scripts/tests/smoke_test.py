@@ -1494,6 +1494,258 @@ def test_trustarc_shape_resolves_accept_and_reject_directly(page) -> None:
         ok("a TrustArc-shaped banner (verified live against trustarc.com) resolves accept and reject directly")
 
 
+def test_iubenda_shape_reject_uses_the_continue_without_accepting_control(page) -> None:
+    """First fixture for iubenda. The table entry was written from documentation,
+    not a live capture. iubenda.com's own site was checked first and runs no
+    CMP of its own (no #iubenda-cs-banner, no iubenda script host, no consent
+    popup at all) - so this is instead verified 2026-08-23 against
+    https://www.tannico.it, a live Iubenda customer deployment.
+
+    `reject` needed a second control, not a replacement: tannico.it renders no
+    `.iubenda-cs-reject-btn` at either layer, but that is because its banner
+    config sets `_iub.cs.options.banner.rejectButtonDisplay: false` (caption
+    'Rifiuta'), not because the control does not exist. The CMP bundle
+    tannico.it itself loads renders `.iubenda-cs-reject-btn` when that flag is
+    on, so the selector is retained ahead of the fallback as a
+    real-but-not-observed-on-this-capture control. The fallback,
+    `.iubenda-cs-cwa-button` ('Continua senza accettare' / 'Continue without
+    accepting'), is the same dismiss-without-agreeing shape already documented
+    on the Didomi entry (`.didomi-continue-without-agreeing`) and is what
+    tannico.it itself renders since its reject button is disabled. Clicking it
+    removes the banner and writes `_iub_cs-<id>` with every non-necessary
+    purpose false, confirmed live to be a complete one-click denial.
+
+    `save` was also wrong: `.iub-cmp-save-btn` does not exist either; the real
+    settings-panel save control is the id `#iubFooterBtn` ('Salva e
+    continua'), which carries no distinguishing class at all. The settings
+    panel additionally exposes a `.purposes-btn-reject` ('Rifiuta tutto')
+    bulk-toggle button, reproduced below - but live testing showed clicking it
+    alone only unchecks the optional-purpose checkboxes and writes no cookie
+    and does not close the panel; `#iubFooterBtn` still has to be clicked
+    afterward to commit. It is deliberately NOT in `reject`: adding it would
+    make execute_denial report `second_layer_reject_clicked` for a click that
+    saved nothing, the same false-positive shape the Cookiebot
+    preferences-checkbox bug was."""
+    fixture_html = """
+        <!doctype html><html><body>
+        <div id="iubenda-cs-banner" class="iubenda-cs-default-floating iubenda-cs-bottom iubenda-cs-center">
+          <div class="iubenda-cs-container" role="alertdialog">
+            <div class="iubenda-cs-content">
+              <p>Utilizziamo i cookie per migliorare la tua esperienza.</p>
+              <button class="iubenda-cs-cwa-button" aria-label="Continua senza accettare - Chiudi questa informativa">
+                Continua senza accettare &rarr;
+              </button>
+              <button class="iubenda-cs-customize-btn">Scopri di pi&ugrave; e personalizza</button>
+              <button class="iubenda-cs-accept-btn iubenda-cs-btn-primary">Accetta</button>
+            </div>
+          </div>
+        </div>
+        <div id="iubenda-iframe" hidden>
+          <div id="purposes-content-container" class="iubenda purposes-widget">
+            <div class="purposes-content">
+              <div class="iub-consent-buttons purposes-buttons">
+                <button class="iub-btn iub-btn-consent iub-btn-reject purposes-btn purposes-btn-reject">Rifiuta tutto</button>
+                <button class="iub-btn iub-btn-consent iub-btn-accept purposes-btn purposes-btn-accept">Accetta tutto</button>
+              </div>
+              <label><input type="checkbox" id="purpose-4" checked> Statistiche</label>
+              <label><input type="checkbox" id="purpose-5" checked> Marketing</label>
+            </div>
+          </div>
+          <div class="iubenda-iframe-footer iubenda-iframe-footer-absolute">
+            <div id="iubFooterBtnContainer">
+              <button id="iubFooterBtn">Salva e continua</button>
+            </div>
+          </div>
+        </div>
+        <script>
+          document.querySelector('.iubenda-cs-customize-btn').addEventListener('click', () => {
+            document.querySelector('#iubenda-cs-banner').hidden = true;
+            document.querySelector('#iubenda-iframe').hidden = false;
+          });
+          document.querySelector('.purposes-btn-reject').addEventListener('click', () => {
+            // Live behaviour: only unchecks the optional toggles. No cookie,
+            // no close - #iubFooterBtn still has to be clicked to commit.
+            document.querySelectorAll('#iubenda-iframe input[type=checkbox]').forEach(cb => cb.checked = false);
+          });
+          document.querySelector('#iubFooterBtn').addEventListener('click', () => {
+            const purpose4 = document.querySelector('#purpose-4').checked;
+            const purpose5 = document.querySelector('#purpose-5').checked;
+            document.querySelector('#iubenda-iframe').remove();
+            document.cookie = `_iub_cs-12345={"purposes":{"1":true,"4":${purpose4},"5":${purpose5}}}; path=/`;
+          });
+          document.querySelector('.iubenda-cs-cwa-button').addEventListener('click', () => {
+            document.querySelector('#iubenda-cs-banner').remove();
+            document.cookie = '_iub_cs-12345={"purposes":{"1":true,"4":false,"5":false}}; path=/';
+          });
+        </script></body></html>
+    """
+    with _serve_cmp_fixture(page, fixture_html):
+        match = fingerprint_cmp(page, load_cmp_table())
+        assert match and match["id"] == "iubenda", match
+        entry = match["entry"]
+
+        # Structural guard: `.iubenda-cs-reject-btn` is a real control on
+        # deployments that enable it (see the second fixture below), so it
+        # belongs in the table - but it must stay ordered ahead of the
+        # dismiss-without-agreeing fallback, since it is the genuine
+        # reject-all and should win when both are present.
+        assert ".iubenda-cs-reject-btn" in entry["reject"], (
+            "the real Iubenda reject-all control must be present in the table"
+        )
+        assert entry["reject"].index(".iubenda-cs-reject-btn") < entry["reject"].index(".iubenda-cs-cwa-button"), (
+            "the reject-all control must be tried before the dismiss-without-agreeing fallback"
+        )
+        assert ".iub-cmp-save-btn" not in entry["save"], (
+            "the historically wrong save selector (absent from real markup) must not return to the table"
+        )
+
+        # Mutation check: the removed save selector is proven here to never
+        # have matched this real markup shape, not just assumed absent -
+        # find_control must fall through to a CMP-table miss, exactly as it
+        # did on the live site.
+        old_save_entry = dict(entry, save=[".iub-cmp-save-btn"])
+        _, _, old_save_resolution = find_control(page, "save", old_save_entry)
+        assert old_save_resolution["cmp_table_miss"] is True, old_save_resolution
+        assert old_save_resolution["path"] != "cmp_selector_table", old_save_resolution
+        ok("the removed iubenda save selector is confirmed to match nothing on real markup, not just suspected to")
+
+        # The current table's reject resolves to the real 'continue without
+        # accepting' control, through the CMP table, before it is clicked.
+        reject_control, _, reject_resolution = find_control(page, "reject", entry)
+        assert reject_control is not None, reject_resolution
+        assert reject_resolution["path"] == "cmp_selector_table", reject_resolution
+
+        settings_control, _, settings_resolution = find_control(page, "settings", entry)
+        assert settings_control is not None, settings_resolution
+        assert settings_resolution["path"] == "cmp_selector_table", settings_resolution
+
+        result = _denial_for(page, entry)
+        assert result["status"] == "direct_reject_clicked", result
+        assert result["click_count"] == 1, result
+        assert result["resolution"]["reject"]["path"] == "cmp_selector_table", result["resolution"]
+        assert (result.get("verification") or {}).get("verified") is True, result
+        ok("an Iubenda-shaped banner (verified live against tannico.it) resolves reject via the real "
+           "'continue without accepting' control, since this deployment disables .iubenda-cs-reject-btn "
+           "via rejectButtonDisplay: false")
+
+    # Positive coverage for the corrected `save` selector, on a fresh copy of
+    # the fixture: the structural guard above only proves the corrected
+    # selector is absent from the historical entries, never that the current
+    # one (`#iubFooterBtn`) actually resolves and commits - `_denial_for`
+    # never reaches it via `entry` because `direct_reject_clicked`
+    # short-circuits at click_count == 1. Forcing `reject` empty instead
+    # routes execute_denial through the settings -> toggle -> save fallback,
+    # the same shape as the Osano fixture above.
+    with _serve_cmp_fixture(page, fixture_html):
+        assert entry["save"] == ["#iubFooterBtn"], entry["save"]
+
+        save_only_entry = dict(entry, reject=[])
+        save_result = _denial_for(page, save_only_entry)
+        assert save_result["status"] == "preferences_disabled_and_saved", save_result
+        assert save_result["resolution"]["save"] == {
+            "kind": "save",
+            "path": "cmp_selector_table",
+            "matched_selector": "#iubFooterBtn",
+            "cmp": "iubenda",
+        }, save_result["resolution"]
+        assert (save_result.get("verification") or {}).get("verified") is True, save_result
+        ok("the corrected iubenda save selector (#iubFooterBtn) resolves through the CMP table and completes "
+           "preferences_disabled_and_saved via the settings -> toggle -> save fallback")
+
+    # Second layer, on another fresh copy: the docstring stakes a correctness
+    # claim on `.purposes-btn-reject` alone doing nothing - no cookie, no
+    # closed panel - which is why it is deliberately excluded from `reject`.
+    # Nothing asserted that claim before this. Note this exercises save
+    # directly through find_control (the same resolver execute_denial uses)
+    # rather than via `_denial_for`: the panel, once opened, hides its own
+    # `.iubenda-cs-customize-btn` trigger (real site behaviour, reproduced in
+    # the fixture), so a second settings-click - which execute_denial's
+    # settings -> toggle -> save fallback always attempts first - would find
+    # nothing and report `manual_required` instead.
+    with _serve_cmp_fixture(page, fixture_html):
+        page.click(".iubenda-cs-customize-btn")
+        assert page.evaluate(
+            "() => { const el = document.getElementById('iubenda-iframe'); return el !== null && !el.hidden; }"
+        ), "the settings panel must be open before .purposes-btn-reject is exercised"
+
+        page.click(".purposes-btn-reject")
+        assert page.evaluate(
+            "() => { const el = document.getElementById('iubenda-iframe'); return el !== null && !el.hidden; }"
+        ), "clicking .purposes-btn-reject alone must not close the settings panel"
+        assert "_iub_cs-" not in page.evaluate("() => document.cookie"), (
+            "clicking .purposes-btn-reject alone must not write a consent cookie - "
+            "only #iubFooterBtn commits"
+        )
+
+        before = consent_snapshot(page, page.context, entry)
+        save_control, _, save_resolution = find_control(page, "save", entry)
+        assert save_control is not None, save_resolution
+        assert save_resolution == {
+            "kind": "save",
+            "path": "cmp_selector_table",
+            "matched_selector": "#iubFooterBtn",
+            "cmp": "iubenda",
+        }, save_resolution
+        save_control["locator"].click()
+        after = consent_snapshot(page, page.context, entry)
+        verification = verify_choice_registered(before, after)
+        assert verification["verified"] is True, verification
+        assert "_iub_cs-" in page.evaluate("() => document.cookie"), (
+            "the corrected save selector must be what actually commits the consent cookie"
+        )
+        ok("an Iubenda settings panel confirms .purposes-btn-reject alone commits nothing, and the "
+           "corrected save selector (#iubFooterBtn) is what actually commits the denial")
+
+    # Third fixture: the other real first-layer shape, on a deployment that
+    # enables `rejectButtonDisplay`. tannico.it disables this control, but the
+    # shipped CMP bundle renders it - with exactly this markup, tabindex and
+    # role - whenever the flag is on, so the restored `.iubenda-cs-reject-btn`
+    # selector needs its own coverage rather than shipping untested. No
+    # `.iubenda-cs-cwa-button` is present here, so `find_control` can only
+    # resolve `reject` via the table if `.iubenda-cs-reject-btn` itself works.
+    reject_display_fixture_html = """
+        <!doctype html><html><body>
+        <div id="iubenda-cs-banner" class="iubenda-cs-default-floating iubenda-cs-bottom iubenda-cs-center">
+          <div class="iubenda-cs-container" role="alertdialog">
+            <div class="iubenda-cs-content">
+              <p>Utilizziamo i cookie per migliorare la tua esperienza.</p>
+              <button class="iubenda-cs-reject-btn iubenda-cs-btn-primary" tabindex="0" role="button">Rifiuta</button>
+              <button class="iubenda-cs-customize-btn">Scopri di pi&ugrave; e personalizza</button>
+              <button class="iubenda-cs-accept-btn iubenda-cs-btn-primary">Accetta</button>
+            </div>
+          </div>
+        </div>
+        <script>
+          document.querySelector('.iubenda-cs-reject-btn').addEventListener('click', () => {
+            document.querySelector('#iubenda-cs-banner').remove();
+            document.cookie = '_iub_cs-12345={"purposes":{"1":true,"4":false,"5":false}}; path=/';
+          });
+        </script></body></html>
+    """
+    with _serve_cmp_fixture(page, reject_display_fixture_html):
+        display_match = fingerprint_cmp(page, load_cmp_table())
+        assert display_match and display_match["id"] == "iubenda", display_match
+        display_entry = display_match["entry"]
+
+        # Without the table, the Italian caption alone does not resolve:
+        # REJECT_PATTERNS is English-only, so this proves the table entry is
+        # load-bearing rather than redundant with text scoring.
+        no_table_control, _, no_table_resolution = find_control(page, "reject", None)
+        assert no_table_control is None, no_table_resolution
+
+        reject_control, _, reject_resolution = find_control(page, "reject", display_entry)
+        assert reject_control is not None, reject_resolution
+        assert reject_resolution["path"] == "cmp_selector_table", reject_resolution
+        assert reject_resolution["matched_selector"] == ".iubenda-cs-reject-btn", reject_resolution
+
+        result = _denial_for(page, display_entry)
+        assert result["status"] == "direct_reject_clicked", result
+        assert result["resolution"]["reject"]["path"] == "cmp_selector_table", result["resolution"]
+        assert (result.get("verification") or {}).get("verified") is True, result
+        ok("an Iubenda deployment with rejectButtonDisplay enabled resolves reject directly via the "
+           "restored .iubenda-cs-reject-btn selector, which text scoring alone cannot reach")
+
+
 def test_safe_internal_links_refuses_dangerous_and_offsite(page) -> None:
     """This decides what the auditor navigates to on a live site the user owns.
     The skill promises no logout, no account change, no purchase and no
@@ -4501,6 +4753,7 @@ def main() -> int:
             test_osano_shape_completes_via_settings_toggles_and_save(page)
             test_cookieyes_shape_scopes_to_the_visible_layer(page)
             test_trustarc_shape_resolves_accept_and_reject_directly(page)
+            test_iubenda_shape_reject_uses_the_continue_without_accepting_control(page)
             test_safe_internal_links_refuses_dangerous_and_offsite(page)
             test_annotate_controls_marks_resolved_controls(page)
             test_annotation_labels_are_painted_above_every_outline(page)
