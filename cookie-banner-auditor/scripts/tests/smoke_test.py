@@ -1746,6 +1746,223 @@ def test_iubenda_shape_reject_uses_the_continue_without_accepting_control(page) 
            "restored .iubenda-cs-reject-btn selector, which text scoring alone cannot reach")
 
 
+def test_complianz_shape_settings_resolves_via_the_real_view_preferences_button(page) -> None:
+    """The complianz table entry's `accept`, `reject`, `save`, and
+    `consent_storage` were already correct - verified 2026-08-23 against two
+    live WordPress deployments: complianz.io itself (dogfooding - its own DOM
+    templates both an 'optin' and a region-detected 'optout' banner at once,
+    only one shown per visitor's detected region) and wpcodetips.com, a real
+    customer site on the default first-layer 'banner-1 banner-a optin'
+    template. Clicking `.cmplz-deny` on wpcodetips.com actually wrote
+    `cmplz_marketing=deny; cmplz_statistics=deny; cmplz_preferences=deny`
+    cookies live, confirming both the selector and the consent_storage names.
+
+    `settings` was wrong, on both captures. The real, functioning first-layer
+    settings launcher is `<button class="cmplz-btn cmplz-view-preferences">`
+    - confirmed live: clicking it adds `cmplz-categories-visible` to the
+    banner and reveals the category toggles plus Save. The table instead had
+    `.cmplz-manage-options`, which matches two elements on real markup and
+    neither is that launcher: a permanently-hidden (0x0) footer text link
+    `<a class="cmplz-link cmplz-manage-options cookie-statement"
+    href=".../#cmplz-manage-consent-container">Manage options</a>` that
+    navigates to a *different page* rather than opening the panel in place,
+    and an equally-hidden TCF-only variant `<a class="cmplz-btn
+    cmplz-manage-options tcf cookie-statement">`. On both live captures this
+    left `settings` unresolvable (cmp_table_miss) despite a real, visible,
+    working launcher sitting right next to it under a different class. Both
+    captures also show Deny directly reachable at the first layer whenever
+    the settings launcher is present, so this particular bug never actually
+    blocked a live denial outright the way the Cookiebot/Termly bugs could -
+    but a CMP-table settings resolution failure is still exactly the shape
+    that would strand a denial with no working path on any deployment where
+    reject is second-layer-only, and the launcher itself is proven below to
+    genuinely open the real panel and, paired with the already-correct save
+    selector, commit a real consent write.
+
+    Also confirmed live and reproduced below: the 'Functional' category's
+    checkbox (`#cmplz-functional-optin`, always-active) is present in the DOM
+    but `display: none` - it is not just unchecked, it is not interactable."""
+    fixture_html = """
+        <!doctype html><html><body>
+        <div id="cmplz-cookiebanner-container">
+          <div id="cmplz-cookiebanner-1-optin"
+               class="cmplz-cookiebanner banner-1 banner-a optin cmplz-bottom-right cmplz-categories-type-view-preferences cmplz-show"
+               role="dialog" aria-modal="true">
+            <div class="cmplz-header">
+              <div class="cmplz-title" id="cmplz-header-1-optin">Manage Consent</div>
+            </div>
+            <div class="cmplz-body">
+              <div class="cmplz-message" id="cmplz-message-1-optin">
+                We use cookies to improve your experience.
+              </div>
+              <div class="cmplz-categories" style="display:none">
+                <details class="cmplz-category cmplz-functional">
+                  <summary>
+                    <span class="cmplz-category-header">
+                      <span class="cmplz-category-title">Functional</span>
+                      <span class="cmplz-always-active">
+                        <span class="cmplz-banner-checkbox">
+                          <input type="checkbox" id="cmplz-functional-optin" data-category="cmplz_functional"
+                                 class="cmplz-consent-checkbox cmplz-functional" checked style="display:none">
+                          <label class="cmplz-label" for="cmplz-functional-optin">
+                            <span class="screen-reader-text">Functional</span>
+                          </label>
+                        </span>
+                        Always active
+                      </span>
+                    </span>
+                  </summary>
+                </details>
+                <details class="cmplz-category cmplz-statistics">
+                  <summary>
+                    <span class="cmplz-category-header">
+                      <span class="cmplz-category-title">Statistics</span>
+                      <span class="cmplz-banner-checkbox">
+                        <input type="checkbox" id="cmplz-statistics-optin" data-category="cmplz_statistics"
+                               class="cmplz-consent-checkbox cmplz-statistics">
+                        <label class="cmplz-label" for="cmplz-statistics-optin">
+                          <span class="screen-reader-text">Statistics</span>
+                        </label>
+                      </span>
+                    </span>
+                  </summary>
+                </details>
+                <details class="cmplz-category cmplz-marketing">
+                  <summary>
+                    <span class="cmplz-category-header">
+                      <span class="cmplz-category-title">Marketing</span>
+                      <span class="cmplz-banner-checkbox">
+                        <input type="checkbox" id="cmplz-marketing-optin" data-category="cmplz_marketing"
+                               class="cmplz-consent-checkbox cmplz-marketing">
+                        <label class="cmplz-label" for="cmplz-marketing-optin">
+                          <span class="screen-reader-text">Marketing</span>
+                        </label>
+                      </span>
+                    </span>
+                  </summary>
+                </details>
+              </div>
+              <div class="cmplz-links cmplz-information">
+                <ul>
+                  <li><a class="cmplz-link cmplz-manage-options cookie-statement"
+                         href="https://cmp-fixture.test/cookie-policy/#cmplz-manage-consent-container"
+                         style="display:none">Manage options</a></li>
+                </ul>
+              </div>
+              <div class="cmplz-buttons">
+                <button class="cmplz-btn cmplz-accept">Accept</button>
+                <button class="cmplz-btn cmplz-deny">Deny</button>
+                <button class="cmplz-btn cmplz-view-preferences">View preferences</button>
+                <button class="cmplz-btn cmplz-save-preferences" style="display:none">Save preferences</button>
+                <a class="cmplz-btn cmplz-manage-options tcf cookie-statement"
+                   href="https://cmp-fixture.test/cookie-policy/#cmplz-manage-consent-container"
+                   style="display:none">View preferences</a>
+              </div>
+            </div>
+          </div>
+        </div>
+        <script>
+          function cmplzDeny() {
+            document.cookie = 'cmplz_banner-status=dismissed; path=/';
+            document.cookie = 'cmplz_marketing=deny; path=/';
+            document.cookie = 'cmplz_statistics=deny; path=/';
+            document.cookie = 'cmplz_preferences=deny; path=/';
+            document.cookie = 'cmplz_functional=allow; path=/';
+            document.cookie = 'cmplz_consented_services=; path=/';
+            document.querySelector('.cmplz-cookiebanner').classList.add('cmplz-dismissed');
+            document.querySelector('.cmplz-cookiebanner').style.display = 'none';
+          }
+          document.querySelector('.cmplz-deny').addEventListener('click', cmplzDeny);
+          document.querySelector('.cmplz-view-preferences').addEventListener('click', () => {
+            const banner = document.querySelector('.cmplz-cookiebanner');
+            banner.classList.add('cmplz-categories-visible');
+            document.querySelector('.cmplz-categories').style.display = '';
+            document.querySelector('.cmplz-save-preferences').style.display = 'block';
+          });
+          document.querySelector('.cmplz-save-preferences').addEventListener('click', () => {
+            const statistics = document.querySelector('#cmplz-statistics-optin').checked;
+            const marketing = document.querySelector('#cmplz-marketing-optin').checked;
+            document.cookie = 'cmplz_banner-status=dismissed; path=/';
+            document.cookie = `cmplz_statistics=${statistics ? 'allow' : 'deny'}; path=/`;
+            document.cookie = `cmplz_marketing=${marketing ? 'allow' : 'deny'}; path=/`;
+            document.cookie = 'cmplz_preferences=deny; path=/';
+            document.cookie = 'cmplz_functional=allow; path=/';
+            document.cookie = 'cmplz_consented_services=; path=/';
+            document.querySelector('.cmplz-cookiebanner').classList.add('cmplz-dismissed');
+            document.querySelector('.cmplz-cookiebanner').style.display = 'none';
+          });
+        </script></body></html>
+    """
+    with _serve_cmp_fixture(page, fixture_html):
+        match = fingerprint_cmp(page, load_cmp_table())
+        assert match and match["id"] == "complianz", match
+        entry = match["entry"]
+
+        # Structural guard against reintroduction: `_locate_by_selectors`
+        # returns the first VISIBLE match in list order, so if the buggy
+        # selector were ever added back *behind* the real launcher,
+        # find_control would still resolve correctly and the mutation check
+        # below (which replaces the list wholesale) would not catch it.
+        # Assert directly against the table entry itself.
+        assert ".cmplz-manage-options" not in entry["settings"], (
+            "the historically buggy settings selector (matches only a hidden "
+            "cross-page link and a hidden TCF variant, never the real launcher) "
+            "must not return to the table"
+        )
+
+        # Mutation check: the removed selector is proven here to resolve to
+        # nothing on this real markup shape, not just assumed broken -
+        # find_control must fall through to a CMP-table miss, exactly as it
+        # did on both live captures.
+        buggy_entry = dict(entry, settings=[".cmplz-manage-options"])
+        _, _, buggy_resolution = find_control(page, "settings", buggy_entry)
+        assert buggy_resolution["cmp_table_miss"] is True, buggy_resolution
+        assert buggy_resolution["path"] != "cmp_selector_table", buggy_resolution
+        ok("the removed complianz settings selector is confirmed to match nothing visible on real markup, not just suspected to")
+
+        # The corrected selector resolves through the CMP table, and clicking
+        # it is what actually opens the real preferences panel.
+        settings_control, _, settings_resolution = find_control(page, "settings", entry)
+        assert settings_control is not None, settings_resolution
+        assert settings_resolution["path"] == "cmp_selector_table", settings_resolution
+        assert settings_resolution["matched_selector"] == ".cmplz-view-preferences", settings_resolution
+        settings_control["locator"].click()
+        assert "cmplz-categories-visible" in (page.get_attribute(".cmplz-cookiebanner", "class") or ""), (
+            "the corrected settings selector must resolve to the control that actually opens the panel"
+        )
+        ok("the corrected complianz settings selector (.cmplz-view-preferences) resolves through the CMP table and actually opens the real preferences panel")
+
+        # `save` was already correct in the table; confirm the pair actually
+        # works together - opening the panel via the corrected selector, then
+        # committing via save - and that the commit is a real, verified
+        # consent write, matching the real cmplz_marketing/cmplz_statistics
+        # cookies observed live on wpcodetips.com. This uses find_control
+        # directly (the same resolver execute_denial calls internally)
+        # rather than `_denial_for`, since Deny is directly reachable on this
+        # real shape and `_denial_for` would take that shortcut instead of
+        # the settings route (see below).
+        before = consent_snapshot(page, page.context, entry)
+        save_control, _, save_resolution = find_control(page, "save", entry)
+        assert save_control is not None, save_resolution
+        assert save_resolution["path"] == "cmp_selector_table", save_resolution
+        save_control["locator"].click()
+        after = consent_snapshot(page, page.context, entry)
+        verification = verify_choice_registered(before, after)
+        assert verification["verified"] is True, verification
+        ok("the settings panel opened via the corrected selector commits a real, verified denial once Save is clicked")
+
+    # Fresh fixture: confirms `_denial_for`'s real first-layer path is
+    # unaffected by the settings fix - Deny is directly reachable on this
+    # real shape (unlike the second-layer-only shapes documented on
+    # Cookiebot/Termly above), so a settings detour is correctly never taken.
+    with _serve_cmp_fixture(page, fixture_html):
+        result = _denial_for(page, entry)
+        assert result["status"] == "direct_reject_clicked", result
+        assert result["resolution"]["reject"]["path"] == "cmp_selector_table", result["resolution"]
+        assert (result.get("verification") or {}).get("verified") is True, result
+        ok("a Complianz-shaped banner (verified live, complianz.io and wpcodetips.com) resolves reject directly")
+
+
 def test_safe_internal_links_refuses_dangerous_and_offsite(page) -> None:
     """This decides what the auditor navigates to on a live site the user owns.
     The skill promises no logout, no account change, no purchase and no
@@ -4754,6 +4971,7 @@ def main() -> int:
             test_cookieyes_shape_scopes_to_the_visible_layer(page)
             test_trustarc_shape_resolves_accept_and_reject_directly(page)
             test_iubenda_shape_reject_uses_the_continue_without_accepting_control(page)
+            test_complianz_shape_settings_resolves_via_the_real_view_preferences_button(page)
             test_safe_internal_links_refuses_dangerous_and_offsite(page)
             test_annotate_controls_marks_resolved_controls(page)
             test_annotation_labels_are_painted_above_every_outline(page)

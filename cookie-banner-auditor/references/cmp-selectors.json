@@ -194,9 +194,10 @@
       "container": ["#cmplz-cookiebanner-container", ".cmplz-cookiebanner"],
       "accept": [".cmplz-accept"],
       "reject": [".cmplz-deny"],
-      "settings": [".cmplz-manage-options"],
+      "settings": [".cmplz-view-preferences"],
       "save": [".cmplz-save-preferences"],
-      "consent_storage": ["cmplz_consented_services", "cmplz_marketing", "cmplz_statistics"]
+      "consent_storage": ["cmplz_consented_services", "cmplz_marketing", "cmplz_statistics"],
+      "notes": "Verified 2026-08-23 against two live deployments: complianz.io itself (dogfooding - both an 'optin' and a region-detected 'optout' template are templated into the DOM at once, only one shown per visitor's detected region) and wpcodetips.com, a real customer site on the default first-layer 'banner-1 banner-a optin' template. `container`, `accept` ('.cmplz-btn.cmplz-accept'), `reject` ('.cmplz-btn.cmplz-deny'), `save` ('.cmplz-btn.cmplz-save-preferences', hidden until the panel opens), and `consent_storage` all matched real markup exactly on both captures; clicking Deny on wpcodetips.com wrote real `cmplz_marketing=deny; cmplz_statistics=deny; cmplz_preferences=deny` cookies. `settings` was wrong: the real, functioning first-layer settings launcher on both captures is `<button class=\"cmplz-btn cmplz-view-preferences\">` (confirmed live - clicking it adds `cmplz-categories-visible` to the banner and reveals 4 category toggles plus Save). The old `.cmplz-manage-options` selector matches two elements on real markup, neither of them that launcher: a permanently-hidden (w=0,h=0) footer text link `<a class=\"cmplz-link cmplz-manage-options cookie-statement\" href=\".../#cmplz-manage-consent-container\">` that navigates to a different page rather than opening the panel in place, and an equally-hidden TCF-only variant. On both live captures this made `settings` resolve to nothing (cmp_table_miss) despite a real, visible, working launcher sitting right next to it under a different class."
     },
     {
       "id": "borlabs",
