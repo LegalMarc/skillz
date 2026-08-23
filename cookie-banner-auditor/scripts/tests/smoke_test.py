@@ -3636,6 +3636,79 @@ def test_no_wall_clock_ordering_assertions() -> None:
     ok(f"no test asserts an ordering from wall-clock readings ({len(test_files)} test source(s) scanned)")
 
 
+#: CMP entries whose `notes` carry no dated live-capture reference. This is a
+#: debt list, not a permitted state: the rule for this table is that a selector
+#: is verified against a real browser capture and the capture's date and URL go
+#: in `notes` (see `axeptio`, `iubenda`, `complianz` for the shape). An entry
+#: here has no *recorded* provenance - which is not proof it was written from
+#: memory, only that nothing says otherwise, and for a table where mapping
+#: `save` onto an accept control silently converts a denial into an acceptance,
+#: "nothing says otherwise" is the state this project exists to avoid.
+#:
+#: The five with entirely empty notes are the sharpest end of it: cookieyes,
+#: borlabs, cookielawinfo, civic, secureprivacy.
+#:
+#: Shrink this list; never add to it. `test_cmp_selectors_record_their_provenance`
+#: fails in both directions, so verifying an entry without removing it from here
+#: fails just as loudly as adding an unverified one.
+_CMP_ENTRIES_WITHOUT_RECORDED_PROVENANCE = frozenset({
+    "hubspot", "onetrust", "usercentrics", "sourcepoint", "cookieyes",
+    "borlabs", "cookielawinfo", "klaro", "civic", "secureprivacy",
+})
+
+#: A live-capture note carries the date it was taken. Every entry that has been
+#: through verification records one; nothing else in these notes uses this shape.
+_LIVE_CAPTURE_DATE = re.compile(r"\b\d{4}-\d{2}-\d{2}\b")
+
+
+def test_cmp_selectors_record_their_provenance() -> None:
+    """Every CMP entry either cites a dated live capture or is on the debt list.
+
+    The structural checks in `test_cmp_table_integrity` prove the table is
+    self-consistent - that `save` never reuses an accept selector, that every
+    entry can be fingerprinted. They cannot prove any of it matches a real CMP,
+    and a selector table that is internally perfect and factually wrong fails
+    exactly the way this tool must not: quietly, reporting a completed denial.
+
+    So this checks provenance instead, as a ratchet. Both directions fail:
+
+    - an entry off the list with no dated capture note means an unverified
+      selector just landed;
+    - an entry on the list that now has one means the debt shrank and the list
+      was not updated, which is how allowlists rot into permanent exemptions.
+    """
+    table = load_cmp_table()
+    ids = {entry["id"] for entry in table}
+
+    stale = _CMP_ENTRIES_WITHOUT_RECORDED_PROVENANCE - ids
+    assert not stale, f"debt list names CMPs that are no longer in the table: {sorted(stale)}"
+
+    undocumented, now_documented = [], []
+    for entry in table:
+        has_capture = bool(_LIVE_CAPTURE_DATE.search(entry.get("notes") or ""))
+        on_list = entry["id"] in _CMP_ENTRIES_WITHOUT_RECORDED_PROVENANCE
+        if not has_capture and not on_list:
+            undocumented.append(entry["id"])
+        if has_capture and on_list:
+            now_documented.append(entry["id"])
+
+    assert not undocumented, (
+        f"these CMP entries cite no dated live capture in `notes`: {sorted(undocumented)}. "
+        "Verify the selectors against a real browser capture and record the date and URL, or - "
+        "if you are knowingly taking on the debt - say so explicitly by adding them to "
+        "_CMP_ENTRIES_WITHOUT_RECORDED_PROVENANCE."
+    )
+    assert not now_documented, (
+        f"these CMP entries now cite a live capture but are still listed as lacking one: "
+        f"{sorted(now_documented)}. Remove them from _CMP_ENTRIES_WITHOUT_RECORDED_PROVENANCE - "
+        "a debt list that never shrinks stops meaning anything."
+    )
+
+    verified = len(ids) - len(_CMP_ENTRIES_WITHOUT_RECORDED_PROVENANCE)
+    ok(f"CMP selector provenance: {verified}/{len(ids)} entries cite a dated live capture, "
+       f"{len(_CMP_ENTRIES_WITHOUT_RECORDED_PROVENANCE)} carry recorded debt")
+
+
 def test_cmp_table_integrity() -> None:
     """A 'save' selector that also accepts would turn a denial into an acceptance.
 
@@ -6013,6 +6086,7 @@ def main() -> int:
     test_choose_headless_platform_rules()
     test_launch_browser_sandbox_args_and_error_message()
     test_cmp_table_integrity()
+    test_cmp_selectors_record_their_provenance()
     test_no_wall_clock_ordering_assertions()
     test_consent_namespace_and_key_matching()
     test_narrow_consent_diff_ignores_noise_and_catches_namespaced_writes()
