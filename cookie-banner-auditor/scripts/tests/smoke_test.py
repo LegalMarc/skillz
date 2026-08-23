@@ -5397,6 +5397,35 @@ def test_collapse_viewport_findings() -> None:
     ok("collapse_viewport_findings merges identical cross-viewport findings and preserves real divergence")
 
 
+#: README.md advertises how much this suite covers. That number has gone stale
+#: three times now - it read 99/110 while the suite was at 121, and again the
+#: moment #7 added tests - because nothing connected the claim to the fact.
+#: Checked at the end of `main`, where the real totals are finally known.
+_README_COUNT_PATTERN = re.compile(
+    r"smoke_test\.py\s+#\s*(\d+) test functions, (\d+) checks"
+)
+
+
+def _assert_readme_states_the_real_counts(test_function_count: int, check_count: int) -> None:
+    readme = SCRIPT_DIR.parent / "README.md"
+    text = readme.read_text()
+    match = _README_COUNT_PATTERN.search(text)
+    assert match, (
+        f"{readme.name} no longer states the suite's size in the form this check reads "
+        "(`smoke_test.py   # <N> test functions, <M> checks`); update the check or restore the line"
+    )
+    stated_functions, stated_checks = int(match.group(1)), int(match.group(2))
+    assert (stated_functions, stated_checks) == (test_function_count, check_count), (
+        f"{readme.name} advertises {stated_functions} test functions and {stated_checks} checks, but this "
+        f"run has {test_function_count} and {check_count}. Update the README line - a coverage claim nobody "
+        "checks is one that drifts."
+    )
+    # Deliberately not routed through `ok()`: this runs after the totals have
+    # been taken, so recording it as a check would make the number it just
+    # verified wrong by one.
+    print(f"\n  ok  README's advertised suite size matches reality")
+
+
 def main() -> int:
     print("\nOffline checks")
     test_har_sanitization()
@@ -5530,6 +5559,7 @@ def main() -> int:
     test_function_count = sum(
         1 for name, value in globals().items() if name.startswith("test_") and callable(value)
     )
+    _assert_readme_states_the_real_counts(test_function_count, len(PASSED))
     print(
         f"\nAll {len(PASSED)} checks passed across {test_function_count} cookie-banner-auditor "
         "smoke test functions."
