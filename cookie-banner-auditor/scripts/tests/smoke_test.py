@@ -36,6 +36,8 @@ from lib.analysis import (
     analyze_and_write,
     build_cookie_inventory,
     build_request_inventory,
+    classify_cookie,
+    classify_request,
     generate_findings,
     partition_findings,
     preconsent_tracking_assertion_hits,
@@ -3197,6 +3199,70 @@ def test_run_detect_only_reports_and_annotates_a_real_control() -> None:
 # C - transmission classification and consent mode
 # ---------------------------------------------------------------------------
 
+def test_first_party_proxy_and_cookie_domain_classification() -> None:
+    """The two vendor-classification fallbacks, neither previously executed.
+
+    Both are the last line of defence against a tracker that does not look
+    like one:
+
+    - `first_party_path_patterns` is how a proxied or CNAME-cloaked endpoint
+      gets noticed at all. A site that serves its analytics beacon from its own
+      origin passes every domain rule in the table, so without this it is
+      classified `Unknown` and reads as ordinary site traffic.
+    - `classify_cookie`'s domain fallback catches a cookie whose *name* matches
+      nothing known but whose domain is a known vendor's - a renamed or
+      versioned cookie from a vendor still in the table.
+
+    The negative cases matter as much as the positive ones here, because this
+    heuristic is deliberately narrow: it fires on path alone, so widening it
+    would start labelling ordinary first-party URLs as possible tracking, and
+    a report that cries wolf gets switched off.
+    """
+    patterns = read_json(SCRIPT_DIR.parent / "references" / "vendor-patterns.json")
+
+    proxied = classify_request("https://shop.test/collect?v=2&tid=G-123", "shop.test", patterns)
+    assert proxied["vendor"] == "First-party endpoint", proxied
+    assert proxied["category"] == "possible_tracking", proxied
+    assert proxied["third_party"] is False, proxied
+    # Confidence stays low on purpose: a path heuristic is a prompt to look,
+    # never proof. Raising it here would let a filename coincidence carry the
+    # weight of a matched vendor rule.
+    assert proxied["confidence"] == "low", proxied
+
+    # A subdomain is the same site, so the same proxy heuristic must reach it -
+    # `analytics.shop.test/pixel` is the exact shape of a cloaked endpoint.
+    subdomain = classify_request("https://analytics.shop.test/pixel", "shop.test", patterns)
+    assert subdomain["vendor"] == "First-party endpoint", subdomain
+    assert subdomain["third_party"] is False, subdomain
+
+    # Negative control: an ordinary first-party page must not be swept up.
+    benign = classify_request("https://shop.test/about", "shop.test", patterns)
+    assert benign["vendor"] == "Unknown", benign
+    assert benign["category"] == "unknown", benign
+
+    # Boundary worth pinning: the path heuristic is a *first-party* signal
+    # only. On a third-party host the same path proves nothing the domain
+    # table did not already say, so it must not inherit the first-party label.
+    third_party = classify_request("https://unknown-vendor.test/collect", "shop.test", patterns)
+    assert third_party["vendor"] == "Unknown", third_party
+    assert third_party["third_party"] is True, third_party
+    ok("a first-party path that looks like a beacon is flagged as possible tracking, and nothing else is")
+
+    # A cookie whose name matches no rule, on a domain that does.
+    renamed = classify_cookie({"name": "zz_unmatched_name", "domain": ".google-analytics.com"},
+                              "shop.test", patterns)
+    assert renamed["vendor"] == "Google Analytics", renamed
+    assert renamed["category"] == "analytics", renamed
+    assert renamed["third_party"] is True, renamed
+    assert renamed["confidence"] == "high", renamed
+
+    unknown = classify_cookie({"name": "zz_unmatched_name", "domain": "nowhere.test"},
+                              "shop.test", patterns)
+    assert unknown["vendor"] == "Unknown", unknown
+    assert unknown["category"] == "unknown", unknown
+    ok("a cookie with an unrecognised name is still classified by its vendor domain")
+
+
 def test_transmission_classification() -> None:
     # Read the same way production does (audit_site.py loads this file's
     # "transmission_patterns" key directly) rather than through a loader.
@@ -5872,6 +5938,7 @@ def main() -> int:
     test_har_sanitization()
     test_verify_choice_registered_unit()
     test_cmp_observational_noise_ignored()
+    test_first_party_proxy_and_cookie_domain_classification()
     test_transmission_classification()
     test_consent_mode_parsing()
     test_embedded_identifier_scan()
