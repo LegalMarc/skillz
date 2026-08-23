@@ -3,4 +3,11 @@
 __pycache__/
 *.py[cod]
 .DS_Store
+# Coverage artefacts. Binary, machine-specific, and they embed the
+# absolute paths of whoever ran them - which this repo being public
+# makes a small needless disclosure.
+.coverage
+.coverage.*
+htmlcov/
+coverage.xml
 
