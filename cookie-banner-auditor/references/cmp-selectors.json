@@ -248,11 +248,12 @@
         "script_hosts": ["static.axept.io", "api.axept.io"]
       },
       "container": ["#axeptio_overlay"],
-      "accept": ["#axeptio_btn_acceptAll", "button[aria-label*='Accept' i]"],
+      "accept": ["#axeptio_btn_acceptAll"],
       "reject": ["#axeptio_btn_dismiss", "button[aria-label*='Decline' i]"],
       "settings": ["#axeptio_btn_configure"],
       "save": ["#axeptio_btn_save"],
-      "consent_storage": ["axeptio_cookies", "axeptio_authorized_vendors"]
+      "consent_storage": ["axeptio_cookies", "axeptio_authorized_vendors"],
+      "notes": "Verified 2026-08-22 against https://axept.io (Axeptio's own site). Live DOM: `#axeptio_overlay` is a light-DOM mount point whose only child is an open shadow-root host; the real controls live inside that shadow root as `#axeptio_btn_dismiss` (aria-label 'Close without accepting cookies', text 'No, thanks'), `#axeptio_btn_configure` (aria-label 'I choose the cookies to configure', text 'I want to choose'), and `#axeptio_btn_acceptAll` (aria-label 'Accept all cookies', text 'Ok for me'). The accept fallback `button[aria-label*='Accept' i]` was a live bug, not a hypothetical one, confirmed by querying the real shadow root: 'accepting' contains 'Accept' as a substring, so the selector matched three real buttons - #axeptio_btn_dismiss, #axeptio_btn_acceptAll, and the persistent widget's #axeptio_main_button - and DOM-order/`.first` resolution returned #axeptio_btn_dismiss (the reject-side control) ahead of the real accept button, mirroring the Didomi 'agree'/'disagree' collision exactly. Removed; `#axeptio_btn_acceptAll` alone is Axeptio's stable element id and is sufficient on its own. The existing reject fallback `button[aria-label*='Decline' i]` was also checked against this same live markup and matched nothing at all (the real reject aria-label contains no 'Decline' substring); left in the table since `#axeptio_btn_dismiss` already resolves reject via id and the dead fallback is inert, not harmful, but recorded here so a future pass does not assume it was verified live."
     },
     {
       "id": "civic",

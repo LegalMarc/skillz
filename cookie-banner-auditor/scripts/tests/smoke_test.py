@@ -1055,6 +1055,89 @@ def test_didomi_shape_resolves_and_save_stays_specific_to_settings(page) -> None
     ok("a Didomi-shaped banner (verified against didomi.io) resolves reject directly and save stays scoped to the settings panel")
 
 
+def test_axeptio_shape_accept_fallback_no_longer_collides_with_dismiss(page) -> None:
+    """The axeptio table entry's accept fallback was written from documentation,
+    not a live capture, and carried the same class of bug just fixed on Didomi:
+    an aria-label substring collision. Verified 2026-08-22 against
+    https://axept.io (Axeptio's own site). Real DOM: `#axeptio_overlay` is a
+    light-DOM mount point whose only child is an open shadow-root host; the
+    actual controls live inside that shadow root with real aria-label text -
+    `#axeptio_btn_dismiss` aria-label 'Close without accepting cookies',
+    `#axeptio_btn_configure` aria-label 'I choose the cookies to configure',
+    `#axeptio_btn_acceptAll` aria-label 'Accept all cookies'. This fixture
+    reproduces that exact shape and those exact aria-label strings.
+
+    The collision is confirmed live, not just suspected: 'accepting' contains
+    'Accept' as a substring, so `button[aria-label*='Accept' i]` matched
+    #axeptio_btn_dismiss - the reject-side control - ahead of the real accept
+    button in DOM order, the same mechanical failure as Didomi's
+    'agree'/'disagree'. The fallback was removed; `#axeptio_btn_acceptAll`
+    alone is Axeptio's stable element id and is sufficient on its own."""
+    _serve_cmp_fixture(page, """
+        <!doctype html><html><body>
+        <div id="axeptio_overlay" class="axeptio_mount" data-project-id="000000000000000000000000">
+          <div id="axeptio-shadow-host"></div>
+        </div>
+        <script>
+          const host = document.querySelector('#axeptio-shadow-host');
+          const root = host.attachShadow({mode: 'open'});
+          root.innerHTML = `
+            <div style="position:fixed;bottom:0;padding:20px;background:#fff">
+              <p>We use cookies to improve your experience and for analytics.</p>
+              <button id="axeptio_btn_dismiss" aria-label="Close without accepting cookies">No, thanks</button>
+              <button id="axeptio_btn_configure" aria-label="I choose the cookies to configure">I want to choose</button>
+              <button id="axeptio_btn_acceptAll" aria-label="Accept all cookies">Ok for me</button>
+            </div>`;
+          root.querySelector('#axeptio_btn_dismiss').addEventListener('click', () => {
+            document.querySelector('#axeptio_overlay').remove();
+            document.cookie = 'axeptio_cookies={}; path=/';
+          });
+        </script></body></html>
+    """)
+    match = fingerprint_cmp(page, load_cmp_table())
+    assert match and match["id"] == "axeptio", match
+    entry = match["entry"]
+
+    # Structural guard against reintroduction: _locate_by_selectors returns
+    # the first visible match in list order, so if the buggy fallback were
+    # ever added back *behind* the correct id, find_control would still
+    # resolve correctly and the mutation check below (which replaces the
+    # list wholesale) would not catch it. Assert directly against the table.
+    assert "button[aria-label*='Accept' i]" not in entry["accept"], (
+        "the historically buggy accept fallback (matches the dismiss button too) must not return to the table"
+    )
+
+    # The current table's accept resolves to the real accept-all button, and
+    # only that. Checked before the denial click below, which removes the
+    # overlay entirely.
+    accept_control, _, accept_resolution = find_control(page, "accept", entry)
+    assert accept_control is not None, accept_resolution
+    assert accept_control["id"] == "axeptio_btn_acceptAll", accept_control
+
+    # Mutation check: the fallback this entry used to carry -
+    # `button[aria-label*='Accept' i]` - is proven here to have been a live
+    # bug against real Axeptio markup, not a defensive selector removed out
+    # of caution. "Close without accepting cookies" contains "accepting",
+    # which contains "Accept" as a case-insensitive substring, so the old
+    # selector matched the DISMISS button first (DOM order), not acceptAll.
+    buggy_entry = dict(entry)
+    buggy_entry["accept"] = ["button[aria-label*='Accept' i]"]
+    buggy_control, _, _ = find_control(page, "accept", buggy_entry)
+    assert buggy_control is not None, "the old selector should still match something"
+    assert buggy_control["id"] == "axeptio_btn_dismiss", (
+        "this pins the actual historical bug: the removed accept fallback resolved "
+        f"to the DISMISS button first, not acceptAll - got {buggy_control.get('id')!r}. "
+        "If this ever stops reproducing, the fixture's DOM order changed, not the bug."
+    )
+    ok("the removed Axeptio accept fallback is confirmed to have matched the dismiss button, not just suspected to")
+
+    result = _denial_for(page, entry)
+    assert result["status"] == "direct_reject_clicked", result
+    assert result["resolution"]["reject"]["path"] == "cmp_selector_table", result["resolution"]
+    assert (result.get("verification") or {}).get("verified") is True, result
+    ok("an Axeptio-shaped banner (verified against axept.io) resolves accept and reject to distinct controls")
+
+
 def test_cookiebot_shape_settings_never_resolves_to_the_category_checkbox(page) -> None:
     """First fixture for cookiebot (19 table entries existed with no fixture at
     all). Verified 2026-08-22 against three live deployments: cookiebot.com,
@@ -4391,6 +4474,7 @@ def main() -> int:
             test_usercentrics_shape_resolves_inside_a_shadow_root(page)
             test_sourcepoint_shape_resolves_inside_an_iframe(page)
             test_didomi_shape_resolves_and_save_stays_specific_to_settings(page)
+            test_axeptio_shape_accept_fallback_no_longer_collides_with_dismiss(page)
             test_cookiebot_shape_settings_never_resolves_to_the_category_checkbox(page)
             test_termly_shape_settings_resolves_via_the_real_attribute(page)
             test_osano_shape_completes_via_settings_toggles_and_save(page)
