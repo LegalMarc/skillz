@@ -12,6 +12,7 @@ produced wrong answers before.
 
 from __future__ import annotations
 
+import ast
 import builtins
 import hashlib
 import json
@@ -807,6 +808,10 @@ def test_probe_autosave_reload_ordering_and_phase_tagging(page) -> None:
         page.unroute("**/*")
 
     assert probe["probe_started"] and probe["probe_finished"], probe
+    # time-assertion-ok: not an ordering guarantee standing in for structure -
+    # both readings come from the same probe dict and this only checks they
+    # were populated in the order the function writes them. Equality is a
+    # legitimate outcome here, so whole-second truncation cannot mask a defect.
     assert probe["probe_started"] <= probe["probe_finished"], probe
     assert probe["screenshot"] and Path(probe["screenshot"]).exists(), probe
     assert (scenario_dir / "preferences-after-toggles.png").exists()
@@ -3346,6 +3351,97 @@ def test_launch_browser_sandbox_args_and_error_message() -> None:
     ok("launch_browser scopes --no-sandbox to root and chains the real error into an actionable message")
 
 
+#: Subscript keys and helpers whose values are wall-clock readings from
+#: `utc_now()`. Comparing two of these with an ordering operator is the bug
+#: pattern `test_no_wall_clock_ordering_assertions` exists to ban - see its
+#: docstring.
+_TIMESTAMP_EXPRESSIONS = frozenset({
+    "time", "probe_started", "probe_finished", "timestamp", "started_at", "finished_at",
+})
+
+#: Opt out of the ban on one `assert`, by putting this marker plus a reason in
+#: a comment on any line of that statement. It is deliberately awkward: the
+#: point is to make an author state why a clock reading is adequate here,
+#: not to make the check easy to silence.
+_TIME_ASSERTION_WAIVER = "time-assertion-ok:"
+
+
+def test_no_wall_clock_ordering_assertions() -> None:
+    """No test may assert an ordering by comparing two wall-clock readings.
+
+    `utc_now()` truncates to whole seconds. Anything this suite drives -
+    a reload, a settle, a click - finishes well inside one second, so both
+    readings routinely land in the same second and a `<=` between them holds
+    whichever order they were actually taken in. A guard like that does not
+    fail loudly when the ordering it protects is inverted; it fails *rarely*,
+    which is worse, because a suite that passes reads as proof.
+
+    This has now cost the project twice: once in the Didomi-adjacent CMP work,
+    and again in #7, where `consent_snapshot_after["time"] <= probe_started`
+    caught the exact inversion it existed to catch in only 3 of 4 runs. Both
+    times the fix was the same - assert on a load-time side effect that names
+    *which* load or state a reading came from (see `load_seq` and
+    `fixture_reload_marker` in the autosave tests), so no clock resolution can
+    blur it. Reach for that first.
+
+    Scans this file with `ast`, not a grep, so the check sees the shape of the
+    comparison rather than a substring and cannot be dodged by reformatting.
+    """
+    def references_a_clock(node: ast.AST) -> bool:
+        for child in ast.walk(node):
+            if (
+                isinstance(child, ast.Subscript)
+                and isinstance(child.slice, ast.Constant)
+                and child.slice.value in _TIMESTAMP_EXPRESSIONS
+            ):
+                return True
+            if isinstance(child, ast.Call) and isinstance(child.func, ast.Name) and child.func.id == "utc_now":
+                return True
+        return False
+
+    test_files = sorted((SCRIPT_DIR / "tests").glob("*.py"))
+    assert test_files, "no test sources found to scan"
+
+    offences: list[str] = []
+    scanned = 0
+    for path in test_files:
+        source = path.read_text()
+        lines = source.splitlines()
+        for node in ast.walk(ast.parse(source)):
+            if not isinstance(node, ast.Assert):
+                continue
+            comparisons = [n for n in ast.walk(node.test) if isinstance(n, ast.Compare)]
+            for comparison in comparisons:
+                ordering = any(
+                    isinstance(op, (ast.Lt, ast.LtE, ast.Gt, ast.GtE)) for op in comparison.ops
+                )
+                if not ordering or not references_a_clock(comparison):
+                    continue
+                scanned += 1
+                # The waiver may sit on the statement's own lines or in the
+                # contiguous comment block immediately above it, which is
+                # where a reason long enough to be worth reading belongs.
+                start = node.lineno - 1
+                while start > 0 and lines[start - 1].strip().startswith("#"):
+                    start -= 1
+                statement = "\n".join(lines[start:(node.end_lineno or node.lineno)])
+                if _TIME_ASSERTION_WAIVER in statement:
+                    continue
+                offences.append(f"{path.name}:{node.lineno}: {ast.unparse(comparison)[:120]}")
+
+    assert not offences, (
+        "these assertions order two wall-clock readings, which utc_now()'s whole-second truncation makes "
+        "an unreliable guard. Assert on a structural marker that names which load or state the reading "
+        f"came from, or waive with a `# {_TIME_ASSERTION_WAIVER} <reason>` comment:\n  "
+        + "\n  ".join(offences)
+    )
+    assert scanned >= 1, (
+        "the scanner matched no clock comparisons at all, including the waived one below - it has stopped "
+        "recognising the pattern it exists to find"
+    )
+    ok(f"no test asserts an ordering from wall-clock readings ({len(test_files)} test source(s) scanned)")
+
+
 def test_cmp_table_integrity() -> None:
     """A 'save' selector that also accepts would turn a denial into an acceptance.
 
@@ -5316,6 +5412,7 @@ def main() -> int:
     test_choose_headless_platform_rules()
     test_launch_browser_sandbox_args_and_error_message()
     test_cmp_table_integrity()
+    test_no_wall_clock_ordering_assertions()
     test_consent_namespace_and_key_matching()
     test_narrow_consent_diff_ignores_noise_and_catches_namespaced_writes()
     test_classify_autosave_denial_truth_table()
