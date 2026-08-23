@@ -4445,6 +4445,261 @@ def test_denial_not_committed_finding() -> None:
     ok("an unsaved preference panel produces its own accurate finding, not the unresolved-control one")
 
 
+def test_denial_autosave_unconfirmed_finding() -> None:
+    """`toggles_disabled_no_save_control` must emit its own finding naming both
+    that toggles were switched off and that the recording could not be
+    confirmed, with an empty dependency list (it is invalid by definition, so
+    depending on `denial` would suppress it outright) and must survive
+    `partition_findings` when the `denial` scenario is marked invalid."""
+    def findings_for(action_result):
+        results = {"denial": {"action_result": action_result}}
+        return generate_findings(results, [], [])
+
+    verification = {
+        "status": checks.AUTOSAVE_NO_SAVE_CONTROL,
+        "verified": False,
+        "note": (
+            "Optional denial toggles were operated and page state was mutated, but neither a reload "
+            "read-back nor a namespaced consent-storage write confirmed the choice persisted."
+        ),
+        "basis": "unconfirmed",
+    }
+    findings = findings_for({
+        "status": checks.AUTOSAVE_NO_SAVE_CONTROL,
+        "verification": verification,
+    })
+    matched = [f for f in findings if f["check_type"] == "denial-autosave-unconfirmed"]
+    assert len(matched) == 1, [f["check_type"] for f in findings]
+    finding = matched[0]
+    assert "toggle" in finding["observation"].lower(), finding
+    assert "could not confirm" in finding["observation"] or "could not be confirmed" in finding["title"].lower(), finding
+    assert finding["depends_on_scenarios"] == [], finding
+
+    # Load-bearing: this finding must not depend on "denial", or it would
+    # suppress itself, since the scenario it describes is invalid by definition.
+    validity = {"denial": {"valid": False, "invalid_reason": "x"}}
+    emitted, suppressed = partition_findings(findings, validity)
+    assert finding["id"] in {f["id"] for f in emitted}, (emitted, suppressed)
+    ok("an unconfirmed autosave denial produces its own finding, with an empty dependency list that survives an invalid denial scenario")
+
+
+def test_denial_control_unresolved_excludes_autosave_status() -> None:
+    """`denial-control-unresolved` must still fire for `manual_required`, and
+    must not fire for `toggles_disabled_no_save_control` - a broadened trigger
+    that fired for both would pass a one-sided test."""
+    def findings_for(action_result):
+        results = {"denial": {"action_result": action_result}}
+        return generate_findings(results, [], [])
+
+    manual = findings_for({"status": "manual_required", "resolution": {}})
+    assert [f for f in manual if f["check_type"] == "denial-control-unresolved"], manual
+    assert not [f for f in manual if f["check_type"] == "denial-autosave-unconfirmed"], manual
+
+    autosave = findings_for({
+        "status": checks.AUTOSAVE_NO_SAVE_CONTROL,
+        "verification": {"status": checks.AUTOSAVE_NO_SAVE_CONTROL, "verified": False, "note": "n/a"},
+    })
+    assert not [f for f in autosave if f["check_type"] == "denial-control-unresolved"], autosave
+    assert [f for f in autosave if f["check_type"] == "denial-autosave-unconfirmed"], autosave
+    ok("denial-control-unresolved still fires only for manual_required, not for the autosave status")
+
+
+def test_autosave_no_controls_examined_does_not_claim_a_mutation() -> None:
+    """`classify_autosave_denial`'s `no_controls_examined` basis fires when no
+    optional toggle was found at all - nothing was operated and nothing was
+    mutated. The observation must not claim toggles were switched off."""
+    def findings_for(action_result):
+        results = {"denial": {"action_result": action_result}}
+        return generate_findings(results, [], [])
+
+    verification = {
+        "status": checks.AUTOSAVE_NO_SAVE_CONTROL,
+        "verified": False,
+        "note": "No optional denial toggle was found, so no choice was operated and there is nothing to verify.",
+        "basis": "no_controls_examined",
+    }
+    findings = findings_for({
+        "status": checks.AUTOSAVE_NO_SAVE_CONTROL,
+        "toggle_result": {"disabled": []},
+        "verification": verification,
+    })
+    matched = [f for f in findings if f["check_type"] == "denial-autosave-unconfirmed"]
+    assert len(matched) == 1, [f["check_type"] for f in findings]
+    finding = matched[0]
+    assert "switched" not in finding["observation"].lower(), finding
+    assert "mutat" not in finding["observation"].lower(), finding
+    assert "no optional-category toggle" in finding["observation"], finding
+    ok("no_controls_examined does not claim toggles were switched off or page state mutated")
+
+
+def test_autosave_reload_reverted_reports_a_confirmed_discard() -> None:
+    """`classify_autosave_denial`'s `reload_reverted` basis is affirmative
+    evidence the CMP discarded the choice - a reload read at least one toggle
+    back ON. This must be reported as an observed discard, not downgraded to
+    'could not be confirmed'."""
+    def findings_for(action_result):
+        results = {"denial": {"action_result": action_result}}
+        return generate_findings(results, [], [])
+
+    verification = {
+        "status": checks.AUTOSAVE_NO_SAVE_CONTROL,
+        "verified": False,
+        "note": (
+            "Optional denial toggles were operated and page state was mutated, but a reload read "
+            "at least one back ON: this CMP has no save control on this path and discarded the choice."
+        ),
+        "basis": "reload_reverted",
+    }
+    findings = findings_for({
+        "status": checks.AUTOSAVE_NO_SAVE_CONTROL,
+        "toggle_result": {"disabled": [{"label": "Analytics"}, {"label": "Advertising"}]},
+        "verification": verification,
+    })
+    # Exactly this one check type must fire for the status - not the generic
+    # unconfirmed finding, which would understate a confirmed discard.
+    assert not [f for f in findings if f["check_type"] == "denial-autosave-unconfirmed"], findings
+    matched = [f for f in findings if f["check_type"] == "denial-autosave-discarded"]
+    assert len(matched) == 1, [f["check_type"] for f in findings]
+    finding = matched[0]
+    assert "discarded" in finding["observation"].lower(), finding
+    assert "could not be confirmed" not in finding["title"].lower(), finding
+    assert finding["certainty"] == "high", finding
+    ok("reload_reverted is reported as a confirmed discard, not a merely-unconfirmed choice")
+
+
+def test_autosave_status_emits_exactly_one_check_type() -> None:
+    """`toggles_disabled_no_save_control` (== UNSAVED_PREFERENCE_STATUS) must
+    never emit both `denial-not-committed` and `denial-autosave-unconfirmed` /
+    `denial-autosave-discarded` for the same run - they are contradictory
+    conclusions about the same state."""
+    def findings_for(action_result):
+        results = {"denial": {"action_result": action_result}}
+        return generate_findings(results, [], [])
+
+    autosave_check_types = {"denial-not-committed", "denial-autosave-unconfirmed", "denial-autosave-discarded"}
+
+    # No autosave probe ran at all (verification key absent entirely).
+    no_verification = findings_for({
+        "status": checks.AUTOSAVE_NO_SAVE_CONTROL,
+        "toggle_result": {"disabled": [{"label": "Analytics"}]},
+        "resolution": {"save": {}},
+        "save_candidates": [],
+    })
+    hits = [f["check_type"] for f in no_verification if f["check_type"] in autosave_check_types]
+    assert len(hits) == 1, hits
+
+    # An autosave probe ran and classified the run for every known basis.
+    for basis in (
+        "no_controls_examined",
+        "reload_reverted",
+        "reload_confirmed_off",
+        "unconfirmed",
+        "already_off_unconfirmed",
+        "no_confirmed_denial_state",
+    ):
+        verification = {
+            "status": checks.AUTOSAVE_NO_SAVE_CONTROL,
+            "verified": False,
+            "note": f"note for {basis}",
+            "basis": basis,
+        }
+        findings = findings_for({
+            "status": checks.AUTOSAVE_NO_SAVE_CONTROL,
+            "toggle_result": {"disabled": []},
+            "verification": verification,
+        })
+        hits = [f["check_type"] for f in findings if f["check_type"] in autosave_check_types]
+        assert len(hits) == 1, (basis, hits)
+    ok("exactly one autosave check type fires for toggles_disabled_no_save_control, regardless of basis")
+
+
+def test_verified_autosave_statuses_emit_neither_unconfirmed_nor_not_registered() -> None:
+    """The two verified autosave statuses must emit neither
+    `denial-autosave-unconfirmed` nor `denial-not-registered`."""
+    def findings_for(status):
+        verification = {"status": status, "verified": True, "note": "confirmed"}
+        results = {"denial": {"action_result": {"status": status, "verification": verification}}}
+        return generate_findings(results, [], [])
+
+    for status in (checks.AUTOSAVE_VERIFIED_RELOAD, checks.AUTOSAVE_VERIFIED_STORAGE):
+        findings = findings_for(status)
+        assert not [f for f in findings if f["check_type"] == "denial-autosave-unconfirmed"], (status, findings)
+        assert not [f for f in findings if f["check_type"] == "denial-not-registered"], (status, findings)
+    ok("verified autosave statuses emit neither the unconfirmed finding nor the not-registered finding")
+
+
+def test_asymmetric_choice_fires_for_manual_required_regression_and_now_autosave() -> None:
+    """`asymmetric-choice` still does not fire for `manual_required` with a
+    direct accept available (regression - unchanged from before this ticket),
+    and now also fires for `toggles_disabled_no_save_control` under the same
+    accept-available condition."""
+    def findings_for(status):
+        results = {"denial": {"action_result": {
+            "status": status,
+            "resolution": {},
+            "direct_accept_available": True,
+            "click_count": 1,
+            "verification": {"status": status, "verified": False, "note": "n/a"},
+        }}}
+        return generate_findings(results, [], [])
+
+    manual = findings_for("manual_required")
+    assert not [f for f in manual if f["check_type"] == "asymmetric-choice"], manual
+
+    autosave = findings_for(checks.AUTOSAVE_NO_SAVE_CONTROL)
+    assert [f for f in autosave if f["check_type"] == "asymmetric-choice"], autosave
+    ok("asymmetric-choice still excludes manual_required and now also fires for the unconfirmed autosave status")
+
+
+def test_scenario_validity_reason_uses_autosave_note_not_generic_template() -> None:
+    """`invalid_reason` for an unverified autosave scenario must contain the
+    specific note from `classify_autosave_denial`, not the generic
+    'did not complete' template; a genuinely completed-but-unverified status
+    must still get today's 'was performed but no ... followed' template."""
+    note = (
+        "Optional denial toggles were operated and page state was mutated, but neither a reload "
+        "read-back nor a namespaced consent-storage write confirmed the choice persisted."
+    )
+    action_result = {
+        "status": checks.AUTOSAVE_NO_SAVE_CONTROL,
+        "verification": {"status": checks.AUTOSAVE_NO_SAVE_CONTROL, "verified": False, "note": note},
+    }
+    validity = _scenario_validity("deny", action_result, [])
+    assert not validity["valid"], validity
+    assert "toggles were operated" in validity["invalid_reason"], validity
+    assert "did not complete" not in validity["invalid_reason"], validity
+
+    completed_unverified = {
+        "status": "direct_reject_clicked",
+        "verification": {"status": "direct_reject_clicked", "verified": False, "note": ""},
+    }
+    validity2 = _scenario_validity("deny", completed_unverified, [])
+    assert not validity2["valid"], validity2
+    assert "was performed but no cookie, storage, CMP, or banner change" in validity2["invalid_reason"], validity2
+
+    manual_required_result = {
+        "status": "manual_required",
+        "verification": {"verified": False, "note": "No denial control was operated, so there is nothing to verify."},
+    }
+    manual_required_validity = _scenario_validity("deny", manual_required_result, [])
+    assert (
+        manual_required_validity["invalid_reason"]
+        == "The required denial click did not complete (status: manual_required)."
+    ), manual_required_validity
+
+    accept_not_found_result = {
+        "status": "accept_not_found",
+        "verification": {"verified": False, "note": "No accept control was operated, so there is nothing to verify."},
+    }
+    accept_not_found_validity = _scenario_validity("accept", accept_not_found_result, [])
+    assert (
+        accept_not_found_validity["invalid_reason"]
+        == "The required accept click did not complete (status: accept_not_found)."
+    ), accept_not_found_validity
+
+    ok("an unverified autosave scenario's invalid_reason carries the accurate note, and other statuses are unaffected")
+
+
 def test_validity_gating() -> None:
     findings = [
         {"id": "F-POST-DENIAL-TRACKING", "title": "Tracking continued after denial", "depends_on_scenarios": ["denial"]},
@@ -5461,6 +5716,14 @@ def main() -> int:
     test_context_options_device_emulation()
     test_merge_invalid_scenarios()
     test_denial_not_committed_finding()
+    test_denial_autosave_unconfirmed_finding()
+    test_denial_control_unresolved_excludes_autosave_status()
+    test_autosave_no_controls_examined_does_not_claim_a_mutation()
+    test_autosave_reload_reverted_reports_a_confirmed_discard()
+    test_autosave_status_emits_exactly_one_check_type()
+    test_verified_autosave_statuses_emit_neither_unconfirmed_nor_not_registered()
+    test_asymmetric_choice_fires_for_manual_required_regression_and_now_autosave()
+    test_scenario_validity_reason_uses_autosave_note_not_generic_template()
     test_validity_gating()
     test_unknown_scenario_dependency_fails_closed()
     test_scenario_validity_map()

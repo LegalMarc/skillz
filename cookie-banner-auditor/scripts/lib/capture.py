@@ -2361,7 +2361,8 @@ def _scenario_validity(action: str, action_result: dict[str, Any], errors: list[
         verification = action_result.get("verification") or {}
         verified = bool(verification.get("verified"))
         if not completed:
-            reason = f"The required {required} did not complete (status: {status or 'unknown'})."
+            note = verification.get("note") if status == checks.AUTOSAVE_NO_SAVE_CONTROL else None
+            reason = note or f"The required {required} did not complete (status: {status or 'unknown'})."
         elif not verified:
             reason = (
                 f"The {required} was performed but no cookie, storage, CMP, or banner change "

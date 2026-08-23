@@ -14,7 +14,6 @@ from .capture import (
     ACCEPT_PATTERNS,
     COMPLETED_DENIAL_STATUSES,
     REJECT_PATTERNS,
-    UNSAVED_PREFERENCE_STATUS,
 )
 from .util import (
     escape_markdown_cell,
@@ -433,42 +432,140 @@ def generate_findings(results: dict[str, Any], cookie_rows: list[dict[str, Any]]
     action = denial_result.get("action_result", {}) or {}
     status = str(action.get("status", ""))
     resolution = action.get("resolution") or {}
-    if status == UNSAVED_PREFERENCE_STATUS:
+    if status == checks.AUTOSAVE_NO_SAVE_CONTROL:
         toggle_result = action.get("toggle_result") or {}
         disabled = toggle_result.get("disabled") or []
         save_resolution = resolution.get("save") or {}
-        findings.append(_finding(
-            "denial-not-committed",
-            "Optional categories were switched off but no save control could be operated",
-            "high",
-            (
-                f"The scanner opened the preferences layer and switched {len(disabled)} "
-                "optional-category toggle(s) off, but no save control could be resolved "
-                + (
-                    f"(candidates were visible but none reached the confidence threshold; "
-                    f"best score {save_resolution.get('best_score')} against a threshold of "
-                    f"{save_resolution.get('threshold')})."
-                    if action.get("save_candidates") else
-                    "and no candidate save control was found in any frame."
-                )
-                + " The preference was therefore never committed."
-            ),
-            "Cannot be assessed. No denial was recorded, so nothing about post-denial behaviour is evidenced by this run.",
-            (
-                "No legal inference should be drawn about how denial is honoured. The interface "
-                "observation is separately relevant: a preferences layer that can be changed but "
-                "not saved would not record a choice for a real user either, though that must be "
-                "confirmed by hand before being treated as a UI defect rather than a scanner gap."
-            ),
-            (action.get("save_candidates", [])[:10] + disabled[:10]),
-            (
-                "Confirm by hand whether a save control exists in this CMP's preferences layer. If it "
-                "does, add its selector to references/cmp-selectors.json - taking care that the selector "
-                "is the save control and not the accept control, which would convert a denial into an "
-                "acceptance. If it does not, that is a UI finding to raise with the site owner."
-            ),
-            certainty="high",
-        ))
+        autosave_verification = action.get("verification")
+
+        if autosave_verification is None:
+            # No autosave classification ran for this CMP (checks.classify_
+            # autosave_denial was never invoked); the only fact this run
+            # establishes is that no save control could be resolved after the
+            # toggles were flipped.
+            findings.append(_finding(
+                "denial-not-committed",
+                "Optional categories were switched off but no save control could be operated",
+                "high",
+                (
+                    f"The scanner opened the preferences layer and switched {len(disabled)} "
+                    "optional-category toggle(s) off, but no save control could be resolved "
+                    + (
+                        f"(candidates were visible but none reached the confidence threshold; "
+                        f"best score {save_resolution.get('best_score')} against a threshold of "
+                        f"{save_resolution.get('threshold')})."
+                        if action.get("save_candidates") else
+                        "and no candidate save control was found in any frame."
+                    )
+                    + " The preference was therefore never committed."
+                ),
+                "Cannot be assessed. No denial was recorded, so nothing about post-denial behaviour is evidenced by this run.",
+                (
+                    "No legal inference should be drawn about how denial is honoured. The interface "
+                    "observation is separately relevant: a preferences layer that can be changed but "
+                    "not saved would not record a choice for a real user either, though that must be "
+                    "confirmed by hand before being treated as a UI defect rather than a scanner gap."
+                ),
+                (action.get("save_candidates", [])[:10] + disabled[:10]),
+                (
+                    "Confirm by hand whether a save control exists in this CMP's preferences layer. If it "
+                    "does, add its selector to references/cmp-selectors.json - taking care that the selector "
+                    "is the save control and not the accept control, which would convert a denial into an "
+                    "acceptance. If it does not, that is a UI finding to raise with the site owner."
+                ),
+                certainty="high",
+            ))
+        else:
+            # An autosave classification did run - branch the report on its
+            # basis rather than asserting a fixed mutation claim, since some
+            # bases (no toggle found at all) never mutated anything and one
+            # basis (a reload reading a toggle back ON) is affirmative
+            # evidence of a discard, not merely an unconfirmed choice.
+            basis = autosave_verification.get("basis")
+            mutated = bool(disabled)
+
+            if basis == "reload_reverted":
+                findings.append(_finding(
+                    "denial-autosave-discarded",
+                    "Optional categories were switched off but a reload showed the CMP discarded the choice",
+                    "critical",
+                    (
+                        f"The scanner opened the preferences layer and switched {len(disabled)} "
+                        "optional-category toggle(s) off. A subsequent reload read at least one toggle "
+                        "back ON, which is affirmative evidence that this CMP has no save control on "
+                        f"this path and discarded the choice. {autosave_verification.get('note', '')}"
+                    ),
+                    (
+                        "Fails the conservative baseline: the reload read-back is affirmative evidence "
+                        "that the denial was not persisted, not merely unconfirmed evidence."
+                    ),
+                    (
+                        "A choice the interface lets a user make but silently discards on reload is a "
+                        "strong FTC Section 5 deception fact pattern, because the consumer is told the "
+                        "toggle has an effect it does not have."
+                    ),
+                    [autosave_verification] + disabled[:10],
+                    (
+                        "Confirm by hand that this CMP's settings path discards the choice without a "
+                        "save control, then raise it with the site owner as a UI defect."
+                    ),
+                    certainty="high",
+                    depends_on_scenarios=[],
+                ))
+            elif basis == "no_controls_examined":
+                findings.append(_finding(
+                    "denial-autosave-unconfirmed",
+                    "No optional denial control was found to operate in the preferences layer",
+                    "high",
+                    (
+                        "The scanner opened the preferences layer but found no optional-category toggle "
+                        "to operate, so no choice was made and there is nothing to verify. "
+                        f"{autosave_verification.get('note', '')}"
+                    ),
+                    "Cannot be assessed. No denial was performed, so nothing about post-denial behaviour is evidenced by this run.",
+                    (
+                        "No legal inference should be drawn. This may be a scanner gap or a genuine "
+                        "absence of a denial control on this path; confirm by hand whether one exists in "
+                        "this CMP's preferences layer."
+                    ),
+                    [autosave_verification],
+                    (
+                        "Review screenshots and confirm by hand whether a denial control exists on this "
+                        "settings path. If it does, add its selector to references/cmp-selectors.json; if "
+                        "it does not, that is a UI finding to raise with the site owner."
+                    ),
+                    certainty="medium",
+                    depends_on_scenarios=[],
+                ))
+            else:
+                findings.append(_finding(
+                    "denial-autosave-unconfirmed",
+                    "Optional categories were switched off but the recorded choice could not be confirmed",
+                    "high",
+                    (
+                        (
+                            f"The scanner opened the preferences layer and switched {len(disabled)} "
+                            "optional-category toggle(s) off, "
+                            if mutated else
+                            "The scanner opened the preferences layer, "
+                        )
+                        + "but neither a post-reload read-back nor a namespaced consent-storage write "
+                        "could confirm that the CMP recorded the choice. "
+                        f"{autosave_verification.get('note', '')}"
+                    ),
+                    "Cannot be assessed as a completed denial. No recorded choice is evidenced by this run.",
+                    (
+                        "No legal inference should be drawn about whether the denial is honoured or "
+                        "discarded. The tool cannot tell whether the CMP is persisting the choice "
+                        "server-side in a way a browser scan cannot see; this is an observation of "
+                        "unconfirmed persistence, not a finding that tracking continued."
+                    ),
+                    [autosave_verification],
+                    "Confirm by hand whether this CMP's settings path persists the choice without a save "
+                    "control. If it does not, that is a UI finding to raise with the site owner.",
+                    certainty="medium",
+                    depends_on_scenarios=[],
+                ))
     elif status == "manual_required":
         reject_resolution = resolution.get("reject") or {}
         best_score = reject_resolution.get("best_score")
@@ -493,7 +590,7 @@ def generate_findings(results: dict[str, Any], cookie_rows: list[dict[str, Any]]
             "Review the candidate list and screenshots. If a denial control exists, add its selectors to references/cmp-selectors.json so future runs resolve it directly; if none exists, that is itself a UI finding to raise with the site owner.",
             certainty="high",
         ))
-    elif action.get("direct_accept_available") and status not in {"direct_reject_clicked"}:
+    if action.get("direct_accept_available") and status not in {"direct_reject_clicked", "manual_required"}:
         clicks = int(action.get("click_count") or 0)
         findings.append(_finding(
             "asymmetric-choice",
