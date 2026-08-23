@@ -59,6 +59,7 @@ from lib.capture import (
     capture_checkpoint,
     consent_snapshot,
     dwell_and_nudge,
+    execute_accept,
     execute_denial,
     exercise_forms,
     exercise_search,
@@ -287,6 +288,133 @@ def test_control_detection(page) -> None:
     control, _, resolution = find_control(page, "reject", None)
     assert control is not None, f"shadow-DOM control should be reachable: {resolution}"
     ok("controls inside an open shadow root are reachable")
+
+
+def test_accept_flow_completes_verifies_and_gates_the_scenario(page) -> None:
+    """`execute_accept`'s success path, which nothing exercised before.
+
+    Worth a real fixture rather than a unit stub: `accept_clicked` is the only
+    status outside `COMPLETED_DENIAL_STATUSES` that `_scenario_validity`
+    accepts as a completed interaction, so the accept scenario's entire
+    validity gate rests on this function setting that status and a verified
+    verification. Both halves are asserted here, and the not-found branch is
+    asserted alongside it - a change that made the click always report success
+    would pass a one-sided test.
+    """
+    holder = {"html": """
+        <!doctype html><html><body>
+        <div id="cookie-consent" role="dialog" style="position:fixed;bottom:0;left:0;right:0;padding:24px;background:white">
+          <p>We use cookies for analytics and advertising.</p>
+          <button id="accept">Accept All</button>
+        </div>
+        <script>
+          accept.addEventListener('click', () => {
+            document.cookie = 'consent_state=all; path=/; max-age=31536000';
+            document.getElementById('cookie-consent').remove();
+          });
+        </script></body></html>
+    """}
+    serve_fixture(page, holder)
+    page.context.clear_cookies()
+    page.goto("https://fixture.test/")
+
+    result = execute_accept(page, page.context, wait_ms=50)
+
+    assert result["status"] == "accept_clicked", result
+    assert result["click_count"] == 1, result
+    assert result["verification"]["verified"] is True, result["verification"]
+    assert result["consent_snapshot_before"] and result["consent_snapshot_after"], result
+    # The click really changed consent state, so the verification above is not
+    # certifying a no-op: the cookie is absent before and present after.
+    cookie_key = "fixture.test|consent_state"
+    assert cookie_key not in result["consent_snapshot_before"]["cookies"], result["consent_snapshot_before"]
+    assert cookie_key in result["consent_snapshot_after"]["cookies"], result["consent_snapshot_after"]
+
+    validity = _scenario_validity("accept", result, [])
+    assert validity["interaction_completed"] is True, validity
+    assert validity["valid"] is True, validity
+    ok("execute_accept clicks, verifies a real consent change, and marks the accept scenario valid")
+
+    # Same page with the control removed: the accept scenario must fail closed.
+    holder["html"] = "<!doctype html><html><body><p>No banner here.</p></body></html>"
+    page.context.clear_cookies()
+    page.goto("https://fixture.test/")
+    missing = execute_accept(page, page.context, wait_ms=50)
+    page.unroute("**/*")
+
+    assert missing["status"] == "accept_not_found", missing
+    assert missing["click_count"] == 0, missing
+    assert missing["verification"]["verified"] is False, missing["verification"]
+    assert "nothing to verify" in missing["verification"]["note"], missing["verification"]
+
+    missing_validity = _scenario_validity("accept", missing, [])
+    assert missing_validity["interaction_completed"] is False, missing_validity
+    assert missing_validity["valid"] is False, missing_validity
+    ok("an unresolved accept control fails closed instead of reporting a completed acceptance")
+
+
+def test_symmetry_findings_are_emitted_and_gated(page=None) -> None:
+    """E3's two finding-emission branches, neither of which ran before.
+
+    `measure_symmetry` itself was already unit-tested, but the code turning its
+    verdict into a finding was not - including the `differences` list, which is
+    the entire human-readable content of `measured-asymmetry`, and the
+    `depends_on_scenarios=["denial"]` that keeps both findings out of a report
+    whose denial never completed. Symmetry is a headline claim of this tool
+    ("measured, not inferred"), so an untested emission path here is a silent
+    wrong answer waiting to happen.
+    """
+    accept_control = {
+        "box": {"width": 154, "height": 46}, "frame_url": "https://example.test/",
+        "style": {"backgroundColor": "rgb(66, 91, 118)", "color": "rgb(255, 255, 255)",
+                  "fontSize": "14px", "fontWeight": "400"},
+    }
+    faint_reject = {**accept_control,
+                    "box": {"width": 60, "height": 20},
+                    "style": {**accept_control["style"], "backgroundColor": "rgb(240, 240, 240)"}}
+
+    def findings_for(reject_control):
+        results = {"denial": {"action_result": {
+            "status": "direct_reject_clicked",
+            "verification": {"verified": True, "note": "ok"},
+            "accept_candidates": [accept_control],
+            "reject_candidates": [reject_control],
+        }, "checkpoints": []}}
+        return generate_findings(results, [], [])
+
+    asymmetric = [f for f in findings_for(faint_reject) if f["check_type"] == "measured-asymmetry"]
+    assert len(asymmetric) == 1, [f["check_type"] for f in findings_for(faint_reject)]
+    observation = asymmetric[0]["observation"]
+    # The differences list is built from the measurement, not asserted as a
+    # fixed sentence: this fixture differs in size and background only, so a
+    # difference it does not have must not be named.
+    assert "different rendered size" in observation, observation
+    assert "different background colour" in observation, observation
+    assert "different font size" not in observation, observation
+    assert asymmetric[0]["depends_on_scenarios"] == ["denial"], asymmetric[0]
+
+    symmetric = [f for f in findings_for(dict(accept_control))
+                 if f["check_type"] == "measured-symmetry-satisfied"]
+    assert len(symmetric) == 1, symmetric
+    assert symmetric[0]["severity"] == "informational", symmetric[0]
+    assert symmetric[0]["depends_on_scenarios"] == ["denial"], symmetric[0]
+    # The two branches are mutually exclusive - a run must never report both.
+    both = {f["check_type"] for f in findings_for(faint_reject)}
+    assert "measured-symmetry-satisfied" not in both, both
+    ok("measured symmetry emits exactly one of asymmetry/satisfied, naming only the differences it measured")
+
+    # The gate: a denial that never completed cannot evidence how the controls
+    # were presented at the moment of choice, so both findings must be withheld.
+    for reject_control in (faint_reject, dict(accept_control)):
+        emitted, suppressed = partition_findings(
+            findings_for(reject_control),
+            {"denial": {"valid": False, "invalid_reason": "The required denial click did not complete."}},
+        )
+        symmetry_emitted = [f for f in emitted if f["check_type"].startswith("measured-")]
+        symmetry_suppressed = [f for f in suppressed if f["check_type"].startswith("measured-")]
+        assert not symmetry_emitted, symmetry_emitted
+        assert symmetry_suppressed, (emitted, suppressed)
+    ok("both symmetry findings are withheld when the denial scenario is invalid")
 
 
 def test_denial_flow_and_verification(page) -> None:
@@ -5813,6 +5941,8 @@ def main() -> int:
             test_serve_fixture_seam(page)
             test_control_detection(page)
             test_denial_flow_and_verification(page)
+            test_accept_flow_completes_verifies_and_gates_the_scenario(page)
+            test_symmetry_findings_are_emitted_and_gated()
             test_local_storage_same_length_rewrite_detected(page)
             test_settings_path_denial(page)
             test_settings_path_autosave_verified_by_reload(page)
