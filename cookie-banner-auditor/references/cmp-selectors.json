@@ -279,15 +279,17 @@
       "id": "secureprivacy",
       "name": "Secure Privacy",
       "fingerprint": {
-        "selectors": [".sp-cc-banner", "#sp-cc"],
-        "script_hosts": ["app.secureprivacy.ai", "cdn.secureprivacy.ai"]
+        "selectors": ["#ifrmCookieBanner", "#sp-preference-center", ".sp-cc-banner", "#sp-cc"],
+        "script_hosts": ["cmp.secureprivacy.ai", "app.secureprivacy.ai", "cdn.secureprivacy.ai"]
       },
-      "container": [".sp-cc-banner", "#sp-cc"],
-      "accept": [".sp-cc-accept-all", "#sp-cc-accept"],
-      "reject": [".sp-cc-reject-all", "#sp-cc-reject"],
-      "settings": [".sp-cc-settings"],
-      "save": [".sp-cc-save"],
-      "consent_storage": ["sp_consent", "spConsent"]
+      "iframe": true,
+      "container": ["#ifrmCookieBanner", "#sp-preference-center", ".sp-cc-banner", "#sp-cc"],
+      "accept": ["#sp-accept", ".sp-cc-accept-all", "#sp-cc-accept"],
+      "reject": ["#sp-decline", "[data-sp-onclick*='declineAll']", ".sp-cc-reject-all", "#sp-cc-reject"],
+      "settings": ["#sp-customize", ".sp-cc-settings"],
+      "save": ["[data-sp-onclick*='saveSelected']", ".sp-cc-save"],
+      "consent_storage": ["sp_consent", "sp_dynamic", "spConsent"],
+      "notes": "Verified 2026-08-24 against https://secureprivacy.ai (Secure Privacy's own deployment, cmp.secureprivacy.ai/secure-privacy-v2.js). Not one selector in this entry matched anything - not the fingerprint, not the container, not a single control. The whole `sp-cc-*` naming scheme is absent from the live product; the `sp-`-prefixed classes that do appear on the page (`sp-section`, `sp-container`, `sp-badge`) belong to the marketing site's design system, not the CMP. Only the `app.secureprivacy.ai` script host kept this entry fingerprinting at all, and every control kind would then have reported cmp_table_miss. Secure Privacy renders its banner inside an iframe, `#ifrmCookieBanner` (same-origin, no src, content injected), and its preference centre inside a second iframe nested under `#sp-preference-center`. _locate_by_selectors already walks `page.frames`, so cross-frame selectors resolve without special handling; the `iframe` flag added here is documentary, matching sourcepoint and trustarc, and no code reads it. Captured from inside the banner frame: `#sp-accept` (`data-sp-onclick=\"sp.saveAllConsents('acceptAll', 'cb')\"`, label 'Okay'), `#sp-decline` (`sp.saveAllConsents('declineAll', 'cb')`) and `#sp-customize` (`sp.openPreferenceCenter()`). Those three ids are the real banner controls and were added. The preference centre is the dangerous part and the reason `save` is an attribute selector rather than a class one. Its footer holds 'Save', 'Accept all' and 'Decline all' as three buttons that share the exact same class - `btn btn--primary` - and carry no ids at all. The only thing separating them is `data-sp-onclick`: `sp.saveAllConsents('saveSelected', 'pc')` for Save, `sp.saveAllConsents(true, 'pc')` for Accept all, `sp.saveAllConsents('declineAll', 'pc')` for Decline all. Any class-based save selector here is a coin flip between saving the current selection and accepting everything, which is precisely the failure this table exists to prevent, so `save` is `[data-sp-onclick*='saveSelected']` - a substring that appears on that button and on no other control. Do not 'simplify' it to `.btn--primary`. `consent_storage` is localStorage, not cookies: the site set no cookies at all, and consent lives in `sp_consent` (verified, `[]` while undecided) alongside `sp_dynamic`, which carries `subConsents` and `isConsentRecordingAllowed` and was added. `spConsent` was not observed and is left in place unverified. The original `sp-cc-*` selectors are likewise left as inert fallbacks - none of them can mis-click anything, since none of them match - but every one of them is recorded here as having matched nothing, so no later pass mistakes them for something this capture confirmed. One limit worth stating: this visitor was geolocated US-NY and was served no first-layer banner, so the banner frame was captured in its unrendered template state (some labels still read `{{text}}`). The ids and `data-sp-onclick` handlers are structural and unaffected, but no click was performed and nothing here proves what any of these controls writes."
     }
   ]
 }
