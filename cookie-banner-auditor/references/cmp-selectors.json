@@ -238,12 +238,12 @@
         "script_hosts": []
       },
       "container": [".klaro .cookie-notice", "#klaro .cn-body"],
-      "accept": [".cm-btn-success", ".cn-buttons .cm-btn-success"],
+      "accept": [".cm-btn-accept-all", ".cm-btn-success", ".cn-buttons .cm-btn-success"],
       "reject": [".cm-btn-decline", ".cn-decline", ".cm-btn-danger"],
-      "settings": [".cm-btn-info", ".cn-learn-more"],
+      "settings": [".cn-learn-more"],
       "save": [".cm-btn-accept"],
       "consent_storage": ["klaro"],
-      "notes": "'.cm-btn-success' is Klaro's accept-all control and is deliberately excluded from 'save', so a settings-path denial cannot end in an acceptance."
+      "notes": "Verified 2026-08-24 against https://klaro.org (the project's own deployment), capturing both the notice and the modal opened via `.cn-learn-more` ('Let me choose'). The old note claimed `.cm-btn-success` is Klaro's accept-all control. It is not, and that mistake was load-bearing. Live, `cm-btn-success` sits on TWO modal buttons: 'Accept all' (`cm-btn cm-btn-success cm-btn-accept-all`) and 'Accept selected' (`cm-btn cm-btn-success cm-btn-info cm-btn-accept`), and 'Accept selected' comes first in DOM order. So with the modal open, `accept` resolving through `.cm-btn-success` picked the *save* button - committing whatever the toggles currently said, all off by default, while reporting an acceptance. That is the Borlabs `#CookieBoxSaveButton` defect in mirror image, and it corrupts the accept-versus-denial comparison the run exists to make. `.cm-btn-accept-all` is the genuine accept-all and now leads the list. `.cm-btn-success` stays, because on the first layer it is the only thing that matches the accept button ('That's ok', which carries just `cm-btn cm-btn-success`), but it must never lead. `.cm-btn-info` was REMOVED from `settings`. It is not a settings control: live it is one of the classes on the 'Accept selected' button, and it matched nothing at all on the first layer. Left in place it meant that whenever the modal was already open, execute_denial's settings step would resolve to the save button and commit the selection before any toggle had been touched. The real settings control is `.cn-learn-more`, an `<a class='cm-link cn-learn-more'>`, confirmed to open the modal. `save` (`.cm-btn-accept`) is correct and was left alone. Class-token matching keeps it distinct from `.cm-btn-accept-all` - verified directly, each matched exactly one element, 'Accept selected' and 'Accept all' respectively - so the two never collide despite the shared prefix. `reject` is fine as written, though only `.cn-decline` and `.cm-btn-danger` match on the first layer; `.cm-btn-decline` appears on the modal's decline button. All three resolve to the same 'I decline' control. Clicking it wrote `klaro={\\\"konsens\\\":false,\\\"openstreetmap\\\":false}`, so `consent_storage` is confirmed as a cookie, per-service, and false means denied. The toggles in the modal are `#purpose-item-*` and `#service-item-*` checkboxes, including a `#purpose-item-disableAll` master switch."
     },
     {
       "id": "axeptio",
