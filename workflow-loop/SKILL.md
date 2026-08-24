@@ -169,7 +169,7 @@ Workflow({
     reviewerEffort: "xhigh",
     onBlocked: "skip",               // "skip" = park & grind on (AFK default); "halt" = stop at first block
     blockedLabel: "afk-blocked",     // triage label for parked tickets
-    reportIssue: "auto",             // run journal + end report: "auto" = create/reuse "AFK run log" issue; N = issue number; 0 = off
+    reportIssue: "auto",             // run journal + end report (DEFAULT "auto" = create/reuse "AFK run log" issue; N = issue number; 0 = off — but the head-blocker guard is blind without a journal)
     autoRecover: false,              // restart flows ONLY — stash a crashed run's dirty tree and proceed (see Overnight resilience)
     commitPrefix: "",                // optional subject convention
     maxTickets: 0,                   // 0 = all eligible
