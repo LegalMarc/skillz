@@ -221,13 +221,18 @@ const CODER_SCHEMA = {
 
 const REVIEWER_SCHEMA = {
   type: 'object',
-  required: ['verdict', 'findings', 'lesson'],
+  required: ['verdict', 'findings', 'additions', 'lesson'],
   properties: {
     verdict: { type: 'string', enum: ['APPROVE', 'REQUEST_CHANGES'] },
     findings: {
       type: 'string',
       description:
         'If REQUEST_CHANGES: numbered findings, each "N. <file>:<line> — <problem> — <required change>". If APPROVE: one line of evidence.',
+    },
+    additions: {
+      type: 'string',
+      description:
+        'Everything the diff adds beyond the ticket\'s stated scope that you ruled IN-SPIRIT (kept), one short line each — surfaced in the landing record so no addition lands unremarked. Empty string if the diff adds nothing beyond scope. Creep goes in findings as REQUEST_CHANGES, never here.',
     },
     lesson: {
       type: 'string',
@@ -323,6 +328,13 @@ const DISCOVER_PROMPT = `Sync gate and eligibility discovery for an autonomous b
 Repo: ${cfg.repo}   Loop label: ${cfg.label}   Branch: ${cfg.branch}
 ${setupPrefix}${ghAuthNote}
 1. SYNC GATE:
+   git remote get-url origin
+   - The origin URL must point at ${cfg.repo} (match the OWNER/REPO pair case-insensitively;
+     any host, protocol, or trailing ".git" is fine). args.repo only feeds the gh commands —
+     every git command in this loop acts on the CURRENT working directory, so a mismatch
+     means issues would be read from one repository and commits pushed to a different one,
+     and nothing downstream would notice. Do not proceed:
+     {ok:false, reason:"cwd origin <url> does not match args.repo ${cfg.repo} — launch the loop from the target repo's checkout", tickets:[], malformed:[], pendingCount:0, blocked:[]}
    git fetch origin
    git status --short
    git rev-list --left-right --count origin/${cfg.branch}...HEAD
@@ -492,7 +504,20 @@ ${journalIssue
    ${gh(`gh issue view ${ticket.number} --repo ${cfg.repo} --comments`)}
    You have NO context beyond this issue — read whatever code you need from the repo.
 ${referenceSection(ticket)}
-2b. CHECK FOR RECOVERABLE PRIOR WORK before writing anything new:
+2c. PRE-FLIGHT STALENESS CHECK — before changing anything, run the ticket's own verification
+   commands (its "## Required verification" section if present, otherwise "## Acceptance
+   criteria") against the UNTOUCHED tree. The healthy result is that at least one
+   ticket-specific command FAILS — that failure is the gap your change exists to close (the
+   red half of red–green). The repo-wide gate (${cfg.checkCommand || 'the full check command'})
+   passing is expected — the loop only runs on a green baseline — so it does not count.
+   If EVERY ticket-specific verification command already passes on the untouched tree, the
+   ticket is stale: what it asks for has most likely already shipped (landed by earlier work
+   the ticket predates). Do NOT implement a second, parallel version of an existing feature.
+   Return status "blocked", reason "pre-flight: ticket's own verification already passes on
+   the untouched tree — possibly already implemented; ticket needs human review, not code".
+   (No flaky retries here — a pre-flight failure is the expected result, not a problem.)
+
+2d. CHECK FOR RECOVERABLE PRIOR WORK before writing anything new:
    git stash list | grep -E '#${ticket.number}( |$)'
    If a stash for THIS ticket exists, it is a previous attempt that was interrupted
    (crash, usage limit, operator stop) — often already complete and verified. Prefer
@@ -549,10 +574,29 @@ The coder claims its checks pass. Do not trust the claim — verify everything y
 6. Judge against acceptance criteria and the issue Notes' invariants. For security or
    correctness tickets, the diff must include the attack/regression test, not just the
    happy path. Check the staged set is complete (nothing left unstaged that belongs).
-7. You may NOT edit anything. Findings only.
+7. PROHIBITIONS PASS — run this SEPARATELY from the acceptance criteria, and never skip it:
+   enumerate EVERY negative constraint in the issue body and its comments — each "do not",
+   "never", "must not", "only", "exactly" statement, the entire "## Out of scope" section,
+   and constraints buried in "## Notes" prose. QUOTE each one verbatim, then rule on it
+   explicitly: does the staged diff honour it — yes or no, with the evidence. This pass
+   exists because acceptance criteria are positive and executable, so they get checked by
+   default, while prohibitions are prose that reads as background — a diff can pass every
+   AC and still break the sentence that mattered most. Asked "does this violate the
+   ticket?" a reviewer says no; forced to enumerate and rule, a reviewer has to look. Any
+   violated prohibition is a REQUEST_CHANGES finding, no matter how green the checks are.
+8. SCOPE-ADDITIONS PASS: enumerate everything the staged diff ADDS beyond the ticket's
+   stated scope — new behaviors, new flags, new files, extra checks or types the ticket
+   never asked for. Additive creep is invisible to every other gate (old tests pass, new
+   tests pass, ACs are met), so it must be caught by enumeration here. Rule on each item:
+   - CREEP (unjustified, or it deserves its own ticket) → a REQUEST_CHANGES finding.
+   - IN-SPIRIT (small, and clearly serving THIS ticket's goal) → it may land, but list it
+     in "additions" so it is surfaced in the landing record for human review — an addition
+     may be kept or rejected later, but it must never land unremarked.
+9. You may NOT edit anything. Findings only.
 
 APPROVE only if you personally ran the verification and it passed (retry-passes disclosed
-in your evidence line). Otherwise REQUEST_CHANGES with numbered findings:
+in your evidence line) AND the prohibitions pass found no violations. Otherwise
+REQUEST_CHANGES with numbered findings:
 "N. <file>:<line> — <problem> — <required change>". When you REQUEST_CHANGES, also fill
 "lesson": one factual sentence a future coder in this repo should know to avoid this CLASS
 of mistake — empty string if the finding is purely ticket-specific.`
@@ -573,8 +617,13 @@ Return status "staged" with a ≤2-sentence summary of what changed, or "failed"
 ${cfg.coderNote ? `\nPROJECT NOTE (mandatory — read before staging):\n${cfg.coderNote}` : ''}`
 }
 
-function landPrompt(ticket, journalIssue) {
+function landPrompt(ticket, journalIssue, additions) {
   const evidenceFile = scratchFile(`land-${ticket.number}`)
+  // Reviewer-ruled in-spirit additions must land SURFACED, never silently — additive scope
+  // creep passes every green check, so this close-comment line is the only record of it.
+  const additionsLine = (additions || '').trim()
+    ? `\n      Beyond-scope additions (reviewer ruled in-spirit — kept, flagged for human review): ${additions.trim().slice(0, 400)}`
+    : ''
   const prefixHint = cfg.commitPrefix
     ? `Use the commit-subject prefix convention "${cfg.commitPrefix}".`
     : 'Match the subject PREFIX convention of recent commits (git log --oneline -5), e.g. "fix(scope): ...".'
@@ -602,9 +651,9 @@ ${setupPrefix}${ghAuthNote}
    case, not an attack. ${GH_CLOSE_NO_BODY_FILE_NOTE}
    Never build the comment as a double-quoted --comment string — do it in two safe steps
    instead:
-   a. Use your file-write tool (not a shell command) to write the exact line below,
+   a. Use your file-write tool (not a shell command) to write the exact text below,
       verbatim, to ${evidenceFile}:
-      Implemented in <sha>. Review approved (independent reviewer). Acceptance criteria: all passed — <one-line evidence>.
+      Implemented in <sha>. Review approved (independent reviewer). Acceptance criteria: all passed — <one-line evidence>.${additionsLine}
    b. ${gh(`gh issue comment ${ticket.number} --repo ${cfg.repo} --body-file ${evidenceFile}`)}
    c. ${gh(`gh issue close ${ticket.number} --repo ${cfg.repo}`)}
 ${journalIssue
@@ -936,6 +985,7 @@ for (let round = 1; round <= MAX_ROUNDS && !halted; round++) {
 
     // ── Review loop ──────────────────────────────────────────────────────────
     let approved = false
+    let approvedAdditions = ''
     let lastFindings = ''
     let reviewRounds = 0
 
@@ -954,7 +1004,8 @@ for (let round = 1; round <= MAX_ROUNDS && !halted; round++) {
 
       if (reviewed.verdict === 'APPROVE') {
         approved = true
-        log(`APPROVED (iter ${iter})`)
+        approvedAdditions = (reviewed.additions || '').trim()
+        log(`APPROVED (iter ${iter})${approvedAdditions ? ` — beyond-scope additions ruled in-spirit, will be surfaced on the issue: ${approvedAdditions.slice(0, 160)}` : ''}`)
         break
       }
       recordLesson(reviewed.lesson)
@@ -996,7 +1047,7 @@ for (let round = 1; round <= MAX_ROUNDS && !halted; round++) {
     }
 
     // ── Land ─────────────────────────────────────────────────────────────────
-    const landed = await agent(landPrompt(ticket, journalIssue), {
+    const landed = await agent(landPrompt(ticket, journalIssue, approvedAdditions), {
       ...mechanicalOpts({ label: `land-${ticket.number}`, phase: 'Land' }),
       schema: LAND_SCHEMA,
     })
