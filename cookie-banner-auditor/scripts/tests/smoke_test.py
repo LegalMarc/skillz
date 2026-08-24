@@ -3645,15 +3645,15 @@ def test_no_wall_clock_ordering_assertions() -> None:
 #: `save` onto an accept control silently converts a denial into an acceptance,
 #: "nothing says otherwise" is the state this project exists to avoid.
 #:
-#: The three with entirely empty notes are the sharpest end of it: borlabs,
-#: cookielawinfo, secureprivacy.
+#: The two with entirely empty notes are the sharpest end of it: borlabs and
+#: secureprivacy.
 #:
 #: Shrink this list; never add to it. `test_cmp_selectors_record_their_provenance`
 #: fails in both directions, so verifying an entry without removing it from here
 #: fails just as loudly as adding an unverified one.
 _CMP_ENTRIES_WITHOUT_RECORDED_PROVENANCE = frozenset({
     "hubspot", "onetrust", "usercentrics", "sourcepoint",
-    "borlabs", "cookielawinfo", "klaro", "secureprivacy",
+    "borlabs", "klaro", "secureprivacy",
 })
 
 #: A live-capture note carries the date it was taken. Every entry that has been
