@@ -3645,12 +3645,20 @@ def test_no_wall_clock_ordering_assertions() -> None:
 #: `save` onto an accept control silently converts a denial into an acceptance,
 #: "nothing says otherwise" is the state this project exists to avoid.
 #:
-#: Shrink this list; never add to it. `test_cmp_selectors_record_their_provenance`
+#: EMPTY as of 2026-08-24: all 19 entries now cite a dated live capture. That
+#: was worth doing rather than a formality - verifying the last ten found a
+#: positional OneTrust selector that resolved to Accept All on any site without
+#: a reject button, a Klaro accept that resolved to the save button whenever
+#: the modal was open, a Borlabs save button filed under `accept`, dead
+#: `settings`/`save` selectors on the current Usercentrics and CookieLawInfo
+#: releases, and a Secure Privacy entry whose every selector was fictional.
+#:
+#: Keep it empty; never add to it. `test_cmp_selectors_record_their_provenance`
 #: fails in both directions, so verifying an entry without removing it from here
-#: fails just as loudly as adding an unverified one.
-_CMP_ENTRIES_WITHOUT_RECORDED_PROVENANCE = frozenset({
-    "hubspot",
-})
+#: fails just as loudly as adding an unverified one. If a new CMP genuinely
+#: cannot be captured yet, add it here in the same commit that adds the entry
+#: and say why in `notes` - do not write a plausible selector from memory.
+_CMP_ENTRIES_WITHOUT_RECORDED_PROVENANCE: frozenset[str] = frozenset()
 
 #: A live-capture note carries the date it was taken. Every entry that has been
 #: through verification records one; nothing else in these notes uses this shape.
