@@ -54,7 +54,7 @@ Roles are capability tiers, not model names. Resolve them **at invoke time** fro
 |---|---|---|---|
 | Reviewer (supervisor) | **Highest available** | high (`reviewerEffort: "xhigh"` default) | Leave `reviewerModel` empty to inherit the session model — correct when the session runs a frontier model; set it explicitly only if the session model is NOT the strongest available |
 | Coder | **Mid tier** | high (`coderEffort: "high"` default) | Set `coderModel` to the runtime's cheaper capable tier if one exists; otherwise leave empty to inherit |
-| Discovery / land / park | inherits coder model | medium (fixed) | Mechanical git/gh work — no configuration needed |
+| Discovery / land / park / integrate | inherits coder model | medium (fixed) | Mechanical git/gh work — no configuration needed |
 
 Never write model names into issues, and never hardcode them in the script — the asymmetry that matters is *reviewer thinks harder than coder*, and that survives every model generation.
 
@@ -177,7 +177,15 @@ Workflow({
     coderNote: "",                   // project invariants for every coder prompt (see Adapting)
     referenceMode: false,            // mine per-ticket reference branches (adapt, don't copy)
     referenceNote: "",               // project specifics for referenceMode
-    dryRun: false                    // true = preview the eligible queue, change nothing
+    dryRun: false,                   // true = preview the eligible queue, change nothing
+    priority: [],                    // issue numbers to prefer first (tie-break only, never over deps)
+
+    // ── Parallel mode (opt-in; see "Parallel mode" below) ──
+    workers: 1,                      // tickets coded+reviewed CONCURRENTLY; 1 = sequential
+    workerSetupCommand: "",          // provision each worktree ($WL_MAIN, $WL_WORKSPACE)
+    worktreeRoot: "",                // default: ../.wl-worktrees (sibling of the checkout)
+    branchPrefix: "wl",              // per-ticket branches: wl/<issue>
+    shadowFootprints: false          // sequential run that MEASURES write-set prediction
   }
 })
 ```
@@ -256,18 +264,68 @@ End of run → one marker comment on the journal issue, posted even if nothing
 
 **Attended runs (`onBlocked: "halt"`):** stops at the first blocked ticket with work left staged for inspection — same discipline as a human running one ticket per `/clear`.
 
-The loop is sequential by design: one shared tree, one branch; parallel landings invite merge races.
+**Already-implemented tickets close themselves, with evidence.** When the coder's pre-flight finds the ticket's verification fully green on the untouched tree (or its work proves the feature already present), it returns `no_change_needed` instead of fabricating a no-op diff. The reviewer then independently re-verifies **every acceptance criterion against the current code** — a missed criterion is exactly the gap this hunt exists to catch — and only a confirmed no-change closes the issue, citing the pre-existing commit where identifiable. Stale tickets stop costing rebuild passes without anything closing unverified.
+
+**One writer to `branch`, always.** At `workers: 1` (the default) that is the single tree — the sequential loop above, unchanged. Parallel mode keeps the same invariant by a different route: the serialized Integrate phase is the only writer, and concurrent pushes to `branch` are never allowed.
+
+### Parallel mode (`workers: N`)
+
+The bottleneck in this loop is **model latency, not local CPU** — coders and reviewers spend most of their wall-clock thinking while the test gate is often ~1 core. `workers: N` overlaps those waits. `workers: 1` (default) is the sequential loop above, byte-for-byte.
+
+```
+Round:
+  Discover  →  as above (same sync gate, lint gate, head-blocker guard)
+  Partition →  one cheap agent per ticket predicts its WRITE-SET
+  Prep      →  N reusable WORKER SLOTS (git worktrees), each provisioned via
+               workerSetupCommand and PROVEN able to run the gate. Once, not per ticket.
+  Build     →  WORK-STEALING POOL, not waves. The moment a slot frees it takes the next
+               queued ticket whose write-set collides with nothing IN FLIGHT. Queue order
+               is preserved; a ticket is skipped only on a real conflict. Unknown
+               write-set ⇒ runs ALONE. Nobody fetches, pushes, merges, or touches <branch>.
+               Each ticket: coder → reviewer×N (same prohibitions/additions passes) → the
+               approved work is COMMITTED to its own wl/<n> branch. Blocked tickets are
+               parked in-worker: findings on the issue, label, journal marker — and the
+               work PRESERVED as a WIP commit on the ticket branch (worktree slots get
+               reset for the next ticket; a branch ref survives that).
+  Integrate →  BATCH FIRST: merge every approved branch, run the gate ONCE, push, close
+               each issue with evidence (+ any in-spirit additions). On red or conflict ⇒
+               back the whole thing out and re-integrate ONE AT A TIME to find the culprit.
+               Each fallback merge re-runs the gate; red ⇒ reset --hard, branch preserved,
+               journal marker closed out, ticket re-queued against the new base.
+```
+
+**Why a pool and not waves.** A wave is a barrier: it ends when its slowest member does, so pairing a 10-minute ticket with a 35-minute one idles a worker for 25 minutes. The pool has no barrier.
+
+**Why the batch merge.** The gate is the expensive *serial* step. Gating after every merge costs N gate runs — Amdahl's law eating the win. Merging all N and gating once costs one, and most batches are green. The one-at-a-time path still exists; it is now the *fallback*, and doubles as the bisect that identifies the culprit.
+
+**Why integration re-verifies at all.** Each branch was built and reviewed against `origin/<branch>` as it stood *before* its siblings landed. Per-branch green is not evidence the *combination* is green — two tickets can each pass alone and break together (a renamed helper, a changed fixture, a tightened assertion). That gate run is the only place the combination is ever tested, and it is what pays for the parallelism. Do not remove it.
+
+### Measure before you parallelise
+
+**Prediction accuracy *is* the parallelism.** One confidently-wrong write-set lets two colliding tickets run together, costing a full coder+reviewer pass — which at width 3 can exceed everything the parallelism saved. Do not guess at it: run once with `shadowFootprints: true`. That runs the ordinary **sequential** loop, predicts each ticket's write-set *before* the coder starts (so the prediction cannot be contaminated by seeing the answer), and scores it against what was actually staged — changing nothing about execution. Read the report:
+
+- **`missed`** — files the ticket really wrote that the prediction omitted. The dangerous half; each one is a collision that would have happened.
+- **`extra`** — over-prediction. Costs a little parallelism, nothing else.
+- **`safeRate`** — of the predictions you'd actually have scheduled on, the fraction with no miss.
+
+If `safeRate` is not near 1.0, tighten the file lists in the issue bodies (Partition grounds itself in what the issue names) before setting `workers > 1`.
+
+**Sizing.** The reviewer re-runs the gate too, so N workers means up to 2N concurrent gate runs — measure the gate's core usage before going wide. 2–3 is usually the knee. Below ~8–10 queued tickets the setup cost and conflict risk generally exceed the saving: stay at `workers: 1`.
+
+**`workerSetupCommand` is not optional in practice.** A worktree is a checkout, not a copy — no `node_modules`, no virtualenv, no build cache. Symlink them from `$WL_MAIN` into `$WL_WORKSPACE` (e.g. `ln -sfn $WL_MAIN/.venv $WL_WORKSPACE/.venv`). Prep proves a slot can run the gate before any ticket starts; if it can't, the run halts rather than failing every ticket for reasons unrelated to their code.
 
 ### Hygiene rules (encoded in the template — do not weaken)
 
 - **Sync before picking**; refuse to act if behind or ahead of the remote, or if the tree is dirty — ahead means a prior land committed without a successful push, and re-serving that ticket would let a later push ship it silently, unreviewed and with its issue never closed.
+- **ONE writer to `branch`, always.** Sequentially that's the single tree; in parallel mode it's the serialized Integrate phase. Concurrent pushes to `branch` are never allowed.
 - **Push after every commit**; a closed issue must cite a SHA reachable from the remote.
-- **Never merge/rebase on push rejection** — ff-only retry once, else stop.
-- **One loop per repo.** Never start a second concurrently.
+- **Never merge/rebase on push rejection** — ff-only retry once, else stop. Never hand-resolve an integration conflict — a hand-resolved merge has been reviewed by nobody; back it out and re-run the ticket against the new base.
+- **In parallel mode, re-run the full gate after every merge.** Per-branch green is never evidence the combination is green.
+- **One loop per repo.** Never start a second concurrently. (Parallel mode is *within* one loop — it is not a licence to run two.)
 - **Independent review, always**; the reviewer re-runs verification itself and never edits.
 - **Prohibitions are enumerated, never assumed** — the reviewer quotes every "do not / never / must not / out of scope" statement in the ticket and rules on each one. Acceptance criteria are executable and get checked by default; prohibitions are prose, and a diff can pass every AC while breaking the sentence that mattered most. A green suite is not a defense.
 - **Nothing lands unremarked** — the reviewer enumerates everything the diff adds beyond the ticket's scope. Creep is a finding; an in-spirit addition may land, but it is named in the issue-close comment for human review. Additive scope creep is invisible to every green check; enumeration is the only gate that sees it.
-- **Every ticket starts red** — the coder pre-flights the ticket's own verification on the untouched tree. If it already passes in full, the ticket is stale and gets parked, not rebuilt; a verification block that passes before the diff exists gates nothing.
+- **Every ticket starts red** — the coder pre-flights the ticket's own verification on the untouched tree. All-green means stale: the ticket is never rebuilt — it routes to `no_change_needed`, where the reviewer independently confirms every acceptance criterion before a verified close (or finds the real gap and sends it back to be implemented). A verification block that passes before the diff exists gates nothing.
 - **Parked work is stashed, never discarded**; every park leaves findings on the issue.
 - **Flaky retries are bounded and disclosed** — one re-run per failing command, ever; a retry-pass must say "passed on retry — possible flake" so nothing is silently masked (the reviewer re-runs it anyway).
 - **Attended is a last resort with a stated reason** — every ticket created without the loop label names the rung it stopped at and what would unblock it. "No CLI exists" is a verified claim, not an assumption; a ticket parked as attended without that reasoning is a defect in the decomposition, not a property of the work.
@@ -351,7 +409,8 @@ dirty tree. Attended runs keep the strict gate so a human inspects crashed state
 ## Failure modes & recovery
 
 - **"cwd origin does not match args.repo"** → the session's working directory is a different checkout than the repo the issues live in — `repo` only feeds `gh`; git acts on the cwd. Launch again from the target repo's checkout.
-- **Parked as "pre-flight: verification already passes"** → the ticket is stale — what it asks for likely already shipped. Find the landing commit and close the issue citing it, or rewrite the ticket around the gap that actually remains, then remove the label.
+- **Closed as "no change needed"** → the coder's pre-flight found the ticket's verification already green (or its work proved the feature present), and an independent reviewer confirmed every acceptance criterion against the current code before closing with evidence. Legitimate outcome for stale tickets — but if it happens often, tickets are going stale in the queue: decompose closer to execution.
+- **Parked with pre-flight findings** → the ticket's verification was already green but the reviewer could NOT confirm all acceptance criteria (or review was otherwise exhausted). The findings on the issue say which criterion is unmet or why the verification block is too weak to gate the ticket — rewrite it around the real gap, then remove the label.
 - **"behind origin" / "ahead of origin" / "dirty tree"** → aborts at the sync gate. "Ahead" usually means a prior land committed but its push failed — inspect with `git log origin/<branch>..HEAD`, then push by hand or reset if abandoned. Fix by hand, re-run (or see *Overnight resilience* for unattended flows).
 - **Parked tickets** (skip mode) → triage by label: `gh issue list --label afk-blocked`. Findings are in the issue comments; stashed work via `git stash list`; the run journal issue has the full landed/parked/failed report. Fix or refine the issue, remove the label, re-run.
 - **Lint-gate exclusions** → same label and triage path as parks; the comment says exactly which section is missing. Add the verification commands, remove the label, re-run.
@@ -360,4 +419,39 @@ dirty tree. Attended runs keep the strict gate so a human inspects crashed state
 - **Landing failed** → always halts (loop-level). Resolve the push problem by hand.
 - **"Queue drained" reads as "finished" but isn't** → check `pendingCount`/`blocked` in the result (or the log line right above it). `pendingCount: 0` means genuinely nothing left. `pendingCount > 0` means the remaining tickets are transitively blocked — the result's `blocked` array (and the log line) names which tickets and by what; that is not the same as done, and relaunching won't find new work until the blocker itself lands or is parked.
 - **`journalIssue: 0` in the result** → looks like a crash but usually isn't. It only means `reportIssue` was off, or discovery exited before ever reaching the "open the journal" step (e.g. it blocked at the sync gate, or the queue was empty on round 1). Check `reason` for the actual cause; don't treat `journalIssue: 0` alone as a malfunction.
-- **Resume** → invoke again (discovery recomputes from GitHub), or `Workflow({scriptPath, resumeFromRunId})` to reuse the prior run's cached agent results.
+- **Resume** → invoke again (discovery recomputes from GitHub), or `Workflow({scriptPath, resumeFromRunId})` to reuse the prior run's cached agent results (Claude Code; same-session only — on any harness, GitHub state is the durable resume state).
+
+Parallel mode only:
+
+- **Worktree prep failed** → the run halts before any ticket starts (and still posts its end-of-run marker). Usually `workerSetupCommand` didn't provision what the gate needs; fix it and re-run. Nothing was landed; nothing to clean up but the worktrees.
+- **Batch merge red** → two individually-green tickets broke in combination. The whole batch was backed out and re-integrated one at a time to find the culprit; the innocent ones land, the culprit's branch is **preserved** and its ticket re-queued. If the same pair keeps colliding, their write-sets were mispredicted — name the shared file in one issue's body so Partition separates them.
+- **`conflict` at integration** → merge aborted, branch preserved, journal marker closed out, ticket re-runs against the new base on the next round. Never hand-resolve: a resolved merge has been reviewed by nobody.
+- **Leftover worktrees** → `git worktree list`, then `git worktree remove --force <path> && git worktree prune`. Prep also clears stale slot paths before recreating them.
+- **Parked parallel tickets** → same triage as sequential parks (findings comment + label + journal marker), but the preserved work is a **WIP commit on the ticket's `wl/<n>` branch**, not a stash — recover with `git log wl/<n>`. The WIP commit is never merged by the loop; integration only merges approved branches.
+
+### What the tree means after a kill — check before you land anything
+
+A killed run leaves a dirty tree, and the same tree state means opposite things depending on which stage died. Pair the run journal (or your harness's agent transcripts) with the table before deciding.
+
+| Which agent died | What the tree holds | Safe action |
+|---|---|---|
+| **Coder**, mid-work | partial, unstaged, **never reviewed** | Park it (branch or stash, pushed if a branch), relaunch clean. **Do not land it**, however green its own tests are. |
+| **Fix round**, after a REQUEST_CHANGES | **staged** = the *rejected* attempt; **unstaged** = a half-written fix on top | Park **both layers as two commits** so the boundary survives. Landing the staged half ships code a review explicitly failed. |
+| **Reviewer** | staged, complete, **unreviewed** | Resume so the review actually runs. Do not hand-land. |
+| **Land/Integrate**, after an APPROVE | staged or committed, complete, **already approved** | The **only** safe hand-land: re-run the gate yourself, then commit/push/close. No review was skipped — only the mechanical step. |
+
+The trap is pattern-matching "loop died → salvage the staged diff → land it." That is right only in the last row. A gate passing is not evidence the diff is good; that is what the independent review is for.
+
+### `checkCommand` is global, but tickets are not
+
+One `checkCommand` runs for every ticket, so a fast variant chosen for throughput (e.g. skipping slow infra/integration tests) is **blind to whole classes of regression** on the tickets that touch those layers. The loop will not notice; the coder will report green. Either pass the full gate and accept the wall-clock, or state the stronger gate in the affected issue's own `## Required verification` so the coder and reviewer run it for that ticket.
+
+Related: a repo's "authoritative gate" may not cover its own CI. Check for test files the gate's discovery pattern misses and job steps that live outside the test directory entirely. Those gates are invisible locally and red `main` after the merge.
+
+### Watching a live run (Claude Code specifics)
+
+`~/.claude/projects/<project>/<session>/workflows/<runId>.json` **only exists once the run has ended** — a missing file is not a missing run. For a run in progress use `<session>/subagents/workflows/<runId>/journal.jsonl` (one line per agent completion — the milestone stream) and the `agent-*.jsonl` transcripts beside it (newest mtime vs now is the real alive-or-stalled check), plus new commits on `<branch>`. The state file truncates each agent's result to ~400 chars, but `journal.jsonl` stores the complete return value under `result` — mine it before paying for a re-review; a recovered multi-finding verdict can be posted onto the ticket so the next attempt inherits it. On other harnesses, your loop skeleton's own logs play this role.
+
+### Related
+
+`references/prospector.md` — a proposed phase that makes the loop find its own work. The loop verifies tickets, so it cannot find defects no ticket asked about; the prospector files them. Design only, not implemented.

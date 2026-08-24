@@ -25,14 +25,38 @@
 //     coderNote: "",                  // project invariants injected into every coder prompt
 //     referenceMode: false,           // mine per-ticket reference branches (adapt, don't copy)
 //     referenceNote: "",              // project-specific guidance for referenceMode
-//     dryRun: false
+//     dryRun: false,
+//     priority: [],                   // issue numbers to prefer first (tie-break only)
+//
+//     // ── Parallel mode (opt-in; 1 = the sequential loop, unchanged) ──
+//     workers: 1,                     // tickets coded+reviewed CONCURRENTLY
+//     workerSetupCommand: "",         // provision each worktree ($WL_MAIN, $WL_WORKSPACE)
+//     worktreeRoot: "",               // default: ../.wl-worktrees
+//     branchPrefix: "wl",             // per-ticket branches: wl/<issue>
+//     shadowFootprints: false         // sequential run that MEASURES write-set prediction
 //   }
 //
 // Design invariants (do not weaken):
-// - Sequential by design: one shared tree, one branch. Parallel lands invite merge races.
+// - ONE writer to `branch`, always. Sequentially that is the single tree; in parallel
+//   mode it is the serialized Integrate phase. Concurrent pushes to `branch` are never
+//   allowed.
 // - Push must succeed before an issue is closed. Never merge/rebase on push rejection.
 // - The reviewer never edits; findings go back to a coder agent.
-// - Parked work is stashed, never discarded; every park leaves findings on the issue.
+// - Parked work is preserved, never discarded — stashed (sequential) or committed to the
+//   ticket's own branch (parallel); every park leaves findings on the issue.
+// - In parallel mode the gate is re-run on `branch` after EVERY merge. Per-branch green is
+//   not evidence the combination is green — that is the whole risk parallelism introduces,
+//   and re-verifying at integration is the only thing that pays for it.
+//
+// WHEN PARALLEL IS WORTH IT
+// The bottleneck in this loop is model latency, not local CPU: coders and reviewers spend
+// most of their wall-clock thinking, while the test gate is often ~1 core. Overlapping
+// those waits is a real win. But it costs a worktree per worker (each needs its build deps
+// provisioned), and the reviewer re-runs the gate, so W workers means up to 2W concurrent
+// gate runs — measure the gate's core usage before going wide. 2-3 is usually the knee.
+// Below ~8-10 queued tickets the setup cost and conflict risk generally exceed the saving;
+// keep workers: 1. Run shadowFootprints over one queue first — prediction accuracy IS the
+// parallelism, and one confidently-wrong footprint costs a full coder+reviewer pass.
 
 export const meta = {
   name: 'workflow-loop',
@@ -43,6 +67,11 @@ export const meta = {
     { title: 'Review', detail: 'independent adversarial review of the staged diff' },
     { title: 'Land', detail: 'commit + push + close issue with evidence' },
     { title: 'Park', detail: 'stash blocked work, post findings to the issue, label for triage' },
+    // Parallel mode only (workers > 1); unused phases simply never appear.
+    { title: 'Partition', detail: 'predict each ticket write-set, pack conflict-free dispatch' },
+    { title: 'Prep', detail: 'one git worktree per worker slot, gate-capable' },
+    { title: 'Build', detail: 'code + review W tickets concurrently, each sandboxed' },
+    { title: 'Integrate', detail: 'serialized merge into the branch, full gate after EACH' },
   ],
 }
 
@@ -94,6 +123,31 @@ const cfg = {
   // Project-specific guidance appended to the reference instructions (what refactors
   // postdate the reference branches, what to modernize, known collisions).
   referenceNote: A.referenceNote || '',
+
+  // Issue numbers to prefer at the FRONT of the eligible queue, in this order.
+  // A tie-break within the topological order only — never overrides dependencies.
+  priority: Array.isArray(A.priority) ? A.priority : [],
+
+  // ── Parallel mode ─────────────────────────────────────────────────────────
+  // How many tickets to code+review CONCURRENTLY. 1 (default) is the sequential
+  // loop, unchanged: one tree, one branch, land in place. >1 gives each ticket
+  // its OWN git worktree and branch; nothing touches `branch` until a SERIALIZED
+  // integration phase merges the approved branches, re-running the gate per merge.
+  workers: Math.max(1, typeof A.workers === 'number' ? A.workers : 1),
+  // Run inside each fresh worktree before any verification (symlink node_modules,
+  // .venv, etc.). Worktrees are checkouts, NOT copies — they have no build deps.
+  // Receives $WL_MAIN (the primary checkout) and $WL_WORKSPACE (this worktree).
+  workerSetupCommand: A.workerSetupCommand || '',
+  // Where worktrees live. Default: a sibling of the primary checkout, so the
+  // repo's own ignore rules and file-watchers never see them.
+  worktreeRoot: A.worktreeRoot || '',
+  // Branch-name prefix for per-ticket branches in parallel mode.
+  branchPrefix: A.branchPrefix || 'wl',
+  // SHADOW MODE. Runs the ordinary SEQUENTIAL loop, but predicts each ticket's
+  // write-set first and scores the prediction against what the coder actually
+  // staged. Changes nothing about execution — it answers "is footprint prediction
+  // accurate enough to schedule on?" BEFORE you bet wall-clock on it.
+  shadowFootprints: !!A.shadowFootprints,
 }
 
 if (!cfg.repo) {
@@ -212,7 +266,12 @@ const CODER_SCHEMA = {
   type: 'object',
   required: ['status', 'summary', 'files_changed', 'reason'],
   properties: {
-    status: { type: 'string', enum: ['staged', 'blocked', 'failed'] },
+    status: {
+      type: 'string',
+      enum: ['staged', 'no_change_needed', 'blocked', 'failed'],
+      description:
+        'no_change_needed = verified the ticket is already fully implemented on the target branch; nothing to stage.',
+    },
     summary: { type: 'string', description: 'max 2 sentences' },
     files_changed: { type: 'array', items: { type: 'string' } },
     reason: { type: 'string', description: 'max 1 sentence' },
@@ -257,6 +316,113 @@ const PARK_SCHEMA = {
   required: ['status', 'reason'],
   properties: {
     status: { type: 'string', enum: ['parked', 'failed'] },
+    reason: { type: 'string', description: 'max 1 sentence' },
+  },
+}
+
+const CLOSE_SCHEMA = {
+  type: 'object',
+  required: ['status', 'evidence_sha', 'reason'],
+  properties: {
+    status: { type: 'string', enum: ['closed', 'failed'] },
+    evidence_sha: {
+      type: 'string',
+      description: 'short SHA of the pre-existing commit that already implements this, if identifiable; else empty',
+    },
+    reason: { type: 'string', description: 'max 1 sentence' },
+  },
+}
+
+// Parallel mode only. Predicted write-set per ticket, used to avoid dispatching
+// two colliding tickets at once.
+const FOOTPRINT_SCHEMA = {
+  type: 'object',
+  required: ['number', 'files', 'confidence'],
+  properties: {
+    number: { type: 'number' },
+    files: {
+      type: 'array',
+      items: { type: 'string' },
+      description: 'repo-relative paths this ticket will likely MODIFY (not merely read)',
+    },
+    confidence: {
+      type: 'string',
+      enum: ['high', 'low'],
+      description: 'low = the ticket does not name its files; treat as conflicting with everything',
+    },
+  },
+}
+
+// Parallel mode only. Worktree provisioning result.
+const PREP_SCHEMA = {
+  type: 'object',
+  required: ['ok', 'reason', 'ready'],
+  properties: {
+    ok: { type: 'boolean' },
+    reason: { type: 'string' },
+    ready: {
+      type: 'array',
+      items: {
+        type: 'object',
+        required: ['number', 'branch', 'workspace'],
+        properties: {
+          number: { type: 'number' },
+          branch: { type: 'string' },
+          workspace: { type: 'string' },
+        },
+      },
+    },
+  },
+}
+
+// Parallel mode only. Result of committing one approved ticket to its own branch.
+const BRANCH_SCHEMA = {
+  type: 'object',
+  required: ['status', 'branch', 'reason'],
+  properties: {
+    status: { type: 'string', enum: ['ready', 'failed'] },
+    branch: { type: 'string', description: 'branch holding the commit, or empty' },
+    reason: { type: 'string', description: 'max 1 sentence' },
+  },
+}
+
+// Parallel mode only. ONE attempt to merge ALL approved branches, gated once.
+// The cheap path: N merges cost one gate run instead of N serialized ones.
+// On red or conflict it backs out entirely and the loop falls back to
+// one-at-a-time integration to find the culprit.
+const BATCH_INTEGRATE_SCHEMA = {
+  type: 'object',
+  required: ['status', 'landed', 'reason'],
+  properties: {
+    status: {
+      type: 'string',
+      enum: ['landed', 'red', 'conflict', 'failed'],
+      description: 'red/conflict = fully backed out, all branches preserved, nothing closed',
+    },
+    landed: {
+      type: 'array',
+      items: {
+        type: 'object',
+        required: ['number', 'commit_sha'],
+        properties: { number: { type: 'number' }, commit_sha: { type: 'string' } },
+      },
+      description: 'only populated when status is "landed"; empty otherwise',
+    },
+    reason: { type: 'string', description: 'max 1 sentence; on red, name the failing check' },
+  },
+}
+
+// Parallel mode only. One serialized merge of an approved branch into `branch`.
+const INTEGRATE_SCHEMA = {
+  type: 'object',
+  required: ['status', 'commit_sha', 'reason'],
+  properties: {
+    status: {
+      type: 'string',
+      enum: ['landed', 'conflict', 'gate_red', 'failed'],
+      description: 'conflict/gate_red = backed out cleanly, branch preserved for a retry',
+    },
+    commit_sha: { type: 'string' },
     reason: { type: 'string', description: 'max 1 sentence' },
   },
 }
@@ -434,7 +600,10 @@ ${cfg.reportIssue
    (e.g. a lint-gate misparse that has since been corrected) — that is not a wasted window.
 
 4. ORDER the remaining eligible issues topologically (dependencies first). If you detect
-   a dependency cycle, exclude the cycle members and mention it in reason.
+   a dependency cycle, exclude the cycle members and mention it in reason.${cfg.priority.length ? `
+   PRIORITY TIE-BREAK: among issues whose dependencies are equally satisfied, place these
+   FIRST, in exactly this order: ${cfg.priority.map((n) => `#${n}`).join(', ')}.
+   This only breaks ties — it must NEVER place an issue ahead of one of its own dependencies.` : ''}
 
 5. Return {ok:true, reason:"<N> eligible", tickets:[{number,title}...],
    malformed:[{number, why}...] (empty array if none),
@@ -459,23 +628,24 @@ function journalLocatorHint() {
 
 // When referenceMode is on, derive the ticket's bracketed id (e.g. "[ABC-004]" → "abc-004")
 // and tell the coder to mine the matching reference branch's tip commit as a guide to adapt.
-function referenceSection(ticket) {
+function referenceSection(ticket, ws) {
   if (!cfg.referenceMode) return ''
   const m = ticket.title.match(/\[([A-Za-z]+-\d+)\]/)
   if (!m) return ''
+  const g = gitC(ws)
   const id = m[1].toLowerCase()
   const glob = `*${id}-*`
   return `
 2b. REFERENCE IMPLEMENTATION — use this; it is the main accelerator for this loop:
    A prior implementation of THIS EXACT ticket may exist on a reference branch.
-   - Find it:  git branch -a --list "${glob}"
-   - Its per-ticket diff is that branch's TIP commit: git show <branch> — read the WHOLE commit.
+   - Find it:  ${g} branch -a --list "${glob}"
+   - Its per-ticket diff is that branch's TIP commit: ${g} show <branch> — read the WHOLE commit.
    - ADAPT, never blind-copy: the reference predates later work on ${cfg.branch}, so modernize
      its wiring to CURRENT branch conventions (current helper names, current dependency seams),
      and re-derive anything that collides with state that already landed (migration numbers,
      schema already present, files earlier tickets already handled).
    - COMPLETENESS — the #1 failure mode: list the reference's full changed-file set
-     (git show --name-only <branch>) and account for EVERY file — skip what earlier tickets
+     (${g} show --name-only <branch>) and account for EVERY file — skip what earlier tickets
      already landed, port what remains. If the reference tightens a constraint (e.g. makes a
      column NOT NULL), you MUST port every WRITER it updated too — a partial copy that adds
      constraints without updating writers passes unit tests and breaks in production.
@@ -484,12 +654,52 @@ function referenceSection(ticket) {
 ${cfg.referenceNote ? `   PROJECT REFERENCE NOTES:\n${cfg.referenceNote}\n` : ''}`
 }
 
-function coderPrompt(ticket, journalIssue) {
+// ─── Parallel mode: workspace scoping ────────────────────────────────────────
+//
+// In parallel mode every ticket gets its own git worktree — a full checkout
+// sharing one .git, so N tickets can be edited and tested at once without
+// seeing each other. `ws` is that worktree's absolute path; undefined means the
+// primary checkout, i.e. the original sequential behavior, unchanged.
+//
+// The staged INDEX is what carries state between the coder, the reviewer and
+// the fix rounds. A worktree has its own index on disk, so `git add` in the
+// coder agent is still visible to the reviewer agent that follows it — the
+// same handoff the sequential loop relies on, just scoped to this worktree.
+const gitC = (ws) => (ws ? `git -C ${ws}` : 'git')
+function workspaceBlock(ws) {
+  if (!ws) return ''
+  return `
+WORKSPACE — read this before running anything:
+  Your workspace is a dedicated git worktree: ${ws}
+  Other tickets are being worked CONCURRENTLY in sibling worktrees. Staying
+  inside yours is what keeps them from corrupting each other.
+  - Run every git command as: git -C ${ws} <cmd>   (never bare \`git\`)
+  - Run verification/test commands from INSIDE the worktree (cd ${ws} first in each shell)
+  - Edit, read and test ONLY files under ${ws}
+  - Do NOT run \`git pull\`, \`git push\`, \`git merge\`, \`git rebase\`, or \`git fetch\`.
+    Integration onto ${cfg.branch} is a separate, serialized phase — not yours.
+    (Workspaces share one .git; a concurrent fetch races the others.)
+  - Do NOT commit. Stage only; the loop commits for you.
+  - Your changes will be verified again after merge. Do not compensate for
+    other tickets' work — it is not in your tree and must not be.
+`
+}
+
+function coderPrompt(ticket, journalIssue, ws, branch) {
+  const g = gitC(ws)
+  const syncGate = ws
+    ? `1. CLAIM YOUR WORKSPACE. It is a reusable worker slot that may still hold a
+   previous ticket's work — start from a clean base cut from ${cfg.branch}:
+     git -C ${ws} reset --hard && git -C ${ws} clean -fd
+     git -C ${ws} checkout -B ${branch} origin/${cfg.branch}
+     git -C ${ws} status --short          (MUST be empty before you edit anything)
+   This \`checkout -B\` is the ONE checkout you may run. Do not switch branches again.`
+    : `1. SYNC GATE: git fetch origin && git status --short
+   - If behind origin/${cfg.branch} → return blocked, reason "behind origin".`
   return `You are the CODER in an autonomous build loop. Work ONLY issue #${ticket.number}.
 Repo: ${cfg.repo}   Branch: ${cfg.branch}
-${setupPrefix}${ghAuthNote}
-1. SYNC GATE: git fetch origin && git status --short
-   - If behind origin/${cfg.branch} → return blocked, reason "behind origin".
+${setupPrefix}${ghAuthNote}${workspaceBlock(ws)}
+${syncGate}
 
 ${journalIssue
   ? `1b. RUN JOURNAL MARKER — before any other work, post one line so a mid-ticket crash (this
@@ -503,7 +713,7 @@ ${journalIssue
    any "Implementation guidance" comments are authoritative):
    ${gh(`gh issue view ${ticket.number} --repo ${cfg.repo} --comments`)}
    You have NO context beyond this issue — read whatever code you need from the repo.
-${referenceSection(ticket)}
+${referenceSection(ticket, ws)}
 2c. PRE-FLIGHT STALENESS CHECK — before changing anything, run the ticket's own verification
    commands (its "## Required verification" section if present, otherwise "## Acceptance
    criteria") against the UNTOUCHED tree. The healthy result is that at least one
@@ -511,20 +721,24 @@ ${referenceSection(ticket)}
    red half of red–green). The repo-wide gate (${cfg.checkCommand || 'the full check command'})
    passing is expected — the loop only runs on a green baseline — so it does not count.
    If EVERY ticket-specific verification command already passes on the untouched tree, the
-   ticket is stale: what it asks for has most likely already shipped (landed by earlier work
-   the ticket predates). Do NOT implement a second, parallel version of an existing feature.
-   Return status "blocked", reason "pre-flight: ticket's own verification already passes on
-   the untouched tree — possibly already implemented; ticket needs human review, not code".
+   ticket may be STALE — what it asks for has likely already shipped (landed by earlier
+   work the ticket predates). Do NOT rebuild it and do NOT fabricate a no-op diff. Instead
+   check every acceptance criterion DIRECTLY against the current code, not just the
+   commands: if all are genuinely met, return status "no_change_needed" (files_changed: [],
+   your verification evidence in summary) — a valid, complete outcome that an independent
+   reviewer will re-verify before anything is closed. If a criterion is NOT actually met
+   even though the commands pass, the verification block is too weak to gate this ticket —
+   implement the gap AND make the verification actually exercise it.
    (No flaky retries here — a pre-flight failure is the expected result, not a problem.)
 
 2d. CHECK FOR RECOVERABLE PRIOR WORK before writing anything new:
-   git stash list | grep -E '#${ticket.number}( |$)'
+   ${g} stash list | grep -E '#${ticket.number}( |$)'
    If a stash for THIS ticket exists, it is a previous attempt that was interrupted
    (crash, usage limit, operator stop) — often already complete and verified. Prefer
    RECOVERING it over re-implementing from scratch:
-   - Inspect it first: git stash show -p 'stash@{N}'
-   - If it applies cleanly to current main and matches the ticket's intent, apply it
-     (git stash apply 'stash@{N}' — apply, do NOT drop), then continue at step 4 and
+   - Inspect it first: ${g} stash show -p 'stash@{N}'
+   - If it applies cleanly to current ${cfg.branch} and matches the ticket's intent, apply it
+     (${g} stash apply 'stash@{N}' — apply, do NOT drop), then continue at step 4 and
      re-verify it yourself. Re-verification is mandatory; inheriting a prior "it passed"
      claim is not.
    - Re-derive from scratch ONLY if the stash conflicts against current main, is clearly
@@ -546,23 +760,40 @@ ${lessonsBlock()}
    bypass the layer your change constrains (migrations, infra, external seams), so passing
    units alone proves nothing about that layer.
    ${FLAKY_RULE}
-   git diff --check (must be clean).
+   ${g} diff --check (must be clean).
 
-5. STAGE the complete change set: git add <files>; confirm git diff --cached --stat
-   matches the working tree exactly (no stray or missing files).
+5. If the ticket needed a real change: STAGE the complete change set: ${g} add <files>;
+   confirm ${g} diff --cached --stat matches the working tree exactly (no stray or missing
+   files). If instead your work in steps 2c-4 proved the ticket's functionality is ALREADY
+   fully present — ${g} diff and ${g} diff --cached are BOTH empty once you're done checking —
+   return status "no_change_needed" per step 2c instead of "staged".
 
 Return status "staged" (summary ≤2 sentences, files_changed, reason "checks green"),
-or "blocked"/"failed" with a 1-sentence reason. Do not commit.
+or "no_change_needed" per step 2c, or "blocked"/"failed" with a 1-sentence reason. Do not commit.
 ${cfg.coderNote ? `\nPROJECT NOTE (mandatory — read before staging):\n${cfg.coderNote}` : ''}`
 }
 
-function reviewerPrompt(ticket, iter) {
+function reviewerPrompt(ticket, iter, noChangeNeeded, ws) {
+  const g = gitC(ws)
+  const step1 = noChangeNeeded
+    ? `1. The coder claims issue #${ticket.number} is ALREADY FULLY IMPLEMENTED on ${cfg.branch}
+   and needs NO code change. Do not accept this on faith — independently verify it:
+   - ${g} status --short && ${g} diff && ${g} diff --cached — ALL must be empty. If anything is
+     staged or unstaged, REQUEST_CHANGES: the coder mis-reported its status.
+   - Try to identify the pre-existing commit that already implements this (${g} log -S"<distinctive
+     string>", ${g} blame, ${g} log --oneline -- <file>) — strengthens the evidence if found, not
+     required.
+   - Actively hunt for a real gap: check EVERY acceptance criterion against the current code
+     yourself, not just the commands the coder ran. A missed criterion here is exactly the
+     failure mode to catch — if you find one, REQUEST_CHANGES with the specific gap and treat
+     it like any other missing implementation.`
+    : `1. Read the staged diff: ${g} diff --cached`
   return `You are an INDEPENDENT, adversarial reviewer. Issue #${ticket.number}, iteration ${iter}/${cfg.maxReviewIterations}.
 Repo: ${cfg.repo}
-${setupPrefix}${ghAuthNote}
+${setupPrefix}${ghAuthNote}${workspaceBlock(ws)}
 The coder claims its checks pass. Do not trust the claim — verify everything yourself.
 
-1. Read the staged diff: git diff --cached
+${step1}
 2. Re-read the ticket's acceptance criteria AND comments: ${gh(`gh issue view ${ticket.number} --repo ${cfg.repo} --comments`)}
 3. Re-run the ticket's verification commands yourself — from its "## Required verification"
    section if present, otherwise its "## Acceptance criteria" section.
@@ -570,7 +801,7 @@ The coder claims its checks pass. Do not trust the claim — verify everything y
    If the coder disclosed a "passed on retry" flake, re-run that command yourself with
    extra attention — two independent retry-passes may be a flake; a failure is real.
 4. ${checkLine}
-5. git diff --check (clean).
+5. ${g} diff --check (clean).
 6. Judge against acceptance criteria and the issue Notes' invariants. For security or
    correctness tickets, the diff must include the attack/regression test, not just the
    happy path. Check the staged set is complete (nothing left unstaged that belongs).
@@ -602,16 +833,17 @@ REQUEST_CHANGES with numbered findings:
 of mistake — empty string if the finding is purely ticket-specific.`
 }
 
-function fixPrompt(ticket, iter, findings) {
+function fixPrompt(ticket, iter, findings, ws) {
+  const g = gitC(ws)
   return `You are the CODER addressing review findings for issue #${ticket.number} (fix round ${iter}).
 Repo: ${cfg.repo}
-${setupPrefix}${ghAuthNote}
+${setupPrefix}${ghAuthNote}${workspaceBlock(ws)}
 Findings (fix each exactly; change nothing else):
 ${findings}
 ${cfg.referenceMode ? 'If useful, the reference branch for this ticket (see git branch -a) shows how the original handled this — adapt, do not blind-copy.\n' : ''}${lessonsBlock()}
 Then re-run the ticket's verification commands — its "## Required verification" section if present, otherwise its "## Acceptance criteria" section (${gh(`gh issue view ${ticket.number} --repo ${cfg.repo}`)} if needed). ${checkLine}
 ${FLAKY_RULE}
-git diff --check (clean). Re-stage the COMPLETE set: git add <files>; confirm git diff --cached --stat.
+${g} diff --check (clean). Re-stage the COMPLETE set: ${g} add <files>; confirm ${g} diff --cached --stat.
 
 Return status "staged" with a ≤2-sentence summary of what changed, or "failed" with a 1-sentence reason. Do not commit.
 ${cfg.coderNote ? `\nPROJECT NOTE (mandatory — read before staging):\n${cfg.coderNote}` : ''}`
@@ -707,6 +939,447 @@ ${journalIssue
 `
     : ''}
 Return {status:"parked", reason:"<1 sentence>"} or {status:"failed", reason:"<why parking failed>"}.`
+}
+
+// Both modes: close a ticket the coder AND an independent reviewer confirmed is already
+// fully implemented — nothing to commit or push, but the close still carries evidence.
+function closeOnlyPrompt(ticket, journalIssue, ws) {
+  const g = gitC(ws)
+  const evidenceFile = scratchFile(`close-${ticket.number}`)
+  return `You are the COMMITTER closing ALREADY-IMPLEMENTED issue #${ticket.number} — the coder
+and an independent reviewer both confirmed this is already fully done on ${cfg.branch}, so there
+is nothing to commit or push.
+Repo: ${cfg.repo}
+${setupPrefix}${ghAuthNote}
+1. Confirm there is truly nothing to land: ${g} status --short
+   Only "??" untracked-and-unrelated lines are acceptable. If ANYTHING else is present (staged
+   or modified tracked files), do not close — return failed, reason "unexpected dirty tree".
+2. Try to identify the existing commit on ${cfg.branch} that already implements this, for
+   citation: ${g} log -S"<distinctive string from the ticket>" -- <relevant file>, or
+   ${g} log --oneline -- <relevant file>. If you can identify it confidently, note its short
+   SHA. If not, leave evidence_sha blank — that's fine, it does not block closing.
+3. Close with the verification evidence (if gh says it is already closed, treat that as
+   success). ${GH_CLOSE_NO_BODY_FILE_NOTE}
+   a. Use your file-write tool (not a shell command) to write the exact text below,
+      verbatim, to ${evidenceFile}:
+      Verified already implemented on ${cfg.branch}<if evidence_sha found, append: " (landed in <sha>)">. No code change needed — independent reviewer confirmed every acceptance criterion. Evidence: <one-line verification summary>.
+   b. ${gh(`gh issue comment ${ticket.number} --repo ${cfg.repo} --body-file ${evidenceFile}`)}
+   c. ${gh(`gh issue close ${ticket.number} --repo ${cfg.repo}`)}
+${journalIssue
+    ? `4. RUN JOURNAL MARKER — close out the "Started" marker so this ticket reads as finished:
+   ${gh(`gh issue comment ${journalIssue} --repo ${cfg.repo} --body "✅ Landed #${ticket.number} (no change needed — verified already implemented)"`)}
+`
+    : ''}
+Return {status:"closed", evidence_sha:"<short sha or empty>", reason:"..."} or
+{status:"failed", evidence_sha:"", reason:"..."}.`
+}
+
+// ─── Parallel mode: footprint → worker slots → pool → serialized integration ─
+
+function footprintPrompt(ticket) {
+  return `Predict the WRITE-SET of issue #${ticket.number} in ${cfg.repo}. Do not implement anything.
+${setupPrefix}${ghAuthNote}
+${gh(`gh issue view ${ticket.number} --repo ${cfg.repo} --comments`)}
+
+List the repo-relative paths this ticket will MODIFY. Files it merely reads do not count —
+two tickets reading the same file is harmless; two tickets writing it is a merge conflict.
+
+Be GENEROUS on the write side. A missed file causes a real conflict later; a spurious one
+only costs a little parallelism. Include the test files the ticket will add or change, and
+any shared registry/index/barrel file a new module must be registered in — those are the
+classic surprise conflicts.
+
+Ground it in the repo, don't guess from the title: if the issue names paths, resolve them;
+if it names a symbol, grep for where that symbol lives.
+
+confidence "high" only if the issue names its files or you located them in the repo.
+"low" if the ticket is vague or exploratory — the loop then treats it as conflicting with
+everything and runs it alone, which is the safe reading.`
+}
+
+function prepPrompt(slots) {
+  const lines = slots
+    .map((s) => `   - slot ${s.number} → worktree ${s.workspace} (idle branch ${s.branch})`)
+    .join('\n')
+  return `Prepare reusable WORKER WORKTREES so several tickets can be built CONCURRENTLY.
+Repo: ${cfg.repo}   Primary checkout: $(git rev-parse --show-toplevel)   Base: origin/${cfg.branch}
+${setupPrefix}${ghAuthNote}
+These are SLOTS, not per-ticket checkouts: each is provisioned once and reused for ticket
+after ticket, so the expensive setup in step 3 is paid once rather than per ticket. Each
+coder resets its slot to a fresh branch off origin/${cfg.branch} before it starts.
+
+1. From the PRIMARY checkout: git fetch origin && git status --short
+   - Tree must be clean (only "??" lines are acceptable) and NOT behind origin/${cfg.branch}.
+     If it is dirty or behind → return ok:false with the reason; create nothing.
+   - This is the ONLY fetch: the coders are forbidden from fetching, because they share
+     one .git and concurrent fetches race. Tickets branch from origin/${cfg.branch} as of now.
+
+2. Create ${slots.length} worktree(s), each on its own idle branch cut from origin/${cfg.branch}:
+${lines}
+
+   For each: git worktree add -B <idle-branch> <worktree-path> origin/${cfg.branch}
+   If a path already exists from a previous run, remove it first:
+     git worktree remove --force <path> 2>/dev/null; git worktree prune
+   Create them ONE AT A TIME, not in parallel — concurrent \`git worktree add\` races on
+   the shared .git directory.
+
+3. A worktree is a CHECKOUT, not a copy: it has no node_modules, no virtualenv, no build
+   cache. Anything the verification gate needs must be provisioned now, or every gate run
+   in that worktree fails for reasons that have nothing to do with the ticket.
+${cfg.workerSetupCommand
+      ? `   Run this in EACH worktree, with WL_MAIN=<primary checkout> and WL_WORKSPACE=<that worktree>:
+     ${cfg.workerSetupCommand}`
+      : `   No workerSetupCommand was configured. Inspect what the gate needs (node_modules,
+     .venv, .env) and symlink it from the primary checkout into each worktree — symlink,
+     do not copy. If you cannot make a worktree able to run the gate, return ok:false
+     rather than letting every ticket fail its verification.`}
+
+4. PROVE a worktree can actually run the gate before returning — a worktree that cannot is
+   worse than no parallelism, because it fails every ticket instead of zero, and each
+   failure costs a full coder pass. In ONE worktree run:
+     ${cfg.checkCommand || "the repo's gate"}
+   If it does not pass in a freshly-prepared worktree, return ok:false with what was missing.
+   Do NOT skip this because it is slow — it is the cheapest failure in the whole run.
+
+Return {ok, reason, ready:[{number, branch, workspace}...]} — one entry per SLOT, where
+number is the slot number from the list above.`
+}
+
+function sealPrompt(ticket, ws, branch) {
+  const prefixHint = cfg.commitPrefix
+    ? `Use the commit-subject prefix convention "${cfg.commitPrefix}".`
+    : `Match the subject PREFIX convention of recent commits (git -C ${ws} log --oneline -5), e.g. "fix(scope): ...".`
+  return `Commit the APPROVED work for issue #${ticket.number}: "${ticket.title}" to its own branch. Do NOT push.
+Repo: ${cfg.repo}   Workspace: ${ws}   Branch: ${branch}
+${setupPrefix}
+1. Confirm staged work exists: git -C ${ws} diff --cached --stat (non-empty).
+2. Read the real change: git -C ${ws} diff --cached. Derive the subject from what THIS diff
+   does plus the ticket title above — never copy or lightly reword a recent commit's
+   subject. ${prefixHint} Match prior commits' FORMAT only, never their wording: back-to-back
+   tickets can touch identical files with unrelated fixes, and reusing a prior subject
+   has silently mislabeled commits before.
+3. git -C ${ws} commit -m "<imperative subject>" -m "Refs #${ticket.number}"
+   No "closes/fixes" keywords — the explicit close happens after integration.
+4. Confirm the worktree is now clean: git -C ${ws} status --short
+5. git -C ${ws} rev-parse --abbrev-ref HEAD  (must equal ${branch})
+
+Do NOT push, merge, rebase, or touch ${cfg.branch}. Integration is a separate phase.
+Return {status:"ready", branch:"${branch}", reason:"committed <short sha>"} or
+{status:"failed", branch:"", reason:"..."}.`
+}
+
+// One close-comment body per issue, written via the acting agent's file-write tool —
+// the same shell-safety rule as every other gh body in this script.
+function integrationCloseSteps(n, additions, journalIssue, extraEvidence) {
+  const evidenceFile = scratchFile(`integrate-${n}`)
+  const additionsLine = (additions || '').trim()
+    ? `\n      Beyond-scope additions (reviewer ruled in-spirit — kept, flagged for human review): ${additions.trim().slice(0, 400)}`
+    : ''
+  return `   a. Use your file-write tool (not a shell command) to write the exact text below,
+      verbatim, to ${evidenceFile}:
+      Implemented in <merge sha>. Reviewed independently on its own branch; full gate re-run green after merging into ${cfg.branch}${extraEvidence}. <one-line evidence>.${additionsLine}
+   b. ${gh(`gh issue comment ${n} --repo ${cfg.repo} --body-file ${evidenceFile}`)}
+   c. ${gh(`gh issue close ${n} --repo ${cfg.repo}`)}${journalIssue
+    ? `
+   d. RUN JOURNAL MARKER: ${gh(`gh issue comment ${journalIssue} --repo ${cfg.repo} --body "✅ Landed #${n} @ <merge sha>."`)}`
+    : ''}`
+}
+
+function batchIntegratePrompt(ready, journalIssue) {
+  const list = ready.map((r) => `   - ${r.branch}  (issue #${r.ticket.number})`).join('\n')
+  const closes = ready
+    .map((r) => `For issue #${r.ticket.number}:\n${integrationCloseSteps(r.ticket.number, r.additions, journalIssue, ' alongside <the other branch names, or "no other branches">')}`)
+    .join('\n')
+  return `You are the INTEGRATOR. Merge ALL of these approved branches into ${cfg.branch} as ONE batch.
+Repo: ${cfg.repo}   Target: ${cfg.branch}
+${setupPrefix}${ghAuthNote}
+Branches (each already built and independently reviewed, each green ON ITS OWN):
+${list}
+
+WHY A BATCH: the gate is the expensive serial step. Merging one-at-a-time and gating after
+each costs N gate runs; merging all N and gating ONCE costs one. Most batches are green, so
+this is the cheap path. When it is NOT green you back the whole thing out and the loop
+re-integrates one at a time to find the culprit — you do NOT hunt for it here.
+
+WHAT THE GATE IS ACTUALLY TESTING: each branch was built against ${cfg.branch} as it stood
+BEFORE its siblings landed. Individually green is not evidence the COMBINATION is green —
+two tickets can each pass alone and break together (a renamed helper, a changed fixture, a
+tightened assertion). This gate run is the only place that combination is ever tested.
+
+Work in the PRIMARY checkout (not a worktree). You are the only writer to ${cfg.branch}.
+
+1. git checkout ${cfg.branch} && git pull --ff-only
+2. Record the pre-merge SHA — you will need it to back out EXACTLY: git rev-parse HEAD
+3. Merge each branch in the order listed:
+     git merge --no-ff <branch> -m "Merge <branch> (Refs #<n>)"
+   - On ANY conflict: git merge --abort, then git reset --hard <pre-merge SHA>, confirm
+     git status is clean, and return {status:"conflict", landed:[]} naming the conflicting
+     paths and branch. Do NOT resolve it — a hand-resolved merge has been reviewed by nobody.
+4. RUN THE FULL GATE once on the combined result: ${cfg.checkCommand || "the repo's gate"}
+   - If RED: git reset --hard <pre-merge SHA>, confirm git status is clean and that
+     git log -1 matches the pre-merge SHA, then return {status:"red", landed:[]} with the
+     failing check named. Close NOTHING. Every branch is preserved — nothing is lost.
+     A red ${cfg.branch} is far more expensive than a re-integration: never leave it merged.
+5. Only if GREEN: git push
+   If rejected: git pull --ff-only && re-run the gate && git push (once). If it still fails,
+   do NOT force — return {status:"failed", landed:[]} with the rejection message.
+6. For EACH merged issue, capture its merge commit SHA, then close it with evidence
+   (if gh says already closed, treat as success). ${GH_CLOSE_NO_BODY_FILE_NOTE}
+${closes}
+7. Delete the merged branches: git branch -d <branch> (each).
+
+Return {status, landed:[{number, commit_sha}...], reason}. "landed" is non-empty ONLY when
+status is "landed", and must then contain EVERY issue in the list above.`
+}
+
+function integratePrompt(r, position, total, journalIssue) {
+  const ticket = r.ticket
+  return `You are the INTEGRATOR, merging ONE approved branch into ${cfg.branch}. Merge ${position} of ${total}.
+Repo: ${cfg.repo}   Branch to merge: ${r.branch}   Issue: #${ticket.number}
+${setupPrefix}${ghAuthNote}
+Work in the PRIMARY checkout (not a worktree). You are the only writer to ${cfg.branch} —
+merges are deliberately serialized, so take your time and do this carefully.
+
+WHY THIS PHASE RE-VERIFIES: ${r.branch} was built and reviewed in ISOLATION, against
+origin/${cfg.branch} as it stood before the other tickets in this round landed. Each branch
+is individually green. That is NOT evidence the COMBINATION is green — two tickets can each
+pass alone and break together (a renamed helper, a changed fixture, a tightened assertion).
+This phase is the only place that combination is ever tested. Do not skip the gate because
+"the reviewer already ran it" — the reviewer ran it on a tree that no longer exists.
+
+1. git checkout ${cfg.branch} && git pull --ff-only
+2. Record the pre-merge SHA so you can back out exactly: git rev-parse HEAD
+3. git merge --no-ff ${r.branch} -m "Merge ${r.branch} (Refs #${ticket.number})"
+   - On CONFLICT: git merge --abort, then return {status:"conflict"} naming the conflicting
+     paths. Do NOT resolve it yourself — the ticket needs re-running against the new base,
+     and a hand-resolved merge has never been reviewed by anyone.
+4. RUN THE FULL GATE on the merged result: ${cfg.checkCommand || "the repo's gate"}
+   - If RED: reset hard back to the SHA from step 2 (git reset --hard <sha>), confirm
+     git status is clean, and return {status:"gate_red"} with the failing output. The branch
+     is preserved, so nothing is lost — the ticket is simply re-run against the new base.
+     A red ${cfg.branch} is far more expensive than a re-run: never leave the merge in place.
+5. Only if GREEN: git push
+   If rejected: git pull --ff-only && re-run the gate && git push (once). If it still fails,
+   do NOT force — return failed with the rejection message.
+6. SHA: git rev-parse --short HEAD
+7. Close with evidence (if gh says already closed, treat as success). ${GH_CLOSE_NO_BODY_FILE_NOTE}
+${integrationCloseSteps(ticket.number, r.additions, journalIssue, '')}
+8. Clean up the merged branch: git branch -d ${r.branch}
+
+Return {status:"landed"|"conflict"|"gate_red"|"failed", commit_sha, reason}.`
+}
+
+// Parallel-mode park: same contract as parkPrompt (preserve work, findings on the issue,
+// triage label, journal close-out) but the work lives in a worktree, not the primary tree —
+// so it is PRESERVED BY COMMITTING to the ticket's own branch (a ref in the shared .git
+// that survives the slot being reset for the next ticket), never by stashing.
+function parallelParkPrompt(ticket, why, ws, branch, journalIssue) {
+  const issueBodyFile = scratchFile(`park-${ticket.number}`)
+  const journalBodyFile = scratchFile(`park-journal-${ticket.number}`)
+  return `You are PARKING blocked issue #${ticket.number} so an autonomous loop can continue past it.
+Repo: ${cfg.repo}   Workspace: ${ws}   Ticket branch: ${branch}
+${setupPrefix}${ghAuthNote}
+Why it is blocked:
+${why}
+
+1. PRESERVE any in-progress work — never discard it. This worktree is a reusable slot that
+   the next ticket will reset, so anything left uncommitted here is destroyed:
+   git -C ${ws} status --short
+   If there are ANY staged or unstaged changes (including new files):
+   git -C ${ws} add -A && git -C ${ws} commit -m "WIP (parked): #${ticket.number}" -m "Refs #${ticket.number} — parked by autonomous loop; NOT reviewed, NOT approved. Recover via: git log ${branch}"
+   (Committing to ${branch} is the preservation mechanism — the branch survives slot reuse.
+   This WIP commit is never merged by the loop; integration only merges APPROVED branches.)
+   Then confirm the worktree is clean: git -C ${ws} status --short must show no non-"??" lines.
+2. POST the block reason to the issue so a human can triage asynchronously. That reason
+   (above) is reviewer/coder text, not operator text — NEVER paste it into a plain
+   double-quoted --body string, and do NOT use a shell heredoc either, even a quoted one.
+   Instead:
+   a. Use your file-write tool (not a shell command) to write the following, verbatim and
+      unmodified, to ${issueBodyFile}:
+      Autonomous loop parked this ticket.
+      <the block reason above, verbatim>
+      <if work was committed in step 1, append: Work preserved on branch ${branch} (WIP commit, unreviewed).>
+   b. ${gh(`gh issue comment ${ticket.number} --repo ${cfg.repo} --body-file ${issueBodyFile}`)}
+3. LABEL it (create the label first; ignore an 'already exists' error):
+   ${gh(`gh label create ${cfg.blockedLabel} --repo ${cfg.repo} --color D93F0B --description "parked by autonomous loop" 2>/dev/null; true`)}
+   ${gh(`gh issue edit ${ticket.number} --repo ${cfg.repo} --add-label ${cfg.blockedLabel}`)}
+${journalIssue
+    ? `4. RUN JOURNAL MARKER — close out the "Started" marker so this ticket reads as finished,
+   not as a dangling in-flight attempt. Same rule as step 2 — write it with your file-write
+   tool, never a shell string or heredoc:
+   a. Write the single line below, verbatim, to ${journalBodyFile}:
+      🛑 Parked #${ticket.number}: ${why.slice(0, 200)}
+   b. ${gh(`gh issue comment ${journalIssue} --repo ${cfg.repo} --body-file ${journalBodyFile}`)}
+`
+    : ''}
+Return {status:"parked", reason:"<1 sentence>"} or {status:"failed", reason:"<why parking failed>"}.`
+}
+
+// The predicted write-set, or null when we don't trust it.
+function filesOf(footprints, number) {
+  const fp = footprints.find((f) => f && f.number === number)
+  return fp && fp.confidence === 'high' && Array.isArray(fp.files) ? fp.files : null
+}
+
+// A null write-set means "could touch anything", so it runs ALONE. Guessing
+// optimistically is paid for later with a merge conflict that wastes a whole
+// coder+reviewer pass; erring toward less parallelism is the cheaper mistake.
+function collides(files, inflightFileSets) {
+  if (inflightFileSets.length === 0) return false // idle pool: always dispatchable
+  if (!files) return true // unknown write-set: must run alone
+  return inflightFileSets.some((other) => !other || other.some((f) => files.includes(f)))
+}
+
+// Conflict-aware work-stealing pool. NOT waves: a wave is a barrier that ends when its
+// slowest member does, idling workers. Here, the moment a slot frees it takes the next
+// queued ticket whose predicted write-set collides with nothing currently IN FLIGHT.
+// Queue order is preserved; a ticket is skipped over only on a genuine conflict.
+async function runPool(specs, slots, footprints, journalIssue) {
+  const pending = [...specs]
+  const freeSlots = [...slots]
+  const inflight = new Map() // id -> {files, promise}
+  const results = []
+  let nextId = 0
+
+  while (pending.length || inflight.size) {
+    let dispatched = true
+    while (dispatched && freeSlots.length && pending.length) {
+      dispatched = false
+      const active = [...inflight.values()].map((e) => e.files)
+      for (let i = 0; i < pending.length; i++) {
+        const files = filesOf(footprints, pending[i].number)
+        if (collides(files, active)) continue
+        const ticket = pending.splice(i, 1)[0]
+        const slot = freeSlots.pop()
+        const id = ++nextId
+        const branch = `${cfg.branchPrefix}/${ticket.number}`
+        log(`  → #${ticket.number} dispatched to ${slot.workspace}`)
+        const promise = (async () => ({
+          id,
+          slot,
+          result: await runTicketInWorkspace(ticket, slot.workspace, branch, journalIssue),
+        }))()
+        inflight.set(id, { files, promise })
+        dispatched = true
+        break
+      }
+    }
+    // Nothing running and nothing dispatchable cannot happen: with an empty
+    // pool `collides` always returns false. Guard anyway rather than spin.
+    if (!inflight.size) break
+    const { id, slot, result } = await Promise.race([...inflight.values()].map((e) => e.promise))
+    inflight.delete(id)
+    freeSlots.push(slot)
+    results.push(result)
+    log(`  ← #${result.ticket.number} ${result.status}`)
+  }
+  return results
+}
+
+// Shadow mode scoring. `missed` is the dangerous half — a file the ticket really
+// wrote but the prediction did not list would have let a colliding ticket run
+// beside it. `extra` only costs a little parallelism.
+function scoreFootprint(predicted, actual) {
+  const p = new Set(predicted || [])
+  const a = new Set(actual || [])
+  return {
+    missed: [...a].filter((f) => !p.has(f)),
+    extra: [...p].filter((f) => !a.has(f)),
+    exact: p.size === a.size && [...a].every((f) => p.has(f)),
+  }
+}
+
+// One ticket's full code→review→fix cycle inside its own worktree. Returns a sealed
+// branch ready for integration, a verified no_change_needed, or a terminal status.
+// Never touches `branch` — landing is the serialized integration phase's job alone.
+// Parking (skip mode) happens IN HERE, while the slot is still claimed: the work is
+// preserved by committing to the ticket branch, which must occur before the next
+// ticket's claim step resets the slot.
+async function runTicketInWorkspace(ticket, ws, branch, journalIssue) {
+  const coded = await agent(coderPrompt(ticket, journalIssue, ws, branch), {
+    ...coderOpts({ label: `coder-${ticket.number}`, phase: 'Build' }),
+    schema: CODER_SCHEMA,
+  })
+  if (!coded || !['staged', 'no_change_needed'].includes(coded.status)) {
+    const status = coded ? coded.status : 'failed'
+    const reason = coded ? coded.reason : 'coder agent terminated (skipped or API error)'
+    return await maybeParkParallel(ticket, `Coder ${status}: ${reason}`, ws, branch, journalIssue, status === 'blocked' ? 'blocked' : 'failed')
+  }
+  let noChangeNeeded = coded.status === 'no_change_needed'
+
+  let approved = false
+  let approvedAdditions = ''
+  let lastFindings = ''
+  let reviewRounds = 0
+  for (let iter = 1; iter <= cfg.maxReviewIterations; iter++) {
+    reviewRounds = iter
+    const reviewed = await agent(reviewerPrompt(ticket, iter, noChangeNeeded, ws), {
+      ...reviewerOpts({ label: `review-${ticket.number}-i${iter}`, phase: 'Review' }),
+      schema: REVIEWER_SCHEMA,
+    })
+    if (!reviewed) {
+      lastFindings = 'reviewer agent terminated (skipped or API error)'
+      break
+    }
+    lastFindings = reviewed.findings
+    if (reviewed.verdict === 'APPROVE') {
+      approved = true
+      approvedAdditions = (reviewed.additions || '').trim()
+      break
+    }
+    recordLesson(reviewed.lesson)
+    if (iter === cfg.maxReviewIterations) break
+
+    const isFinalFixRound = iter === cfg.maxReviewIterations - 1
+    const fixAgentOpts = isFinalFixRound ? escalatedOpts : coderOpts
+    const fixed = await agent(fixPrompt(ticket, iter, reviewed.findings, ws), {
+      ...fixAgentOpts({ label: `fix-${ticket.number}-i${iter}${isFinalFixRound ? '-esc' : ''}`, phase: 'Build' }),
+      schema: CODER_SCHEMA,
+    })
+    if (!fixed || fixed.status !== 'staged') {
+      lastFindings = `fix round ${iter} ${fixed ? 'failed: ' + fixed.reason : 'terminated'}; outstanding: ${lastFindings}`
+      break
+    }
+    noChangeNeeded = false
+  }
+
+  if (!approved) {
+    const why = `Review not approved after ${reviewRounds} round(s). Outstanding findings:\n${lastFindings}`
+    return await maybeParkParallel(ticket, why, ws, branch, journalIssue, 'blocked', reviewRounds)
+  }
+  if (noChangeNeeded) {
+    return { ticket, status: 'no_change_needed', branch: '', ws, reviewRounds, reason: coded.reason, additions: '' }
+  }
+
+  const sealed = await agent(sealPrompt(ticket, ws, branch), {
+    ...mechanicalOpts({ label: `seal-${ticket.number}`, phase: 'Build' }),
+    schema: BRANCH_SCHEMA,
+  })
+  if (!sealed || sealed.status !== 'ready') {
+    const reason = sealed ? sealed.reason : 'seal agent terminated (skipped or API error)'
+    return await maybeParkParallel(ticket, `Seal failed: ${reason}`, ws, branch, journalIssue, 'failed', reviewRounds)
+  }
+  return { ticket, status: 'ready', branch, ws, reviewRounds, reason: sealed.reason, additions: approvedAdditions }
+}
+
+// Skip mode parks inside the worker (see runTicketInWorkspace). Halt mode returns the
+// raw status: work stays in the worktree/branch for inspection, and the loop halts after
+// the pool drains. A park failure here does NOT halt the run — the worktree is isolated,
+// so unlike the sequential tree there is nothing a failed park can contaminate.
+async function maybeParkParallel(ticket, why, ws, branch, journalIssue, rawStatus, reviewRounds) {
+  if (cfg.onBlocked !== 'skip') {
+    return { ticket, status: rawStatus, branch: '', ws, reviewRounds, reason: why.slice(0, 240), additions: '' }
+  }
+  const parked = await agent(parallelParkPrompt(ticket, why, ws, branch, journalIssue), {
+    ...mechanicalOpts({ label: `park-${ticket.number}`, phase: 'Park' }),
+    schema: PARK_SCHEMA,
+  })
+  if (!parked || parked.status !== 'parked') {
+    const reason = parked ? parked.reason : 'park agent terminated (skipped or API error)'
+    return { ticket, status: 'failed', branch: '', ws, reviewRounds, reason: `park failed: ${reason} (original: ${why.slice(0, 160)})`, additions: '' }
+  }
+  log(`#${ticket.number} PARKED (${cfg.blockedLabel}) — findings posted; work preserved on ${branch}; loop continues`)
+  return { ticket, status: 'parked', branch, ws, reviewRounds, reason: why.slice(0, 240), additions: '' }
 }
 
 function journalStartPrompt() {
@@ -835,6 +1508,8 @@ async function park(ticket, why, completed, journalIssue) {
 
 const completed = []
 const attempted = new Set()
+// Shadow mode: one entry per ticket, predicted write-set vs what was staged.
+const footprintScores = []
 let landedTotal = 0
 let parkedTotal = 0
 let halted = false
@@ -942,6 +1617,188 @@ for (let round = 1; round <= MAX_ROUNDS && !halted; round++) {
 
   let landedThisRound = 0
 
+  // ── Parallel path (workers > 1) ──────────────────────────────────────────
+  // Same roles as the sequential loop below, but code+review run W-wide in
+  // isolated worktrees via a conflict-aware work-stealing pool, and NOTHING
+  // reaches `branch` until the serialized Integrate phase — ONE writer, always.
+  if (cfg.workers > 1) {
+    if (budget.total && budget.remaining() < BUDGET_FLOOR) {
+      halted = true
+      haltReason = `token budget nearly exhausted (${Math.round(budget.remaining() / 1000)}k left) — stopped cleanly between rounds`
+      break
+    }
+    let batch = queue
+    if (cfg.maxTickets > 0) batch = batch.slice(0, Math.max(0, cfg.maxTickets - landedTotal))
+    if (batch.length === 0) {
+      halted = true
+      haltReason = `maxTickets (${cfg.maxTickets}) reached`
+      break
+    }
+
+    phase('Partition')
+    const footprints = await parallel(
+      batch.map((t) => () =>
+        agent(footprintPrompt(t), {
+          ...mechanicalOpts({ label: `footprint-${t.number}`, phase: 'Partition' }),
+          schema: FOOTPRINT_SCHEMA,
+        }),
+      ),
+    )
+    const loners = batch.filter((t) => !filesOf(footprints, t.number))
+    if (loners.length) {
+      log(`Write-set unknown for ${loners.map((t) => '#' + t.number).join(', ')} — each runs ALONE (safe reading).`)
+    }
+
+    // Worker SLOTS: provisioned once, reused ticket after ticket.
+    const width = Math.min(cfg.workers, batch.length)
+    const slots = Array.from({ length: width }, (_, i) => ({
+      number: i + 1,
+      workspace: `${cfg.worktreeRoot || '../.wl-worktrees'}/slot-${i + 1}`,
+      branch: `${cfg.branchPrefix}/idle-${i + 1}`,
+    }))
+
+    phase('Prep')
+    const prep = await agent(prepPrompt(slots), {
+      ...mechanicalOpts({ label: `prep-${width}-slots`, phase: 'Prep' }),
+      schema: PREP_SCHEMA,
+    })
+    if (!prep || !prep.ok || !prep.ready || prep.ready.length === 0) {
+      // Halt-and-fall-through (not an early return) so the end-of-run marker posts.
+      halted = true
+      haltReason = `worktree prep failed: ${prep && prep.reason ? prep.reason : 'prep agent terminated'}`
+      log(`BLOCKED at worktree prep: ${haltReason}`)
+      break
+    }
+    const readySlots = prep.ready.map((r) => ({ workspace: r.workspace, branch: r.branch }))
+    log(`${readySlots.length} worker slot(s) ready; dispatching ${batch.length} ticket(s).`)
+
+    batch.forEach((t) => attempted.add(t.number))
+    phase('Build')
+    const results = await runPool(batch, readySlots, footprints, journalIssue)
+
+    const ready = results.filter((r) => r && r.status === 'ready')
+    const notReady = results.filter((r) => r && r.status !== 'ready')
+    const died = batch.length - results.filter(Boolean).length
+
+    // ── Integration: batch-merge first, fall back to one-at-a-time on red ──
+    phase('Integrate')
+    const integratedNumbers = new Set()
+    if (ready.length > 1) {
+      const bulk = await agent(batchIntegratePrompt(ready, journalIssue), {
+        ...mechanicalOpts({ label: `integrate-batch-${ready.map((r) => r.ticket.number).join('-')}`, phase: 'Integrate' }),
+        schema: BATCH_INTEGRATE_SCHEMA,
+      })
+      if (bulk && bulk.status === 'landed' && Array.isArray(bulk.landed)) {
+        for (const l of bulk.landed) {
+          const r = ready.find((x) => x.ticket.number === l.number)
+          completed.push({
+            ticket: l.number,
+            status: 'landed',
+            commit_sha: l.commit_sha,
+            reviewRounds: r ? r.reviewRounds : undefined,
+            reason: bulk.reason,
+          })
+          integratedNumbers.add(l.number)
+          landedTotal++
+          landedThisRound++
+        }
+        log(`Batch-merged ${bulk.landed.length} branch(es) with ONE gate run: ${bulk.landed.map((l) => '#' + l.number).join(', ')}`)
+      } else {
+        const why = bulk ? `${bulk.status}: ${bulk.reason}` : 'batch integrator terminated'
+        log(`Batch merge backed out (${why}) — falling back to one-at-a-time to find the culprit.`)
+      }
+    }
+
+    // Anything the batch did not land (or a single ready branch) goes through
+    // the serialized path, which is also how the culprit gets identified.
+    const remaining = ready.filter((r) => !integratedNumbers.has(r.ticket.number))
+    let pos = 0
+    for (const r of remaining) {
+      pos++
+      const integrated = await agent(integratePrompt(r, pos, remaining.length, journalIssue), {
+        ...mechanicalOpts({ label: `integrate-${r.ticket.number}`, phase: 'Integrate' }),
+        schema: INTEGRATE_SCHEMA,
+      })
+      if (!integrated || integrated.status !== 'landed') {
+        const status = integrated ? integrated.status : 'failed'
+        const reason = integrated ? integrated.reason : 'integrator agent terminated'
+        completed.push({ ticket: r.ticket.number, status, commit_sha: '', branch: r.branch, reason })
+        if (status === 'conflict' || status === 'gate_red') {
+          // Expected, recoverable: branch preserved; the ticket re-runs against the
+          // new base via the next discovery round. Close its journal marker so the
+          // head-blocker guard doesn't misread the deliberate re-serve as a crash.
+          log(`Integration ${status} for #${r.ticket.number}: ${reason} (branch ${r.branch} preserved; re-queued against the new base)`)
+          await closeJournalOnHalt(r.ticket, `integration ${status}: ${reason} — branch ${r.branch} preserved, ticket re-queued against the new base`, journalIssue)
+          attempted.delete(r.ticket.number)
+          continue
+        }
+        // Push/infra failure: loop-level, same as a sequential landing failure.
+        halted = true
+        haltReason = `integration failed for #${r.ticket.number}: ${reason}`
+        log(`Integration FAILED for #${r.ticket.number}: ${reason}`)
+        await closeJournalOnHalt(r.ticket, haltReason, journalIssue)
+        break
+      }
+      completed.push({
+        ticket: r.ticket.number,
+        status: 'landed',
+        commit_sha: integrated.commit_sha,
+        reviewRounds: r.reviewRounds,
+        reason: integrated.reason,
+      })
+      landedTotal++
+      landedThisRound++
+      log(`#${r.ticket.number} landed @ ${integrated.commit_sha}`)
+    }
+
+    // Tickets that never produced a ready branch: verified-no-change closes,
+    // in-worker parks (already commented/labeled), and halt-mode blocks.
+    for (const r of notReady) {
+      if (halted) break
+      if (r.status === 'no_change_needed') {
+        const closed = await agent(closeOnlyPrompt(r.ticket, journalIssue), {
+          ...mechanicalOpts({ label: `close-${r.ticket.number}`, phase: 'Integrate' }),
+          schema: CLOSE_SCHEMA,
+        })
+        if (closed && closed.status === 'closed') {
+          completed.push({
+            ticket: r.ticket.number,
+            status: 'closed_no_change',
+            commit_sha: closed.evidence_sha || '',
+            reviewRounds: r.reviewRounds,
+            reason: closed.reason,
+          })
+          landedTotal++
+          landedThisRound++
+          log(`#${r.ticket.number} closed, no change needed`)
+        } else {
+          const reason = closed ? closed.reason : 'close agent terminated (skipped or API error)'
+          completed.push({ ticket: r.ticket.number, status: 'failed', commit_sha: '', reason: `close failed: ${reason}` })
+          await closeJournalOnHalt(r.ticket, `close (no change needed) failed: ${reason}`, journalIssue)
+        }
+        continue
+      }
+      if (r.status === 'parked') {
+        // Parked in-worker: findings, label, and journal marker already posted.
+        completed.push({ ticket: r.ticket.number, status: 'parked', commit_sha: '', reason: r.reason })
+        parkedTotal++
+        continue
+      }
+      // blocked/failed: halt mode, or a park that itself failed.
+      completed.push({ ticket: r.ticket.number, status: r.status, commit_sha: '', reason: r.reason })
+      if (cfg.onBlocked === 'halt') {
+        halted = true
+        haltReason = `#${r.ticket.number} ${r.status}: ${r.reason} (work left in its worktree for inspection)`
+      }
+      await closeJournalOnHalt(r.ticket, `#${r.ticket.number} ${r.status}: ${r.reason}`, journalIssue)
+      if (halted) break
+    }
+    if (died) log(`${died} ticket agent(s) terminated with no result — their journal "Started" markers (if any) will be caught by the next run's head-blocker guard`)
+
+    if (halted || landedThisRound === 0) break
+    continue
+  }
+
   for (const ticket of queue) {
     if (cfg.maxTickets > 0 && landedTotal >= cfg.maxTickets) {
       halted = true
@@ -957,13 +1814,26 @@ for (let round = 1; round <= MAX_ROUNDS && !halted; round++) {
     attempted.add(ticket.number)
     log(`\n=== #${ticket.number}: ${ticket.title} ===`)
 
+    // ── Shadow footprint (measurement only; changes nothing) ─────────────────
+    // Predict BEFORE the coder runs, so the prediction cannot be contaminated
+    // by seeing the answer. Scored against what the coder actually staged.
+    let predictedFiles = null
+    if (cfg.shadowFootprints) {
+      const fp = await agent(footprintPrompt(ticket), {
+        ...mechanicalOpts({ label: `footprint-${ticket.number}`, phase: 'Coder' }),
+        schema: FOOTPRINT_SCHEMA,
+      })
+      predictedFiles = fp && fp.confidence === 'high' && Array.isArray(fp.files) ? fp.files : null
+      log(`shadow: predicted ${predictedFiles ? predictedFiles.length + ' file(s)' : 'UNKNOWN (would run alone)'}`)
+    }
+
     // ── Coder ────────────────────────────────────────────────────────────────
     const coded = await agent(coderPrompt(ticket, journalIssue), {
       ...coderOpts({ label: `coder-${ticket.number}`, phase: 'Coder' }),
       schema: CODER_SCHEMA,
     })
 
-    if (!coded || coded.status !== 'staged') {
+    if (!coded || !['staged', 'no_change_needed'].includes(coded.status)) {
       const status = coded ? coded.status : 'failed'
       const reason = coded ? coded.reason : 'coder agent terminated (skipped or API error)'
       log(`Coder ${status} on #${ticket.number}: ${reason}`)
@@ -981,7 +1851,25 @@ for (let round = 1; round <= MAX_ROUNDS && !halted; round++) {
       await closeJournalOnHalt(ticket, haltReason, journalIssue)
       break
     }
-    log(`Staged: ${coded.summary} (${coded.files_changed.length} file(s))`)
+    let noChangeNeeded = coded.status === 'no_change_needed'
+    log(`${noChangeNeeded ? 'Verified, no change needed' : 'Staged'}: ${coded.summary} (${coded.files_changed.length} file(s))`)
+
+    if (cfg.shadowFootprints && !noChangeNeeded) {
+      const score = scoreFootprint(predictedFiles, coded.files_changed)
+      footprintScores.push({
+        ticket: ticket.number,
+        predicted: predictedFiles,
+        actual: coded.files_changed,
+        ...score,
+      })
+      if (predictedFiles === null) {
+        log('shadow: no usable prediction — would have run alone (no parallelism, but safe)')
+      } else if (score.missed.length) {
+        log(`shadow: UNSAFE — missed ${score.missed.join(', ')} (a colliding ticket could have run beside this one)`)
+      } else {
+        log(`shadow: safe${score.extra.length ? ` (over-predicted ${score.extra.length}: costs parallelism only)` : ' (exact)'}`)
+      }
+    }
 
     // ── Review loop ──────────────────────────────────────────────────────────
     let approved = false
@@ -991,7 +1879,7 @@ for (let round = 1; round <= MAX_ROUNDS && !halted; round++) {
 
     for (let iter = 1; iter <= cfg.maxReviewIterations; iter++) {
       reviewRounds = iter
-      const reviewed = await agent(reviewerPrompt(ticket, iter), {
+      const reviewed = await agent(reviewerPrompt(ticket, iter, noChangeNeeded), {
         ...reviewerOpts({ label: `review-${ticket.number}-i${iter}`, phase: 'Review' }),
         schema: REVIEWER_SCHEMA,
       })
@@ -1026,6 +1914,7 @@ for (let round = 1; round <= MAX_ROUNDS && !halted; round++) {
         lastFindings = `fix round ${iter} ${fixed ? 'failed: ' + fixed.reason : 'terminated'}; outstanding findings: ${lastFindings}`
         break
       }
+      noChangeNeeded = false
       log(`Re-staged: ${fixed.summary}`)
     }
 
@@ -1047,6 +1936,35 @@ for (let round = 1; round <= MAX_ROUNDS && !halted; round++) {
     }
 
     // ── Land ─────────────────────────────────────────────────────────────────
+    if (noChangeNeeded) {
+      // Coder found it already implemented; the reviewer independently confirmed
+      // every acceptance criterion. Close with evidence — nothing to commit.
+      const closed = await agent(closeOnlyPrompt(ticket, journalIssue), {
+        ...mechanicalOpts({ label: `close-${ticket.number}`, phase: 'Land' }),
+        schema: CLOSE_SCHEMA,
+      })
+      if (!closed || closed.status !== 'closed') {
+        const reason = closed ? closed.reason : 'close agent terminated (skipped or API error)'
+        log(`Closing FAILED for #${ticket.number}: ${reason}`)
+        completed.push({ ticket: ticket.number, status: 'failed', commit_sha: '', reason })
+        halted = true
+        haltReason = `closing failed: ${reason}`
+        await closeJournalOnHalt(ticket, haltReason, journalIssue)
+        break
+      }
+      completed.push({
+        ticket: ticket.number,
+        status: 'closed_no_change',
+        commit_sha: closed.evidence_sha || '',
+        reviewRounds,
+        reason: closed.reason,
+      })
+      landedTotal++
+      landedThisRound++
+      log(`#${ticket.number} closed, no change needed${closed.evidence_sha ? ' (evidence: ' + closed.evidence_sha + ')' : ''}`)
+      continue
+    }
+
     const landed = await agent(landPrompt(ticket, journalIssue, approvedAdditions), {
       ...mechanicalOpts({ label: `land-${ticket.number}`, phase: 'Land' }),
       schema: LAND_SCHEMA,
@@ -1075,13 +1993,57 @@ for (let round = 1; round <= MAX_ROUNDS && !halted; round++) {
     log(`#${ticket.number} landed @ ${landed.commit_sha}`)
   }
 
-  // Re-discover only when this round landed something AND issues remain blocked
-  // on deps — a land may have unblocked them. Otherwise we're done.
-  if (!halted && !(landedThisRound > 0 && discovery.pendingCount > 0)) break
+  // Re-discover whenever this round landed something. Do NOT also require
+  // pendingCount > 0: that assumed the only source of newly-eligible work is a
+  // dependency unblocking, which is false — issues get FILED mid-run (by a human
+  // watching, or by this loop's own coders reporting out-of-scope defects they
+  // tripped over), and parallel-mode integration conflicts re-queue their tickets
+  // deliberately. Neither exists at discovery time, so pendingCount is 0 and the
+  // old rule exited announcing "queue drained" while labelled work sat open
+  // (observed 2026-08-02: three coder-filed tickets stranded exactly this way).
+  // An extra discovery costs one cheap agent; a false "drained" ends the run.
+  // Termination is unaffected — an empty queue breaks out above, and MAX_ROUNDS
+  // is the backstop.
+  if (halted || landedThisRound === 0) break
 }
 
-const failed = completed.filter((r) => r.status !== 'landed' && r.status !== 'parked').length
-log(`\nDone. ${landedTotal} landed, ${parkedTotal} parked (${cfg.blockedLabel}), ${failed} failed, of ${completed.length} attempted.${haltReason ? ' Halt: ' + haltReason : ''}`)
+// A ticket can legitimately appear in `completed` more than once — a parallel-mode
+// integration conflict records the failed attempt, then the re-run against the new
+// base records the landing. Judge the run by each ticket's FINAL state, keep the
+// full history in the returned `completed` array.
+const finalStates = [...new Map(completed.map((r) => [r.ticket, r])).values()]
+const SUCCESS_STATES = ['landed', 'closed_no_change', 'parked']
+const failed = finalStates.filter((r) => !SUCCESS_STATES.includes(r.status)).length
+log(`\nDone. ${landedTotal} landed/closed, ${parkedTotal} parked (${cfg.blockedLabel}), ${failed} failed, of ${finalStates.length} ticket(s) attempted.${haltReason ? ' Halt: ' + haltReason : ''}`)
+
+// Shadow report: the number that decides whether `workers` > 1 is safe here.
+let shadow = null
+if (cfg.shadowFootprints && footprintScores.length) {
+  const n = footprintScores.length
+  const unusable = footprintScores.filter((s) => s.predicted === null).length
+  const unsafe = footprintScores.filter((s) => s.predicted !== null && s.missed.length > 0)
+  const exact = footprintScores.filter((s) => s.exact).length
+  const usable = n - unusable
+  shadow = {
+    tickets: n,
+    exact,
+    unusablePredictions: unusable,
+    unsafePredictions: unsafe.length,
+    // The only number that matters for scheduling: of the predictions we WOULD
+    // have scheduled on, how many were safe (no missed file)?
+    safeRate: usable ? Number(((usable - unsafe.length) / usable).toFixed(2)) : 0,
+    worstOffenders: unsafe.slice(0, 5).map((s) => ({ ticket: s.ticket, missed: s.missed })),
+  }
+  log(`\nSHADOW FOOTPRINT REPORT (${n} ticket(s))`)
+  log(`  exact predictions:      ${exact}/${n}`)
+  log(`  no usable prediction:   ${unusable}/${n}  (these would run alone — safe, just slower)`)
+  log(`  UNSAFE (missed a file): ${unsafe.length}/${usable} of schedulable predictions`)
+  log(`  safe rate:              ${usable ? Math.round(((usable - unsafe.length) / usable) * 100) : 0}%`)
+  for (const s of unsafe) log(`    #${s.ticket} missed: ${s.missed.join(', ')}`)
+  log(unsafe.length === 0
+    ? '  → Prediction never missed a file. Parallel scheduling is safe on this queue.'
+    : "  → Each miss is a ticket that could have run beside a colliding one. Tighten the issues' file lists (or keep workers: 1) before going parallel.")
+}
 
 // "Drained" must not read as "finished" when work is only transitively stuck — name it.
 // Computed before the end-of-run marker below so that marker can say WHY, not just THAT,
@@ -1096,8 +2058,8 @@ const drainedReason = lastPendingCount > 0
 // a durable "I stopped here" record — that record, not the cron, is what makes an overnight
 // resume across a multi-day gap possible (see SKILL.md "Overnight resilience").
 if (journalIssue) {
-  const resultLines = completed
-    .map((r) => `#${r.ticket} | ${r.status} | ${r.status === 'landed' ? r.commit_sha : (r.reason || '').slice(0, 160)}`)
+  const resultLines = finalStates
+    .map((r) => `#${r.ticket} | ${r.status} | ${r.status === 'landed' || r.status === 'closed_no_change' ? (r.commit_sha || 'no change needed') : (r.reason || '').slice(0, 160)}`)
     .join('\n')
   const reported = await agent(reportPrompt(journalIssue, resultLines, haltReason, lastPendingCount, drainedReason), {
     ...mechanicalOpts({ label: 'run-report', phase: 'Land' }),
@@ -1111,7 +2073,7 @@ if (journalIssue) {
 }
 
 return {
-  done: completed.length > 0 && failed === 0 && !halted,
+  done: finalStates.length > 0 && failed === 0 && !halted,
   landed: landedTotal,
   parked: parkedTotal,
   failed,
@@ -1120,4 +2082,5 @@ return {
   blocked: lastBlocked,
   reason: haltReason || (parkedTotal > 0 ? `${drainedReason}; ${parkedTotal} ticket(s) parked for triage under label "${cfg.blockedLabel}"` : drainedReason),
   completed,
+  ...(shadow ? { shadow } : {}),
 }

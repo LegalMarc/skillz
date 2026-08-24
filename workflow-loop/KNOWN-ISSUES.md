@@ -166,14 +166,18 @@ find the earlier landing commit — would have built a second, parallel implemen
 but nothing checked the body against the repo before work started, so a ticket that quietly went
 stale while sitting in the queue was indistinguishable from a live one.
 
-**Status: fixed.** The coder now pre-flights the ticket's own verification commands against the
-untouched tree before changing anything. The healthy result is at least one ticket-specific
-failure — the red half of red–green, the gap the change exists to close. If every ticket-specific
-command already passes (the repo-wide green gate doesn't count — it is green by prerequisite), the
-coder returns blocked with a "pre-flight: possibly already implemented" reason and the ticket parks
-for human review instead of being rebuilt. Useful side effect: a verification block that passes
-before the diff exists gates nothing, and now something notices — Phase 1 guidance says to write
-verification that fails on the untouched tree.
+**Status: fixed, then improved.** The coder now pre-flights the ticket's own verification commands
+against the untouched tree before changing anything. The healthy result is at least one
+ticket-specific failure — the red half of red–green, the gap the change exists to close. If every
+ticket-specific command already passes (the repo-wide green gate doesn't count — it is green by
+prerequisite), the ticket is never rebuilt. The first fix parked it for human triage; the merged
+lineage does better: the coder checks every acceptance criterion directly against the current code
+and returns `no_change_needed`, an independent reviewer re-verifies each criterion adversarially
+(a missed criterion is exactly the gap to catch), and only a confirmed no-change closes the issue —
+citing the pre-existing commit where identifiable. Stale tickets resolve unattended, and nothing
+closes unverified. Useful side effect: a verification block that passes before the diff exists
+gates nothing, and now something notices — Phase 1 guidance says to write verification that fails
+on the untouched tree.
 
 ---
 
@@ -183,6 +187,16 @@ verification that fails on the untouched tree.
   directory, the loop reads issues from one repository and pushes commits to another, and nothing
   downstream notices. Discovery's sync gate now verifies `git remote get-url origin` matches
   `args.repo` before anything else runs. Found by operating-note review, not (yet) a live run.
+- **The skill briefly existed as two diverged lineages, and a naive "sync" would have destroyed
+  work.** The deployed copy (unversioned, outside any repo) grew parallel mode, quarantine, and
+  shadow footprints; the repo copy grew park/journal/head-blocker/shell-safety and the audit
+  fixes. Neither was a superset, so issue #22's "fix the sync path" framing — copy repo over
+  deployed — would have silently deleted ~280 lines of never-committed parallel-mode work. The
+  2026-08-24 merge took the repo lineage as base and ported parallel mode into it, upgraded to the
+  repo's safety patterns (file-based gh bodies, journal markers, parks that preserve work by
+  committing to the ticket branch). The deployed-only state is preserved on branch
+  `workflow-loop/deployed-parallel-mode` for archaeology. Lesson: a skill's executing copy must be
+  a symlink into its repo, never a divergent duplicate — "deployed" and "source" must be one inode.
 
 - **Never hand-edit a shared file mid-run.** A near-miss silently dropped a decisions-log paragraph from a
   commit; it was recovered only because a later coder happened to notice an unstaged file.
