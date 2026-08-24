@@ -29,7 +29,9 @@ Loop (without you):
 
 **Model-agnostic:** roles are capability tiers, not model names. The reviewer runs the strongest model available at extra-high effort; the coder runs a mid tier (or inherits the session model) at high effort; mechanical steps (discover/land/park) run at medium effort. Configure via args — the script never hardcodes a vendor's model names, so it survives model generations and ports across runtimes.
 
-**Safety rails (non-negotiable):** sync gate before every pick (including that the checkout's `origin` matches the repo the issues live in); push must succeed before an issue closes; never merge/rebase on rejection (ff-only retry once, then halt); reviewer never edits; parked work is stashed, never discarded; flaky-test retries are bounded to one and always disclosed; sequential by design — one tree, one branch, no merge races.
+**Safety rails (non-negotiable):** sync gate before every pick (including that the checkout's `origin` matches the repo the issues live in); push must succeed before an issue closes; never merge/rebase on rejection (ff-only retry once, then halt); reviewer never edits; parked work is preserved, never discarded (stashed sequentially, committed to the ticket's own branch in parallel mode); flaky-test retries are bounded to one and always disclosed; ONE writer to the branch, always — sequentially the single tree, in parallel mode the serialized integrate phase.
+
+**Parallel mode (opt-in, `workers: N`):** the bottleneck is model latency, not CPU — so N tickets code+review concurrently, each in its own git worktree on its own branch, dispatched by a conflict-aware work-stealing pool over predicted write-sets. Nothing touches the target branch until a serialized integrate phase merges the approved branches — batch-merged with one gate run when green, backed out and bisected one-at-a-time when not, with the full gate re-run after every merge because per-branch green is not evidence the combination is green. Run `shadowFootprints: true` first: it measures write-set prediction accuracy on a sequential run before you bet wall-clock on it.
 
 **Ticket-fidelity gates (what the green suite can't see):** the coder pre-flights the ticket's own verification on the untouched tree — all-green means the ticket is stale (its feature likely already shipped) and it parks instead of rebuilding; the reviewer enumerates and rules on every prohibition in the ticket ("do not / never / out of scope" — a violation is REQUEST_CHANGES no matter how green the checks); and everything the diff adds beyond the ticket's scope is ruled creep (a finding) or in-spirit (kept, but named in the issue-close comment) — nothing lands unremarked.
 
@@ -56,6 +58,10 @@ All project specifics flow through `args` — never edit the script. Key knobs:
 | `coderNote` | `""` | Project invariants injected into every coder prompt |
 | `referenceMode` / `referenceNote` | off | Mine per-ticket reference branches; adapt, never blind-copy |
 | `dryRun` | false | Preview the queue before spending tokens |
+| `priority` | `[]` | Issue numbers to serve first — a tie-break only, never over dependencies |
+| `workers` | `1` | Tickets coded+reviewed concurrently; 1 = the sequential loop, unchanged |
+| `workerSetupCommand` / `worktreeRoot` / `branchPrefix` | — | Parallel mode: provision each worktree; where slots live; ticket-branch prefix |
+| `shadowFootprints` | `false` | Sequential run that scores write-set prediction — read it before setting `workers > 1` |
 
 See [SKILL.md](SKILL.md) for the full invocation, the issue template, and the failure-mode table.
 

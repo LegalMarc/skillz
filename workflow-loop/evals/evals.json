@@ -71,6 +71,20 @@
         "Does NOT set autoRecover: true on the initial attended invocation — only the restart flow gets it.",
         "Explains the recovery semantics honestly: while the account is rate-limited the cron firings no-op; the first firing after the window resets resumes; a crashed run's dirty tree is stashed as afk-crash-recovery, never discarded."
       ]
+    },
+    {
+      "id": 6,
+      "name": "measure-before-parallelizing",
+      "skills": ["workflow-loop"],
+      "query": "We have 14 'afk' issues queued on acme/webhook-svc and I want them done fast — crank the loop up to 6 workers.",
+      "files": [],
+      "expected_behavior": [
+        "Does not blindly launch with workers: 6. Recommends measuring first: a shadowFootprints: true sequential run to score write-set prediction accuracy (safeRate) before betting wall-clock on parallelism.",
+        "Explains the 2N gate-run cost (the reviewer re-runs the gate too) and that 2-3 workers is usually the knee — 6 needs evidence the gate's core usage supports it.",
+        "Raises workerSetupCommand: worktrees are checkouts with no build deps, and prep proves a slot can run the gate before any ticket starts.",
+        "States the integration invariant honestly: per-branch green is not combination green; the serialized integrate phase re-runs the full gate after every merge (batch first, one-at-a-time bisect on red), and that serial step bounds the speedup.",
+        "Keeps the one-writer rule: no concurrent pushes to the target branch under any worker count."
+      ]
     }
   ]
 }
