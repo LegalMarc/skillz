@@ -3649,7 +3649,7 @@ def test_no_wall_clock_ordering_assertions() -> None:
 #: fails in both directions, so verifying an entry without removing it from here
 #: fails just as loudly as adding an unverified one.
 _CMP_ENTRIES_WITHOUT_RECORDED_PROVENANCE = frozenset({
-    "hubspot", "onetrust", "usercentrics", "sourcepoint", "klaro",
+    "hubspot", "usercentrics", "sourcepoint", "klaro",
 })
 
 #: A live-capture note carries the date it was taken. Every entry that has been
@@ -3748,6 +3748,60 @@ def test_cmp_table_integrity() -> None:
     assert len(ids) == len(set(ids)), "CMP ids must be unique"
     ok(f"CMP table integrity: {len(table)} entries, no save/accept or reject/accept collisions, "
        "all carry a consent_storage namespace")
+
+
+#: A CSS sibling combinator in a denial-side selector resolves the control by
+#: what sits next to it in the DOM. On a consent banner the neighbour is
+#: routinely the accept button, so the resolution is only ever as stable as the
+#: site's button configuration. Attribute selectors are stripped before this is
+#: applied: `~=` is an attribute operator, not a combinator.
+_SIBLING_COMBINATOR = re.compile(r"[+~]")
+
+
+def test_denial_controls_are_not_resolved_by_position() -> None:
+    """No `reject` or `save` selector may find its control via a sibling.
+
+    `#onetrust-pc-btn-handler + button` sat in OneTrust's `reject` list and
+    meant "whatever button follows Settings". On OneTrust's own banner that
+    was the reject button - but only because that site had enabled reject,
+    which OneTrust renders optionally and which this very entry's notes flag
+    as commonly absent. Captured 2026-08-24: deleting the optional reject
+    button from a clone of the live `.ot-button-order-container` made the same
+    selector resolve to `#onetrust-accept-btn-handler`. Under `reject`, that is
+    execute_denial clicking Accept All and reporting a completed denial.
+
+    test_cmp_table_integrity cannot catch this shape. It compares selector
+    strings for equality, and a positional selector collides with the accept
+    control by *resolution*, never by text - the two selectors look nothing
+    alike right up until they return the same element.
+
+    Descendant and child combinators are scoping rather than positional and
+    stay allowed: `#onetrust-pc-sdk .save-preference-btn-handler` narrows to
+    one named element and cannot drift onto a neighbour.
+    """
+    table = load_cmp_table()
+    offences, scanned = [], 0
+    for entry in table:
+        for kind in ("reject", "save"):
+            for selector in entry.get(kind) or []:
+                scanned += 1
+                # `[...]` spans hold attribute operators such as `~=` and
+                # values that may contain anything; they are never combinators.
+                bare = re.sub(r"\[[^\]]*\]", "", str(selector))
+                if _SIBLING_COMBINATOR.search(bare):
+                    offences.append(f"{entry['id']}.{kind}: {selector!r}")
+
+    assert not offences, (
+        "these denial-side selectors resolve a control by its DOM neighbours, which on a consent "
+        "banner is routinely the accept button:\n  "
+        + "\n  ".join(offences)
+        + "\nName the control instead. See the onetrust notes for the capture that removed the last one."
+    )
+    assert scanned >= 2 * len(table), (
+        f"only {scanned} reject/save selectors scanned across {len(table)} entries - the scan is "
+        "not reaching the lists it is supposed to police"
+    )
+    ok(f"no denial-side selector resolves by position ({scanned} reject/save selectors scanned)")
 
 
 def test_consent_namespace_and_key_matching() -> None:
@@ -6083,6 +6137,7 @@ def main() -> int:
     test_launch_browser_sandbox_args_and_error_message()
     test_cmp_table_integrity()
     test_cmp_selectors_record_their_provenance()
+    test_denial_controls_are_not_resolved_by_position()
     test_no_wall_clock_ordering_assertions()
     test_consent_namespace_and_key_matching()
     test_narrow_consent_diff_ignores_noise_and_catches_namespaced_writes()
