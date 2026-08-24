@@ -52,16 +52,16 @@
       "name": "Usercentrics CMP",
       "fingerprint": {
         "selectors": ["#usercentrics-root", "#usercentrics-cmp-ui", "[data-testid='uc-container']"],
-        "script_hosts": ["app.usercentrics.eu", "web.cmp.usercentrics.eu", "api.usercentrics.eu"]
+        "script_hosts": ["app.usercentrics.eu", "web.cmp.usercentrics.eu", "api.usercentrics.eu", "privacy-proxy.usercentrics.eu"]
       },
-      "container": ["#usercentrics-root", "#usercentrics-cmp-ui"],
-      "accept": ["[data-testid='uc-accept-all-button']", "[data-action-type='accept']"],
-      "reject": ["[data-testid='uc-deny-all-button']", "[data-action-type='deny']"],
-      "settings": ["[data-testid='uc-customize-anchor']", "[data-testid='uc-more-button']"],
-      "save": ["[data-testid='uc-save-button']"],
-      "consent_storage": ["uc_settings", "ucData", "usercentrics"],
+      "container": ["#usercentrics-cmp-ui", "#usercentrics-root"],
+      "accept": ["[data-action-type='accept']", ".uc-accept-button", "[data-testid='uc-accept-all-button']"],
+      "reject": ["[data-action-type='deny']", ".uc-deny-button", "[data-testid='uc-deny-all-button']"],
+      "settings": ["[data-action-type='more']", "#uc-more-link", "[data-testid='uc-customize-anchor']", "[data-testid='uc-more-button']"],
+      "save": ["[data-action-type='save']", ".uc-save-button", "[data-testid='uc-save-button']"],
+      "consent_storage": ["ucData", "ucString", "uc_settings", "usercentrics"],
       "shadow_dom": true,
-      "notes": "Renders inside a shadow root under #usercentrics-root; control collection must pierce shadow DOM or nothing will be found."
+      "notes": "Renders inside a shadow root; control collection must pierce shadow DOM or nothing will be found. Verified 2026-08-24 against https://support.usercentrics.com (Usercentrics' own Web CMP, v4.14.0 from web.cmp.usercentrics.eu/ui). The shadow host on v4 is `<aside id='usercentrics-cmp-ui'>`, not `#usercentrics-root` - that id is the older v2 SDK and was absent here - so the note's original wording named the wrong host. The `uc-*` data-testid scheme this entry was built on is essentially gone in v4: the only testids left in the whole shadow root are `uc-footer` and `uc-close-button`. `[data-testid='uc-accept-all-button']`, `[data-testid='uc-deny-all-button']`, `[data-testid='uc-customize-anchor']`, `[data-testid='uc-more-button']` and `[data-testid='uc-save-button']` all matched nothing. accept and reject survived only because each already carried a `data-action-type` fallback; `settings` and `save` had none, so both resolved to nothing at all and the entire settings -> toggles -> save denial fallback was dead on the current product while the CMP still fingerprinted cleanly. v4 exposes a clean semantic attribute and the entry now leads with it. Captured first layer: `[data-action-type='accept']` (`<button id='accept' class='accept uc-accept-button'>Accept All</button>`), `[data-action-type='deny']` (`id='deny'`, 'Deny') and `[data-action-type='more']` (`<a id='uc-more-link'>More Information</a>`, the settings launcher). Opening that second layer revealed `[data-action-type='save']` (`<button id='save' class='save uc-save-button'>Save Settings</button>`) beside the category toggles `#uc-category-*-toggle` and service toggles `#uc-service-*-toggle`, which carry `data-action-type` of `categoryConsent` / `serviceConsent` and express state through `aria-checked`. The full attribute vocabulary observed was accept, deny, save, more, less, categoryConsent, serviceConsent, privacyPolicy, imprint. Deliberately NOT added: the bare ids `#accept`, `#deny` and `#save`. Playwright's CSS engine pierces open shadow roots, so a bare `#save` would be matched against the host page as well as the CMP, and `save` is about the most likely id for a site to use on its own forms - resolving a consent save onto a page's own button is the kind of collision this table exists to avoid. The `data-action-type` and `uc-`-prefixed class forms are vendor-specific and carry no such risk. `consent_storage` gained `ucString`, which was live on this deployment alongside `ucData` and holds the encoded consent string; `ucData` carries the Google Consent Mode block (`adStorage:'denied'`, `adPersonalization:'denied'`, `adUserData:'denied'`). `uc_settings` and `usercentrics` were not observed and are left in place unverified. `privacy-proxy.usercentrics.eu` was also loaded and was added to script_hosts. No control was clicked, so nothing here proves what any of them writes."
     },
     {
       "id": "sourcepoint",

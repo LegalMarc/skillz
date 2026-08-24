@@ -3649,7 +3649,7 @@ def test_no_wall_clock_ordering_assertions() -> None:
 #: fails in both directions, so verifying an entry without removing it from here
 #: fails just as loudly as adding an unverified one.
 _CMP_ENTRIES_WITHOUT_RECORDED_PROVENANCE = frozenset({
-    "hubspot", "usercentrics", "sourcepoint", "klaro",
+    "hubspot", "sourcepoint", "klaro",
 })
 
 #: A live-capture note carries the date it was taken. Every entry that has been
