@@ -206,6 +206,24 @@ const escalatedOpts = (extra) => ({
   ...extra,
 })
 
+// Exception boundary around every agent call (LegalMarc/skillz#22 finding 2).
+// agent() returns null on user-skip and terminal API errors, and every call site
+// below already routes null into park/halt/log — but agent() can also THROW
+// (budget-target exhaustion mid-ticket is the known case), and an uncaught throw
+// kills the whole run instead of failing one ticket. Converting a throw into the
+// same null every call site already handles gives per-ticket fault isolation with
+// one uniform mechanism. The park/report agents this triggers may throw for the
+// same underlying reason — they pass through here too, becoming a logged, graceful
+// halt rather than a crash.
+const tryAgent = async (prompt, opts) => {
+  try {
+    return await agent(prompt, opts)
+  } catch (e) {
+    log(`agent "${(opts && opts.label) || '?'}" threw (${e && e.message ? String(e.message).slice(0, 160) : 'unknown error'}) — treating as terminated`)
+    return null
+  }
+}
+
 // ─── Schemas ─────────────────────────────────────────────────────────────────
 
 const QUEUE_SCHEMA = {
@@ -1296,7 +1314,7 @@ function scoreFootprint(predicted, actual) {
 // preserved by committing to the ticket branch, which must occur before the next
 // ticket's claim step resets the slot.
 async function runTicketInWorkspace(ticket, ws, branch, journalIssue) {
-  const coded = await agent(coderPrompt(ticket, journalIssue, ws, branch), {
+  const coded = await tryAgent(coderPrompt(ticket, journalIssue, ws, branch), {
     ...coderOpts({ label: `coder-${ticket.number}`, phase: 'Build' }),
     schema: CODER_SCHEMA,
   })
@@ -1313,7 +1331,7 @@ async function runTicketInWorkspace(ticket, ws, branch, journalIssue) {
   let reviewRounds = 0
   for (let iter = 1; iter <= cfg.maxReviewIterations; iter++) {
     reviewRounds = iter
-    const reviewed = await agent(reviewerPrompt(ticket, iter, noChangeNeeded, ws), {
+    const reviewed = await tryAgent(reviewerPrompt(ticket, iter, noChangeNeeded, ws), {
       ...reviewerOpts({ label: `review-${ticket.number}-i${iter}`, phase: 'Review' }),
       schema: REVIEWER_SCHEMA,
     })
@@ -1332,7 +1350,7 @@ async function runTicketInWorkspace(ticket, ws, branch, journalIssue) {
 
     const isFinalFixRound = iter === cfg.maxReviewIterations - 1
     const fixAgentOpts = isFinalFixRound ? escalatedOpts : coderOpts
-    const fixed = await agent(fixPrompt(ticket, iter, reviewed.findings, ws), {
+    const fixed = await tryAgent(fixPrompt(ticket, iter, reviewed.findings, ws), {
       ...fixAgentOpts({ label: `fix-${ticket.number}-i${iter}${isFinalFixRound ? '-esc' : ''}`, phase: 'Build' }),
       schema: CODER_SCHEMA,
     })
@@ -1351,7 +1369,7 @@ async function runTicketInWorkspace(ticket, ws, branch, journalIssue) {
     return { ticket, status: 'no_change_needed', branch: '', ws, reviewRounds, reason: coded.reason, additions: '' }
   }
 
-  const sealed = await agent(sealPrompt(ticket, ws, branch), {
+  const sealed = await tryAgent(sealPrompt(ticket, ws, branch), {
     ...mechanicalOpts({ label: `seal-${ticket.number}`, phase: 'Build' }),
     schema: BRANCH_SCHEMA,
   })
@@ -1370,7 +1388,7 @@ async function maybeParkParallel(ticket, why, ws, branch, journalIssue, rawStatu
   if (cfg.onBlocked !== 'skip') {
     return { ticket, status: rawStatus, branch: '', ws, reviewRounds, reason: why.slice(0, 240), additions: '' }
   }
-  const parked = await agent(parallelParkPrompt(ticket, why, ws, branch, journalIssue), {
+  const parked = await tryAgent(parallelParkPrompt(ticket, why, ws, branch, journalIssue), {
     ...mechanicalOpts({ label: `park-${ticket.number}`, phase: 'Park' }),
     schema: PARK_SCHEMA,
   })
@@ -1478,7 +1496,7 @@ Return {status:"ok", issue:${journalIssue}, reason:""} or {status:"failed", issu
 // as journalStartPrompt's own failure handling.
 async function closeJournalOnHalt(ticket, reason, journalIssue) {
   if (!journalIssue) return
-  const closed = await agent(haltMarkerPrompt(ticket, reason, journalIssue), {
+  const closed = await tryAgent(haltMarkerPrompt(ticket, reason, journalIssue), {
     ...mechanicalOpts({ label: `halt-marker-${ticket.number}`, phase: 'Land' }),
     schema: JOURNAL_SCHEMA,
   })
@@ -1490,7 +1508,7 @@ async function closeJournalOnHalt(ticket, reason, journalIssue) {
 // ─── Park helper: preserve work, annotate issue, keep the loop grinding ──────
 
 async function park(ticket, why, completed, journalIssue) {
-  const parked = await agent(parkPrompt(ticket, why, journalIssue), {
+  const parked = await tryAgent(parkPrompt(ticket, why, journalIssue), {
     ...mechanicalOpts({ label: `park-${ticket.number}`, phase: 'Park' }),
     schema: PARK_SCHEMA,
   })
@@ -1543,7 +1561,7 @@ for (let round = 1; round <= MAX_ROUNDS && !halted; round++) {
   // recur on later restarts, leaving the journal's last comment stale and misread by a
   // relauncher as "still alive." Guarded by !cfg.dryRun: dryRun must never touch GitHub.
   if (cfg.reportIssue && !cfg.dryRun && !journalIssue) {
-    const opened = await agent(journalStartPrompt(), {
+    const opened = await tryAgent(journalStartPrompt(), {
       ...mechanicalOpts({ label: 'journal-start', phase: 'Discover' }),
       schema: JOURNAL_SCHEMA,
     })
@@ -1556,7 +1574,7 @@ for (let round = 1; round <= MAX_ROUNDS && !halted; round++) {
     }
   }
 
-  const discovery = await agent(DISCOVER_PROMPT, {
+  const discovery = await tryAgent(DISCOVER_PROMPT, {
     ...mechanicalOpts({ label: round === 1 ? 'discover' : `discover-r${round}`, phase: 'Discover' }),
     schema: QUEUE_SCHEMA,
   })
@@ -1638,7 +1656,7 @@ for (let round = 1; round <= MAX_ROUNDS && !halted; round++) {
     phase('Partition')
     const footprints = await parallel(
       batch.map((t) => () =>
-        agent(footprintPrompt(t), {
+        tryAgent(footprintPrompt(t), {
           ...mechanicalOpts({ label: `footprint-${t.number}`, phase: 'Partition' }),
           schema: FOOTPRINT_SCHEMA,
         }),
@@ -1658,7 +1676,7 @@ for (let round = 1; round <= MAX_ROUNDS && !halted; round++) {
     }))
 
     phase('Prep')
-    const prep = await agent(prepPrompt(slots), {
+    const prep = await tryAgent(prepPrompt(slots), {
       ...mechanicalOpts({ label: `prep-${width}-slots`, phase: 'Prep' }),
       schema: PREP_SCHEMA,
     })
@@ -1684,7 +1702,7 @@ for (let round = 1; round <= MAX_ROUNDS && !halted; round++) {
     phase('Integrate')
     const integratedNumbers = new Set()
     if (ready.length > 1) {
-      const bulk = await agent(batchIntegratePrompt(ready, journalIssue), {
+      const bulk = await tryAgent(batchIntegratePrompt(ready, journalIssue), {
         ...mechanicalOpts({ label: `integrate-batch-${ready.map((r) => r.ticket.number).join('-')}`, phase: 'Integrate' }),
         schema: BATCH_INTEGRATE_SCHEMA,
       })
@@ -1715,7 +1733,7 @@ for (let round = 1; round <= MAX_ROUNDS && !halted; round++) {
     let pos = 0
     for (const r of remaining) {
       pos++
-      const integrated = await agent(integratePrompt(r, pos, remaining.length, journalIssue), {
+      const integrated = await tryAgent(integratePrompt(r, pos, remaining.length, journalIssue), {
         ...mechanicalOpts({ label: `integrate-${r.ticket.number}`, phase: 'Integrate' }),
         schema: INTEGRATE_SCHEMA,
       })
@@ -1756,7 +1774,7 @@ for (let round = 1; round <= MAX_ROUNDS && !halted; round++) {
     for (const r of notReady) {
       if (halted) break
       if (r.status === 'no_change_needed') {
-        const closed = await agent(closeOnlyPrompt(r.ticket, journalIssue), {
+        const closed = await tryAgent(closeOnlyPrompt(r.ticket, journalIssue), {
           ...mechanicalOpts({ label: `close-${r.ticket.number}`, phase: 'Integrate' }),
           schema: CLOSE_SCHEMA,
         })
@@ -1819,7 +1837,7 @@ for (let round = 1; round <= MAX_ROUNDS && !halted; round++) {
     // by seeing the answer. Scored against what the coder actually staged.
     let predictedFiles = null
     if (cfg.shadowFootprints) {
-      const fp = await agent(footprintPrompt(ticket), {
+      const fp = await tryAgent(footprintPrompt(ticket), {
         ...mechanicalOpts({ label: `footprint-${ticket.number}`, phase: 'Coder' }),
         schema: FOOTPRINT_SCHEMA,
       })
@@ -1828,7 +1846,7 @@ for (let round = 1; round <= MAX_ROUNDS && !halted; round++) {
     }
 
     // ── Coder ────────────────────────────────────────────────────────────────
-    const coded = await agent(coderPrompt(ticket, journalIssue), {
+    const coded = await tryAgent(coderPrompt(ticket, journalIssue), {
       ...coderOpts({ label: `coder-${ticket.number}`, phase: 'Coder' }),
       schema: CODER_SCHEMA,
     })
@@ -1879,7 +1897,7 @@ for (let round = 1; round <= MAX_ROUNDS && !halted; round++) {
 
     for (let iter = 1; iter <= cfg.maxReviewIterations; iter++) {
       reviewRounds = iter
-      const reviewed = await agent(reviewerPrompt(ticket, iter, noChangeNeeded), {
+      const reviewed = await tryAgent(reviewerPrompt(ticket, iter, noChangeNeeded), {
         ...reviewerOpts({ label: `review-${ticket.number}-i${iter}`, phase: 'Review' }),
         schema: REVIEWER_SCHEMA,
       })
@@ -1905,7 +1923,7 @@ for (let round = 1; round <= MAX_ROUNDS && !halted; round++) {
       const isFinalFixRound = iter === cfg.maxReviewIterations - 1
       if (isFinalFixRound) log(`Final fix round for #${ticket.number} — escalating to reviewer-tier model/effort`)
       const fixAgentOpts = isFinalFixRound ? escalatedOpts : coderOpts
-      const fixed = await agent(fixPrompt(ticket, iter, reviewed.findings), {
+      const fixed = await tryAgent(fixPrompt(ticket, iter, reviewed.findings), {
         ...fixAgentOpts({ label: `fix-${ticket.number}-i${iter}${isFinalFixRound ? '-esc' : ''}`, phase: 'Coder' }),
         schema: CODER_SCHEMA,
       })
@@ -1939,7 +1957,7 @@ for (let round = 1; round <= MAX_ROUNDS && !halted; round++) {
     if (noChangeNeeded) {
       // Coder found it already implemented; the reviewer independently confirmed
       // every acceptance criterion. Close with evidence — nothing to commit.
-      const closed = await agent(closeOnlyPrompt(ticket, journalIssue), {
+      const closed = await tryAgent(closeOnlyPrompt(ticket, journalIssue), {
         ...mechanicalOpts({ label: `close-${ticket.number}`, phase: 'Land' }),
         schema: CLOSE_SCHEMA,
       })
@@ -1965,7 +1983,7 @@ for (let round = 1; round <= MAX_ROUNDS && !halted; round++) {
       continue
     }
 
-    const landed = await agent(landPrompt(ticket, journalIssue, approvedAdditions), {
+    const landed = await tryAgent(landPrompt(ticket, journalIssue, approvedAdditions), {
       ...mechanicalOpts({ label: `land-${ticket.number}`, phase: 'Land' }),
       schema: LAND_SCHEMA,
     })
@@ -2061,7 +2079,7 @@ if (journalIssue) {
   const resultLines = finalStates
     .map((r) => `#${r.ticket} | ${r.status} | ${r.status === 'landed' || r.status === 'closed_no_change' ? (r.commit_sha || 'no change needed') : (r.reason || '').slice(0, 160)}`)
     .join('\n')
-  const reported = await agent(reportPrompt(journalIssue, resultLines, haltReason, lastPendingCount, drainedReason), {
+  const reported = await tryAgent(reportPrompt(journalIssue, resultLines, haltReason, lastPendingCount, drainedReason), {
     ...mechanicalOpts({ label: 'run-report', phase: 'Land' }),
     schema: JOURNAL_SCHEMA,
   })

@@ -181,6 +181,28 @@ on the untouched tree.
 
 ---
 
+## 6. A thrown `agent()` killed the whole run instead of failing one ticket
+
+**Symptom.** An uncaught exception from any agent call — budget-target exhaustion mid-ticket is
+the known case — propagated straight up and terminated the entire run, discarding the queue's
+remaining work. Recorded as LegalMarc/skillz#22 finding 2 and confirmed by the 2026-08-23 audit:
+`grep -c 'try {\|catch ('` returned 0 in both lineages.
+
+**Mechanism.** `agent()` returns `null` on user-skips and terminal API errors, and every call site
+routes `null` into the park/halt/log paths — but a *throw* took a different exit that nothing
+caught. The budget floor check runs between tickets, so a single long ticket could still cross the
+target mid-flight and throw from deep inside a coder or reviewer call.
+
+**Status: fixed.** One uniform boundary rather than per-site try/catch: every agent call goes
+through a `tryAgent` wrapper that logs the exception and returns the same `null` the call sites
+already handle — a thrown coder now parks its ticket and the loop grinds on, exactly like a
+terminated one. The park/report agents that a failure triggers pass through the same wrapper, so
+when the underlying cause is global (hard budget exhaustion) the run degrades to a logged, graceful
+halt instead of a crash. Verified by a mock-runtime scenario in which a coder throws mid-queue: the
+ticket parks, the sibling lands, the run completes.
+
+---
+
 ## Related operating notes, learned the same way
 
 - **`args.repo` only feeds `gh`; every git command acts on the cwd.** Launched from the wrong
