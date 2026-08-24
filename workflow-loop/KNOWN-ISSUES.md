@@ -124,7 +124,65 @@ marker, because nothing survives to write one.
 
 ---
 
+## 4. The reviewer verified acceptance criteria; nothing verified prohibitions or additions
+
+**Symptom.** A landed diff broke three explicit "do not" instructions carried in the ticket's own
+body, while an independent frontier-model reviewer approved it across three review rounds. In the
+same run, the coder shipped a second feature the ticket never authorised, and no gate flagged it —
+it was found only by a human reading the diff against the ticket afterwards.
+
+**Mechanism.** Acceptance criteria are positive and executable — "X fires", "Y is empty" — so a
+coder can satisfy them and a reviewer can run them. Prohibitions are negative and prose, and they
+live in `## Out of scope` and `## Notes`, which the review prompt treated as background rather than
+as assertions to check. Additive scope creep is worse still: every existing check reads green (old
+tests pass, new tests pass, ACs met), because an *addition* violates nothing — it just was never
+asked for. Every AC passed; the gate was green; nothing in the loop was looking at the sentence
+that mattered. This is the failure mode with the worst blast radius, because a passing suite reads
+as proof.
+
+**Why "just ask the reviewer to check" is not the fix.** A reviewer asked "does this violate the
+ticket?" says no. A reviewer forced to enumerate the prohibitions and rule on each one has to
+actually look. Enumeration is the mechanism, not politeness.
+
+**Status: fixed.** The reviewer prompt now carries two mandatory passes, separate from AC
+verification: a **prohibitions pass** — enumerate and QUOTE every "do not / never / must not /
+only / out of scope" statement in the body and comments, rule on each with evidence; any violation
+is REQUEST_CHANGES regardless of how green the checks are (APPROVE is now explicitly conditioned on
+this pass finding no violations) — and a **scope-additions pass** — enumerate everything the diff
+adds beyond the ticket; creep is a finding, while an in-spirit addition may land but is returned in
+a new required `additions` schema field that the land step threads into the issue-close comment, so
+no addition lands unremarked.
+
+---
+
+## 5. A stale ticket sends a cold coder to rebuild something that already shipped
+
+**Symptom.** A queued ticket asked for a feature that had landed two days earlier; both of the
+ticket's own Required-verification commands passed on unmodified main. Had it been served, a
+clean-context coder — which by design trusts the issue body completely and would most likely not
+find the earlier landing commit — would have built a second, parallel implementation.
+
+**Mechanism.** The cold coder's total trust in the issue body is the load-bearing design decision,
+but nothing checked the body against the repo before work started, so a ticket that quietly went
+stale while sitting in the queue was indistinguishable from a live one.
+
+**Status: fixed.** The coder now pre-flights the ticket's own verification commands against the
+untouched tree before changing anything. The healthy result is at least one ticket-specific
+failure — the red half of red–green, the gap the change exists to close. If every ticket-specific
+command already passes (the repo-wide green gate doesn't count — it is green by prerequisite), the
+coder returns blocked with a "pre-flight: possibly already implemented" reason and the ticket parks
+for human review instead of being rebuilt. Useful side effect: a verification block that passes
+before the diff exists gates nothing, and now something notices — Phase 1 guidance says to write
+verification that fails on the untouched tree.
+
+---
+
 ## Related operating notes, learned the same way
+
+- **`args.repo` only feeds `gh`; every git command acts on the cwd.** Launched from the wrong
+  directory, the loop reads issues from one repository and pushes commits to another, and nothing
+  downstream notices. Discovery's sync gate now verifies `git remote get-url origin` matches
+  `args.repo` before anything else runs. Found by operating-note review, not (yet) a live run.
 
 - **Never hand-edit a shared file mid-run.** A near-miss silently dropped a decisions-log paragraph from a
   commit; it was recovered only because a later coder happened to notice an unstaged file.

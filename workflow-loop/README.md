@@ -29,7 +29,9 @@ Loop (without you):
 
 **Model-agnostic:** roles are capability tiers, not model names. The reviewer runs the strongest model available at extra-high effort; the coder runs a mid tier (or inherits the session model) at high effort; mechanical steps (discover/land/park) run at medium effort. Configure via args — the script never hardcodes a vendor's model names, so it survives model generations and ports across runtimes.
 
-**Safety rails (non-negotiable):** sync gate before every pick; push must succeed before an issue closes; never merge/rebase on rejection (ff-only retry once, then halt); reviewer never edits; parked work is stashed, never discarded; flaky-test retries are bounded to one and always disclosed; sequential by design — one tree, one branch, no merge races.
+**Safety rails (non-negotiable):** sync gate before every pick (including that the checkout's `origin` matches the repo the issues live in); push must succeed before an issue closes; never merge/rebase on rejection (ff-only retry once, then halt); reviewer never edits; parked work is stashed, never discarded; flaky-test retries are bounded to one and always disclosed; sequential by design — one tree, one branch, no merge races.
+
+**Ticket-fidelity gates (what the green suite can't see):** the coder pre-flights the ticket's own verification on the untouched tree — all-green means the ticket is stale (its feature likely already shipped) and it parks instead of rebuilding; the reviewer enumerates and rules on every prohibition in the ticket ("do not / never / out of scope" — a violation is REQUEST_CHANGES no matter how green the checks); and everything the diff adds beyond the ticket's scope is ruled creep (a finding) or in-spirit (kept, but named in the issue-close comment) — nothing lands unremarked.
 
 **Built-in force multipliers:** a lint gate at discovery rejects issues that can't self-verify before they burn a coder+reviewer cycle; a bounded **run ledger** feeds each fresh coder the (≤5) lessons reviewers taught earlier in the same run; the **final fix round escalates** to reviewer-tier model/effort — one max-strength attempt before parking; and an optional **run journal** issue collects a start comment and an end-of-run report (landed SHAs, parked reasons) so triage is one permalink.
 
@@ -59,7 +61,7 @@ See [SKILL.md](SKILL.md) for the full invocation, the issue template, and the fa
 
 ## Requirements
 
-- A runtime with a `Workflow`-style orchestration tool that can run a scripted multi-agent loop from a file (here, `assets/workflow-loop.js`).
+- An orchestrator that can run a scripted multi-agent loop — on Claude Code, the `Workflow` tool runs `assets/workflow-loop.js` natively; for OpenAI- or DeepSeek-based harnesses (or any other), see the "Harness vocabulary" table in [SKILL.md](SKILL.md), which maps every generic term this skill uses to each harness and states the concept any new harness must satisfy.
 - `gh` CLI authenticated for the target repo.
 - A green baseline and a clean tree on the target branch.
 

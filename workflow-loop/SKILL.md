@@ -21,6 +21,23 @@ A two-phase pattern for shipping a body of work autonomously:
 
 The load-bearing idea: **the solver agent has zero prior context.** It only knows what the issue body says. The loop's quality is decided in Phase 1 — an issue without its own verification commands cannot self-verify, and the loop will drift. Spend the effort making issues self-contained.
 
+## Harness vocabulary
+
+This skill is written in generic terms so any agentic coding harness can run the pattern. The **Concept** column is the contract; the harness columns are translations. On a harness not listed here, satisfy the Concept column and the rest of this document applies unchanged.
+
+| Generic term | Concept — what any harness must provide | Claude Code | OpenAI (Codex CLI / Agents SDK) | DeepSeek-based harness (e.g. OpenHands, Aider + DeepSeek API) |
+|---|---|---|---|---|
+| **orchestrator** | A deterministic runner that executes the loop script, spawns one sub-agent per prompt, and enforces each reply's JSON schema | the `Workflow` tool runs `assets/workflow-loop.js` natively (`scriptPath` + `args`) | no native equivalent — port the loop skeleton to the Agents SDK, or drive `codex exec` once per role from your own script | no native equivalent — script the loop yourself; each role is one API call with a JSON-schema response format |
+| **sub-agent (fresh context)** | One clean-context model run that sees ONLY its prompt — no memory of other tickets or other roles | `agent(prompt, {schema, effort, model})` inside the Workflow script | one fresh agent run / one `codex exec` invocation per role | one fresh conversation per role — never reuse a session across tickets |
+| **capability tier** | "Strongest available" vs "cheaper capable" model, resolved at invoke time, never hardcoded | leave the model arg empty to inherit the session model; set a cheaper tier for the coder if one exists | strongest reasoning model for review; a mini tier for mechanical steps | `deepseek-reasoner` for review; `deepseek-chat` for coder and mechanical steps |
+| **reasoning effort** | How hard a role thinks: reviewer > coder > mechanical | `effort: "low"` … `"xhigh"` | the `reasoning_effort` parameter | no effort dial — approximate by tier: reasoner ≈ high, chat ≈ low |
+| **token budget** | A ceiling for the run; the loop stops cleanly BETWEEN tickets as it nears | a "+500k"-style directive, exposed to the script as `budget` | track usage from API responses in your skeleton; stop between tickets | same — count tokens from the API's usage fields |
+| **run monitor** | A live view of loop progress | `/workflows` | your skeleton's own logs | your skeleton's own logs |
+| **resume** | Re-running after a stop must not redo landed work | re-invoke (discovery recomputes from GitHub), or `resumeFromRunId` to replay cached agent results | re-invoke — GitHub state (closed issues, labels, stashes) IS the resume state | same — GitHub state is the resume state |
+| **scheduled task** | Something that can fire after the session is gone (see Overnight resilience) | in-session scheduled tasks (fire only while the session lives) or an external scheduler | system cron / hosted scheduler | system cron / hosted scheduler |
+
+Only the **orchestrator** row is harness-native code: `assets/workflow-loop.js` is written in Claude Code's Workflow DSL. Everything else — the issue template, the AFK ladder, the role prompts inside the script, the hygiene rules, the journal/marker protocol — is plain text and plain process, portable as-is. Porting to a new harness means re-implementing only the loop skeleton (discover → code → review×N → land | park → re-discover) around the same prompts.
+
 ## When to use
 
 - "Break this into tickets and solve them automatically." / "Run an AFK build loop overnight."
@@ -31,7 +48,7 @@ For decomposition only (no execution), prefer `to-issues`. This skill adds the a
 
 ## Model policy (model-agnostic by design)
 
-Roles are capability tiers, not model names. Resolve them **at invoke time** from whatever models the runtime offers:
+Roles are capability tiers, not model names. Resolve them **at invoke time** from whatever models the runtime offers. (Effort names below use Claude Code's scale — translate per the Harness vocabulary table.)
 
 | Role | Intelligence tier | Effort | How to configure |
 |---|---|---|---|
@@ -46,7 +63,7 @@ Never write model names into issues, and never hardcode them in the script — t
 - `gh` CLI authenticated for the target repo.
 - A green baseline: the repo's check command passes on a clean tree. The loop keeps a green tree green; it can't fix a red one.
 - Clean working tree, on the branch you'll commit to.
-- The `Workflow` tool. The loop is `assets/workflow-loop.js`.
+- An orchestrator (see Harness vocabulary). On Claude Code that is the `Workflow` tool, which runs `assets/workflow-loop.js` natively; elsewhere, the loop skeleton is ported around the same prompts.
 
 ---
 
@@ -58,7 +75,7 @@ Work from the conversation context (plan, PRD, prose). Then:
 
 **1b. Order by dependency.** Record dependencies explicitly in each issue body (`## Dependencies` / "needs #N") so the loop computes eligibility from GitHub state alone. An issue is *eligible* only when all its deps are CLOSED.
 
-**1c. Use the self-contained template.** Every issue MUST include a **Required verification** section with copy-pasteable commands — runnable from the repo root, deterministic (no live network, no manual steps). Non-negotiable: it is how a cold solver and reviewer prove the work. If a change constrains a layer the unit suite bypasses (migrations, infra, external seams), the verification must include the integration command that exercises that layer.
+**1c. Use the self-contained template.** Every issue MUST include a **Required verification** section with copy-pasteable commands — runnable from the repo root, deterministic (no live network, no manual steps). Non-negotiable: it is how a cold solver and reviewer prove the work. If a change constrains a layer the unit suite bypasses (migrations, infra, external seams), the verification must include the integration command that exercises that layer. Write verification that **fails on the untouched tree** — a block that already passes before the diff exists gates nothing; the loop's coder pre-flights exactly this and parks any ticket whose verification is already fully green as stale.
 
 ```markdown
 ## Goal
@@ -132,9 +149,9 @@ Create these **without** the loop label so the queue never blocks on them — bu
 
 ## Phase 2 — Run the autonomous loop
 
-`assets/workflow-loop.js` is a parameterized `Workflow` script. Repo-agnostic and model-agnostic: configure via `args`, never edit per project.
+`assets/workflow-loop.js` is a parameterized orchestrator script. Repo-agnostic and model-agnostic: configure via `args`, never edit per project.
 
-### Invoke
+### Invoke (Claude Code syntax — on another harness, feed the same args to your loop skeleton)
 
 ```
 Workflow({
@@ -165,15 +182,17 @@ Workflow({
 })
 ```
 
-Runs in the background; watch with `/workflows`. Tip: run once with `dryRun: true` to sanity-check the queue, dependency parsing, and lint findings before spending tokens — dryRun is strictly read-only (no comments, no labels, no stashes, no journal). If the user set a token target ("+500k"), the loop honors it — it stops cleanly *between* tickets when the budget nears exhaustion.
+Runs in the background; watch with your harness's run monitor (Claude Code: `/workflows`). Tip: run once with `dryRun: true` to sanity-check the queue, dependency parsing, and lint findings before spending tokens — dryRun is strictly read-only (no comments, no labels, no stashes, no journal). If the user set a token target ("+500k"), the loop honors it — it stops cleanly *between* tickets when the budget nears exhaustion.
 
 ### Shape of a run
 
 ```
 Round:
-  Discover →  sync gate (fetch; abort if behind, ahead, or dirty — ahead means a
-              prior land likely committed but failed to push; autoRecover stashes
-              a dirty tree instead) + eligible open `label` issues (all deps CLOSED, not
+  Discover →  sync gate (origin URL must match `repo` — every git command acts on
+              the cwd, so a wrong checkout would read issues from one repo and
+              push to another; then fetch; abort if behind, ahead, or dirty —
+              ahead means a prior land likely committed but failed to push;
+              autoRecover stashes a dirty tree instead) + eligible open `label` issues (all deps CLOSED, not
               parked) + LINT GATE: issues without runnable Required-verification
               commands are commented, labeled, excluded. HEAD-BLOCKER GUARD:
               reads the run journal for a ticket marked "Started" with no later
@@ -185,11 +204,21 @@ Round:
               tickets blocking them — so a later "drained" report can say why.
   For each eligible issue (FRESH AGENT, no shared memory):
     Coder    →  posts a "Started #N" journal marker first (if reportIssue is on),
-                then reads issue, plans, implements, runs the issue's Required
-                verification + checkCommand (one bounded retry per flaky
-                command, disclosed), git diff --check, stages. Sees the RUN
-                LEDGER: ≤5 factual lessons from this run's earlier rejections.
-    Review   →  independent agent re-runs verification on the staged diff
+                reads issue, then PRE-FLIGHTS the ticket's own verification on
+                the untouched tree — if every ticket-specific command already
+                passes, the ticket is stale (its feature likely already shipped):
+                blocked → parked, never rebuilt. Otherwise plans, implements,
+                runs the issue's Required verification + checkCommand (one
+                bounded retry per flaky command, disclosed), git diff --check,
+                stages. Sees the RUN LEDGER: ≤5 factual lessons from this run's
+                earlier rejections.
+    Review   →  independent agent re-runs verification on the staged diff,
+                then runs two passes no green suite can substitute for:
+                PROHIBITIONS (quote every "do not"/"never"/"out of scope"
+                statement in the ticket and rule on each — a violation is
+                REQUEST_CHANGES no matter how green the checks) and
+                SCOPE ADDITIONS (enumerate what the diff adds beyond the
+                ticket; creep → findings, in-spirit → surfaced at landing)
                 → APPROVE | REQUEST_CHANGES (numbered file:line findings,
                   plus a one-line lesson for the ledger)
                   ↳ coder fixes, re-stages, re-review (max N rounds);
@@ -197,7 +226,8 @@ Round:
                   ↳ exhausted: PARK (skip mode) or stop (halt mode)
     Land     →  commit ("Refs #N" — no auto-close keywords), PUSH
                 (ff-only retry once, NEVER merge/rebase), gh issue close with
-                SHA + evidence, then a "Landed #N" journal marker (closes out
+                SHA + evidence + any reviewer-ruled in-spirit additions (so
+                nothing lands unremarked), then a "Landed #N" journal marker (closes out
                 the Started marker so this ticket doesn't look dangling).
     Park     →  (blocked tickets, skip mode) stash work, post findings as an
                 issue comment, apply `blockedLabel`, post a "Parked #N" journal
@@ -235,6 +265,9 @@ The loop is sequential by design: one shared tree, one branch; parallel landings
 - **Never merge/rebase on push rejection** — ff-only retry once, else stop.
 - **One loop per repo.** Never start a second concurrently.
 - **Independent review, always**; the reviewer re-runs verification itself and never edits.
+- **Prohibitions are enumerated, never assumed** — the reviewer quotes every "do not / never / must not / out of scope" statement in the ticket and rules on each one. Acceptance criteria are executable and get checked by default; prohibitions are prose, and a diff can pass every AC while breaking the sentence that mattered most. A green suite is not a defense.
+- **Nothing lands unremarked** — the reviewer enumerates everything the diff adds beyond the ticket's scope. Creep is a finding; an in-spirit addition may land, but it is named in the issue-close comment for human review. Additive scope creep is invisible to every green check; enumeration is the only gate that sees it.
+- **Every ticket starts red** — the coder pre-flights the ticket's own verification on the untouched tree. If it already passes in full, the ticket is stale and gets parked, not rebuilt; a verification block that passes before the diff exists gates nothing.
 - **Parked work is stashed, never discarded**; every park leaves findings on the issue.
 - **Flaky retries are bounded and disclosed** — one re-run per failing command, ever; a retry-pass must say "passed on retry — possible flake" so nothing is silently masked (the reviewer re-runs it anyway).
 - **Attended is a last resort with a stated reason** — every ticket created without the loop label names the rung it stopped at and what would unblock it. "No CLI exists" is a verified claim, not an assumption; a ticket parked as attended without that reasoning is a defect in the decomposition, not a property of the work.
@@ -317,6 +350,8 @@ dirty tree. Attended runs keep the strict gate so a human inspects crashed state
 
 ## Failure modes & recovery
 
+- **"cwd origin does not match args.repo"** → the session's working directory is a different checkout than the repo the issues live in — `repo` only feeds `gh`; git acts on the cwd. Launch again from the target repo's checkout.
+- **Parked as "pre-flight: verification already passes"** → the ticket is stale — what it asks for likely already shipped. Find the landing commit and close the issue citing it, or rewrite the ticket around the gap that actually remains, then remove the label.
 - **"behind origin" / "ahead of origin" / "dirty tree"** → aborts at the sync gate. "Ahead" usually means a prior land committed but its push failed — inspect with `git log origin/<branch>..HEAD`, then push by hand or reset if abandoned. Fix by hand, re-run (or see *Overnight resilience* for unattended flows).
 - **Parked tickets** (skip mode) → triage by label: `gh issue list --label afk-blocked`. Findings are in the issue comments; stashed work via `git stash list`; the run journal issue has the full landed/parked/failed report. Fix or refine the issue, remove the label, re-run.
 - **Lint-gate exclusions** → same label and triage path as parks; the comment says exactly which section is missing. Add the verification commands, remove the label, re-run.

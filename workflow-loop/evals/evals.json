@@ -14,6 +14,7 @@
         "Every Required verification section contains copy-pasteable commands including the repo check command (bash scripts/check.sh), and slices that add migrations or middleware include an integration-level verification command, not just unit tests.",
         "Dependencies are explicit ('needs #N' or named references to sibling tickets) and form a valid order: schema slice first, middleware before rate limiting, etc.",
         "PRD constraints (never log plaintext keys, use existing hash_secret() helper, session-cookie auth must keep working) are copied into the Notes of the relevant issues — not assumed known.",
+        "Verification commands are ticket-specific enough to FAIL on the untouched tree before the slice is implemented (red before green) — not just the repo-wide check command, which is green by prerequisite; the loop's coder pre-flights this and parks all-green tickets as stale.",
         "Presents the breakdown for user confirmation BEFORE creating any issues (no gh issue create without sign-off)."
       ]
     },
