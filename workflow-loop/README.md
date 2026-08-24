@@ -52,7 +52,7 @@ All project specifics flow through `args` — never edit the script. Key knobs:
 | `reviewerModel` / `reviewerEffort` | inherit / `xhigh` | Leave empty when the session already runs the strongest model |
 | `onBlocked` | `skip` | `skip` = park & grind on (AFK); `halt` = stop at first block (attended) |
 | `blockedLabel` | `afk-blocked` | Morning-triage filter |
-| `reportIssue` | `0` (off) | `"auto"` = create/reuse an "AFK run log" issue for the run journal + end report |
+| `reportIssue` | `"auto"` (on) | Run journal + end report on an "AFK run log" issue — the head-blocker guard and overnight resume depend on it; `0` turns it off |
 | `autoRecover` | `false` | Restart flows only: stash a crashed run's dirty tree and proceed |
 | `maxTickets` / `maxReviewIterations` | 0 / 3 | 0 = all eligible |
 | `coderNote` | `""` | Project invariants injected into every coder prompt |

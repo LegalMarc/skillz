@@ -17,7 +17,7 @@
 //     reviewerEffort: "xhigh",
 //     onBlocked: "skip",              // "skip" = park & continue (AFK); "halt" = stop at first block
 //     blockedLabel: "afk-blocked",    // label applied to parked tickets
-//     reportIssue: 0,                 // 0 = off; "auto" = create/reuse "AFK run log" issue; or an issue number
+//     reportIssue: "auto",            // DEFAULT "auto" = create/reuse "AFK run log" issue; an issue number; 0 = off
 //     autoRecover: false,             // restart flows ONLY: stash a crashed run's dirty tree and proceed
 //     commitPrefix: "",
 //     maxTickets: 0,                  // 0 = all eligible
@@ -102,9 +102,12 @@ const cfg = {
   reviewerEffort: A.reviewerEffort || 'xhigh',
   onBlocked: A.onBlocked === 'halt' ? 'halt' : 'skip',
   blockedLabel: A.blockedLabel || 'afk-blocked',
-  // Run journal + end-of-run report target: 0 = off, "auto" = create/reuse an issue
-  // titled "AFK run log", or an explicit issue number.
-  reportIssue: A.reportIssue === 'auto' ? 'auto' : typeof A.reportIssue === 'number' ? A.reportIssue : 0,
+  // Run journal + end-of-run report target: "auto" (DEFAULT) = create/reuse an issue
+  // titled "AFK run log"; an explicit issue number; 0 = off. Defaults ON because the
+  // journal is the head-blocker guard's only reliable signal and the durable marker
+  // overnight resumes depend on — a safety net that defaults off protects nobody
+  // (LegalMarc/skillz#22 finding 3). dryRun never touches GitHub regardless.
+  reportIssue: A.reportIssue === undefined ? 'auto' : A.reportIssue === 'auto' ? 'auto' : typeof A.reportIssue === 'number' ? A.reportIssue : 0,
   // Unattended-restart mode: a dirty tree at discovery is stashed (afk-crash-recovery)
   // and the run proceeds, instead of refusing. Set ONLY by auto-restart flows; attended
   // runs keep the strict gate so a human inspects crashed state.
