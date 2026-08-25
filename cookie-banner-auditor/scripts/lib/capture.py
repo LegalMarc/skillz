@@ -452,6 +452,205 @@ def _public_control(control: dict[str, Any]) -> dict[str, Any]:
     return {k: v for k, v in control.items() if k not in {"locator", "frame"}}
 
 
+_CONTROL_CHARS = re.compile(r"[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]")
+
+
+def _untrusted_text(value: Any, limit: int) -> str:
+    """Collapse page-authored text to one bounded, single-line string.
+
+    Everything a control carries - its label, its surrounding copy, its markup
+    - is written by the audited site. When a resolution conflict is printed for
+    a person or an agent to adjudicate, that text is being rendered next to the
+    tool's own output, and a site can put anything in it: a fake section break,
+    a line claiming to be an instruction, whatever it likes.
+
+    This does not make such text safe, and is not what makes the design safe -
+    a verdict is re-resolved and re-vetoed before it can be acted on, so the
+    worst a convincing string can achieve is a refusal. What this does is stop
+    page text from *impersonating the report's own structure*, by removing the
+    control characters and newlines that would let it draw one.
+    """
+    text = _CONTROL_CHARS.sub("", str(value if value is not None else ""))
+    return re.sub(r"\s+", " ", text).strip()[:limit]
+
+
+_CSS_PATH_JS = r"""
+(el) => {
+  const seg = (n) => {
+    if (n.id) return '#' + CSS.escape(n.id);
+    let index = 1;
+    for (let s = n.previousElementSibling; s; s = s.previousElementSibling) {
+      if (s.tagName === n.tagName) index++;
+    }
+    return n.tagName.toLowerCase() + ':nth-of-type(' + index + ')';
+  };
+  const parts = [];
+  for (let n = el; n && n.nodeType === 1 && parts.length < 8; n = n.parentElement) {
+    const s = seg(n);
+    parts.unshift(s);
+    if (s.charAt(0) === '#') break;
+  }
+  return parts.join(' > ');
+}
+"""
+
+# Are these two candidates the same control?
+#
+# Asked because the CMP table and the text scorer resolve independently, and
+# they routinely reach the *same* control by different routes - the table
+# naming a `<span>` the scorer reached through its parent `<button>`. Reporting
+# that as a disagreement would fail the run closed over nothing.
+#
+# `isConnected` is checked first and deliberately. A node detached between
+# resolution and comparison otherwise reports as `distinct` rather than
+# raising, which would record a false conflict as though it were a real one;
+# "I could not tell" and "they are different" must stay different answers,
+# because only one of them says something about the page.
+#
+# `getRootNode()` separates shadow roots and frame documents before `contains`
+# is consulted, since `contains` does not cross either boundary and would
+# answer `false` for reasons that have nothing to do with the two elements.
+#
+# The blocker walk is what makes containment mean "a click on either lands on
+# the same handler": if anything actionable sits between the inner and outer
+# element, they are two controls that happen to be nested, not one.
+_SAME_CONTROL_JS = r"""
+(el, other) => {
+  if (!el || !other) return {rel: 'unknown', why: 'missing'};
+  if (!el.isConnected || !other.isConnected) return {rel: 'unknown', why: 'detached'};
+  if (el === other) return {rel: 'same'};
+  if (el.getRootNode() !== other.getRootNode()) return {rel: 'distinct', why: 'different_root'};
+  const inner = el.contains(other) ? other : (other.contains(el) ? el : null);
+  if (!inner) return {rel: 'distinct', why: 'unrelated'};
+  const outer = inner === el ? other : el;
+  // Counts the inner candidate itself, not only what sits above it. A
+  // <span> inside its own <button> is one control reached two ways; a
+  // <button> inside a role="button" anchor is two controls that happen to
+  // nest, and clicking the inner one is not the same act as clicking the
+  // outer one even though the event reaches both.
+  let actionable = 0;
+  for (let n = inner; n && n !== outer; n = n.parentElement) {
+    if (n.matches('button, a, [role="button"], input')) actionable++;
+  }
+  return {rel: actionable ? 'distinct' : 'containment', why: actionable ? 'nested_actionable' : ''};
+}
+"""
+
+
+def _control_ref(control: dict[str, Any] | None) -> dict[str, Any] | None:
+    """A stable, re-resolvable description of one candidate control.
+
+    `_public_control` keeps everything the browser gave us, including a live
+    `Locator` the moment the page goes away. This is the form that has to
+    survive being written to disk, read by a person or an agent, and turned
+    back into a selector on a *later* load - so it carries a `css_path` and
+    the element's own identifying attributes rather than a handle.
+
+    `css_path` is a best effort and will not survive a framework reshuffling
+    the DOM between one load and the next. That is exactly why a verdict
+    naming a selector is re-resolved and re-vetoed at the point it is used,
+    instead of being trusted because it once matched.
+    """
+    if not control:
+        return None
+    class_tokens = [t for t in str(control.get("className") or "").split() if t][:8]
+    css_path = ""
+    locator = control.get("locator")
+    if locator is not None:
+        try:
+            css_path = str(locator.evaluate(_CSS_PATH_JS) or "")
+        except Exception:
+            css_path = ""
+    ref = {
+        "frame_url": control.get("frame_url"),
+        "tag": control.get("tag"),
+        "id": control.get("id"),
+        "class_tokens": class_tokens,
+        "role": control.get("role"),
+        "aria_label": _untrusted_text(control.get("ariaLabel"), 120),
+        "type": control.get("type"),
+        "text": _untrusted_text(control.get("text"), 120),
+        "box": control.get("box"),
+        "css_path": css_path,
+        # Deliberately shorter than the 1200 characters `_control_metadata`
+        # captures: enough to see the tag and its attributes when adjudicating,
+        # with less room to hide a paragraph addressed to the reader.
+        "html_excerpt": _untrusted_text(control.get("html"), 400),
+    }
+    if control.get("matched_selector") is not None:
+        ref["matched_selector"] = control.get("matched_selector")
+    if control.get("score") is not None:
+        ref["score"] = control.get("score")
+    return ref
+
+
+def _relation_verdict(result: dict[str, Any]) -> tuple[bool | None, str]:
+    """Map one `_SAME_CONTROL_JS` answer onto `(verdict, basis)`.
+
+    Split out from `_same_control` so the mapping can be exercised for every
+    relation the JS can return. The `unknown` arms are otherwise reachable
+    only by winning a race - a node detached in the window between taking its
+    handle and evaluating against it - which no test can schedule reliably.
+    Anything unrecognised falls through to undetermined rather than to a
+    verdict, so a future relation added to the JS fails safe.
+    """
+    relation = str(result.get("rel") or "")
+    why = str(result.get("why") or "")
+    if relation == "same":
+        return True, "identical"
+    if relation == "containment":
+        return True, "containment"
+    if relation == "distinct":
+        return False, why or "distinct"
+    return None, why or "unknown"
+
+
+def _same_control(a: dict[str, Any] | None, b: dict[str, Any] | None) -> tuple[bool | None, str]:
+    """Do these two candidates refer to one control? `(verdict, basis)`.
+
+    A `None` verdict means undetermined, and is never quietly folded into
+    either answer: the caller treats it the same way it treats a real
+    disagreement (refuse to click) but records that it could not tell, which
+    is a different sentence in a report than "these are two controls".
+    """
+    if not a or not b:
+        return None, "missing"
+    # Two frames are two clickable things even when they look identical, and
+    # a handle from one frame cannot be reasoned about inside another.
+    if a.get("frame") is not b.get("frame"):
+        return False, "different_frame"
+
+    for attempt in range(2):
+        result: dict[str, Any] = {}
+        handle = None
+        try:
+            handle = b["locator"].element_handle(timeout=1000)
+            if handle is None:
+                raise RuntimeError("no element handle")
+            result = a["locator"].evaluate(_SAME_CONTROL_JS, handle) or {}
+        except Exception as error:
+            if attempt == 0:
+                _sleep_ms(250)
+                continue
+            return None, f"error:{str(error)[:120]}"
+        finally:
+            if handle is not None:
+                try:
+                    handle.dispose()
+                except Exception:
+                    pass
+        verdict, basis = _relation_verdict(result)
+        if verdict is not None:
+            return verdict, basis
+        # A CMP mid-animation can detach and re-attach a node; one settle and
+        # retry distinguishes that from a control that is genuinely gone.
+        if attempt == 0:
+            _sleep_ms(250)
+            continue
+        return None, basis
+    return None, "unknown"
+
+
 SCORE_THRESHOLD = 70
 BARE_LABELS = {"reject", "decline", "deny", "refuse", "accept", "allow", "agree", "save", "confirm", "ok"}
 

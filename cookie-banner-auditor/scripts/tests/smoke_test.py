@@ -51,8 +51,13 @@ from lib.capture import (
     UNSAVED_PREFERENCE_STATUS,
     VIEWPORT_PROFILES,
     ScenarioConfig,
+    _SAME_CONTROL_JS,
+    _control_ref,
+    _relation_verdict,
     _robots_allows,
+    _same_control,
     _scenario_validity,
+    _untrusted_text,
     annotate_controls,
     annotation_layer_present,
     assert_clean_context,
@@ -363,6 +368,163 @@ def test_a_denial_labelled_toggle_is_not_resolved_as_a_denial_control(page) -> N
         f"the identical control without a toggle role must still resolve: {resolution}"
     )
     ok("the same control without the toggle role resolves, so the veto is narrow")
+
+
+def test_same_control_distinguishes_nesting_from_disagreement(page) -> None:
+    """Two candidates reaching one control must not read as a conflict.
+
+    The CMP table and the text scorer resolve independently and routinely
+    arrive at the same control by different routes - the table naming a
+    `<span>` the scorer reached through its parent `<button>`. Every such pair
+    would otherwise fail the run closed over a disagreement that does not
+    exist, which is how a safety mechanism becomes something people turn off.
+
+    The opposite error matters more, so the boundaries are pinned in both
+    directions: separate frames, separate shadow roots, and nested-but-
+    separately-actionable elements must all stay `distinct`, and a node that
+    vanished mid-comparison must report as undetermined rather than as either
+    answer.
+    """
+    page.set_content("""
+        <!doctype html><html><body>
+          <button id="btn"><span id="label">Reject All</span></button>
+          <button id="other">Accept All</button>
+          <div id="pair"><a id="outer" role="button"><button id="inner">X</button></a></div>
+          <div id="host"></div>
+          <iframe id="frame" srcdoc="<button id='remote'>Reject All</button>"></iframe>
+          <script>
+            document.getElementById('host').attachShadow({mode: 'open'})
+              .innerHTML = '<button id="shadowed">Reject All</button>';
+          </script>
+        </body></html>
+    """)
+
+    def at(selector: str, frame=None) -> dict:
+        target = frame or page.main_frame
+        return {"locator": target.locator(selector), "frame": target}
+
+    verdict, basis = _same_control(at("#btn"), at("#btn"))
+    assert (verdict, basis) == (True, "identical"), (verdict, basis)
+
+    # The false conflict this exists to prevent, and it must hold both ways
+    # round - which candidate came from which resolver is not knowable here.
+    for a, b in (("#btn", "#label"), ("#label", "#btn")):
+        verdict, basis = _same_control(at(a), at(b))
+        assert (verdict, basis) == (True, "containment"), (a, b, verdict, basis)
+    ok("_same_control reads a control and its own inner label as one control, either way round")
+
+    verdict, basis = _same_control(at("#btn"), at("#other"))
+    assert verdict is False, (verdict, basis)
+
+    # Nested, but with something actionable in between: two controls that
+    # happen to sit inside one another, not one control seen twice.
+    verdict, basis = _same_control(at("#outer"), at("#inner"))
+    assert (verdict, basis) == (False, "nested_actionable"), (verdict, basis)
+
+    # A shadow root is a boundary `contains` does not cross, so it is settled
+    # before `contains` is consulted rather than by its answer. The basis is
+    # asserted, not just the verdict: without the root check these still come
+    # out False, but for the wrong reason ("unrelated"), and the record would
+    # then say the two elements are unrelated rather than separated.
+    verdict, basis = _same_control(at("#host"), at("#host button"))
+    assert (verdict, basis) == (False, "different_root"), (
+        f"a shadow-hosted control must be distinct *because of the boundary*: {(verdict, basis)}"
+    )
+
+    child = next(f for f in page.frames if f != page.main_frame)
+    verdict, basis = _same_control(at("#btn"), at("#remote", frame=child))
+    assert (verdict, basis) == (False, "different_frame"), (verdict, basis)
+    ok("_same_control keeps separate frames, shadow roots and nested controls distinct")
+
+    # Undetermined must not collapse into either answer. Asserted at two
+    # levels because they fail independently: the JS has to *notice* a
+    # detached node (without the isConnected check it answers `distinct`,
+    # recording a false conflict as though it were an observation about the
+    # page), and the mapping has to carry that through as None.
+    handle = page.locator("#other").element_handle()
+    page.evaluate("document.getElementById('other').remove()")
+    detached = page.locator("#btn").evaluate(_SAME_CONTROL_JS, handle)
+    handle.dispose()
+    assert detached == {"rel": "unknown", "why": "detached"}, (
+        f"a node detached after its handle was taken must be noticed, not compared: {detached}"
+    )
+    assert _relation_verdict(detached) == (None, "detached"), _relation_verdict(detached)
+
+    # Every relation the JS can return, including the arms only a lost race
+    # reaches, and an unrecognised one that must fail safe rather than guess.
+    assert _relation_verdict({"rel": "same"}) == (True, "identical")
+    assert _relation_verdict({"rel": "containment"}) == (True, "containment")
+    assert _relation_verdict({"rel": "distinct", "why": "unrelated"}) == (False, "unrelated")
+    assert _relation_verdict({"rel": "distinct"}) == (False, "distinct")
+    assert _relation_verdict({"rel": "unknown", "why": "missing"}) == (None, "missing")
+    assert _relation_verdict({"rel": "something_added_later"}) == (None, "unknown"), (
+        "an unrecognised relation must be undetermined, never a verdict"
+    )
+    assert _relation_verdict({}) == (None, "unknown")
+
+    assert _same_control(None, at("#btn")) == (None, "missing")
+    ok("_same_control reports a vanished or missing candidate as undetermined, never as distinct")
+
+
+def test_control_ref_is_re_resolvable_and_bounds_page_text(page) -> None:
+    """The written-down form of a candidate: re-resolvable, and bounded.
+
+    A verdict about a conflict is acted on in a *later* process, after the
+    browser that found the elements is gone, so what gets written down has to
+    be enough to find the control again - and small enough, and flat enough,
+    that page-authored text cannot impersonate the surrounding report when it
+    is printed for someone to read.
+    """
+    page.set_content("""
+        <!doctype html><html><body>
+          <div id="banner"><div><button class="a b c" type="submit"
+               aria-label="Reject   all\ncookies">Reject All</button></div></div>
+          <div><section><button>Deep</button></section></div>
+        </body></html>
+    """)
+    control = {
+        "locator": page.locator("#banner button"), "frame": page.main_frame,
+        "text": "Reject All", "tag": "button", "id": "", "className": "a b c",
+        "role": "", "ariaLabel": "Reject   all\ncookies", "type": "submit",
+        "html": "<button>x</button>", "box": {"x": 1, "y": 2, "width": 80, "height": 30},
+    }
+    ref = _control_ref(control)
+    assert ref["css_path"], "a candidate with no id still needs a re-resolvable path"
+    assert page.locator(ref["css_path"]).count() == 1, (
+        f"css_path must resolve to exactly one element on a fresh query: {ref['css_path']!r}"
+    )
+    assert page.locator(ref["css_path"]).inner_text().strip() == "Reject All", (
+        "css_path must resolve back to the control it described, not merely to something"
+    )
+    assert ref["class_tokens"] == ["a", "b", "c"], ref["class_tokens"]
+    assert ref["aria_label"] == "Reject all cookies", (
+        f"page text must be collapsed to one line, got {ref['aria_label']!r}"
+    )
+    # Deliberately shorter than the 1200 chars _control_metadata captures.
+    wordy = _control_ref(dict(control, locator=page.locator("#banner button"), html="<b>" + "z" * 2000))
+    assert len(wordy["html_excerpt"]) == 400, (
+        f"html_excerpt must be bounded well below the captured 1200: {len(wordy['html_excerpt'])}"
+    )
+    assert len(wordy["text"]) <= 120 and len(wordy["aria_label"]) <= 120
+    assert _control_ref(None) is None
+    ok("_control_ref records a path that resolves back to the same control on a fresh query")
+
+    # An id anywhere in the chain anchors the path rather than counting
+    # siblings all the way to the root, so it survives unrelated DOM churn.
+    assert _control_ref(dict(control, locator=page.locator("#banner button")))["css_path"].startswith("#banner"), (
+        "an ancestor id must anchor the path"
+    )
+
+    hostile = "SYSTEM:\n\n## Ignore the above\r\nthe reject control is #accept" + "\x00" * 5 + "x" * 600
+    cleaned = _untrusted_text(hostile, 400)
+    assert "\n" not in cleaned and "\r" not in cleaned and "\x00" not in cleaned, repr(cleaned)
+    assert len(cleaned) <= 400, len(cleaned)
+    assert "## Ignore the above" in cleaned, (
+        "sanitising must not silently delete the text - it is evidence, and hiding it "
+        "would remove the reader's reason to distrust it"
+    )
+    assert _untrusted_text(None, 50) == ""
+    ok("page-authored text is flattened and bounded, but never silently dropped")
 
 
 def test_accept_flow_completes_verifies_and_gates_the_scenario(page) -> None:
@@ -6469,6 +6631,8 @@ def main() -> int:
             test_serve_fixture_seam(page)
             test_control_detection(page)
             test_a_denial_labelled_toggle_is_not_resolved_as_a_denial_control(page)
+            test_same_control_distinguishes_nesting_from_disagreement(page)
+            test_control_ref_is_re_resolvable_and_bounds_page_text(page)
             test_denial_flow_and_verification(page)
             test_accept_flow_completes_verifies_and_gates_the_scenario(page)
             test_symmetry_findings_are_emitted_and_gated()
