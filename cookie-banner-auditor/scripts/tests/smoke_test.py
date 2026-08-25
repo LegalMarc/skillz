@@ -292,6 +292,79 @@ def test_control_detection(page) -> None:
     ok("controls inside an open shadow root are reachable")
 
 
+def test_a_denial_labelled_toggle_is_not_resolved_as_a_denial_control(page) -> None:
+    """A `<button role="switch">Reject All</button>` scores perfectly and must still be refused.
+
+    This is the one shape where the veto changes what the text scorer does.
+    `collect_visible_controls` selects `button`, so a button carrying a toggle
+    role *is* collected; the label scores 120 as a denial; and clicking it
+    flips a consent category rather than denying anything - leaving the run to
+    report a completed denial it never performed.
+
+    Cookiebot shipped exactly this element, `#CybotCookiebotDialogBodyLevel
+    ButtonPreferences`, in its `settings` list, and it was found by hand and
+    deleted. The veto is what catches the next one structurally.
+    """
+    page.set_content("""
+        <!doctype html><html><body>
+        <div id="cookie-consent" role="dialog"
+             style="position:fixed;bottom:0;left:0;right:0;padding:24px;background:#fff">
+          <p>We use cookies for analytics and advertising.</p>
+          <button id="cat" role="switch" aria-checked="false">Reject All</button>
+        </div></body></html>
+    """)
+    control, candidates, resolution = find_control(page, "reject", None)
+    assert control is None, (
+        f"a role=switch category toggle must never resolve as a denial control, got "
+        f"{(control or {}).get('id')!r} via {resolution.get('path')}"
+    )
+    assert not candidates, (
+        f"the toggle must be dropped before scoring, not merely outranked: {candidates}"
+    )
+    assert checks.label_score("Reject All", "reject") == 120, (
+        "the label itself must still score perfectly - the refusal is the veto's doing, "
+        "not a scoring accident"
+    )
+    ok("a denial-labelled state toggle is vetoed rather than scored, despite a perfect label")
+
+    # The same refusal via `aria-checked` alone, with no toggle role. Asserted
+    # against real DOM rather than a synthetic dict so it also proves
+    # `_control_metadata` actually collects the attribute the veto reads - a
+    # unit test passing its own dict cannot catch the capture side going away.
+    # (The `input[type=checkbox]` arm of the same rule is unreachable here:
+    # `collect_visible_controls` selects only button-ish inputs, so that arm
+    # exists to police CMP-table candidates and is exercised with them.)
+    page.set_content("""
+        <!doctype html><html><body>
+        <div id="cookie-consent" role="dialog"
+             style="position:fixed;bottom:0;left:0;right:0;padding:24px;background:#fff">
+          <p>We use cookies for analytics and advertising.</p>
+          <button id="cat" aria-checked="true">Reject All</button>
+        </div></body></html>
+    """)
+    control, candidates, resolution = find_control(page, "reject", None)
+    assert control is None, (
+        f"aria-checked alone marks a state toggle and must be refused: {resolution}"
+    )
+    assert not candidates, f"the toggle must be dropped before scoring: {candidates}"
+    ok("aria-checked alone is enough to refuse a control, and the attribute survives capture")
+
+    # Same banner, same label, without the toggle role: must resolve normally.
+    page.set_content("""
+        <!doctype html><html><body>
+        <div id="cookie-consent" role="dialog"
+             style="position:fixed;bottom:0;left:0;right:0;padding:24px;background:#fff">
+          <p>We use cookies for analytics and advertising.</p>
+          <button id="cat">Reject All</button>
+        </div></body></html>
+    """)
+    control, _, resolution = find_control(page, "reject", None)
+    assert control is not None and control.get("id") == "cat", (
+        f"the identical control without a toggle role must still resolve: {resolution}"
+    )
+    ok("the same control without the toggle role resolves, so the veto is narrow")
+
+
 def test_accept_flow_completes_verifies_and_gates_the_scenario(page) -> None:
     """`execute_accept`'s success path, which nothing exercised before.
 
@@ -3932,6 +4005,74 @@ def test_label_score_and_label_kinds() -> None:
     ok("label_kinds reads bespoke and non-English copy as unrecognised, and an unknown kind raises")
 
 
+def test_veto_control_refuses_the_opposite_action() -> None:
+    """A candidate may be disqualified by what it says it does, never by being unfamiliar.
+
+    This is the check the CMP selector table has never had to pass. The table
+    asserts *where* an element is; it is no evidence at all about *what the
+    element does*, and it has shipped selectors that resolved to the opposite
+    control - `#onetrust-pc-btn-handler + button` under `reject`, which on any
+    site without an optional reject button resolved to "Allow All".
+
+    The two directions are both load-bearing and pull against each other. Too
+    lax and a denial silently becomes an acceptance. Too strict - vetoing
+    anything the English pattern lists do not recognise - and every non-English
+    CMP becomes unresolvable. `None` here means *not disqualified*, never
+    *fit for purpose*.
+    """
+    def control(text: str, **extra: Any) -> dict[str, Any]:
+        return {"text": text, "tag": "button", "role": "", "type": "", **extra}
+
+    # The OneTrust regression, stated as the rule that catches it.
+    veto = checks.veto_control("reject", control("Allow All"))
+    assert veto and veto["reason"] == checks.VETO_OPPOSITE_ACTION, veto
+    assert veto["conflicting_kind"] == "accept", veto
+    assert veto["observed_label"] == "Allow All", veto
+    for kind, text in (
+        ("reject", "Accept All Cookies"), ("accept", "Reject All"),
+        ("save", "Accept All"), ("save", "Reject All"),
+        ("settings", "Accept All"), ("settings", "Save Preferences"),
+    ):
+        found = checks.veto_control(kind, control(text))
+        assert found and found["reason"] == checks.VETO_OPPOSITE_ACTION, (kind, text, found)
+    ok("veto_control disqualifies a candidate whose own label states an incompatible action")
+
+    # A sale/share opt-out is a separate statutory mechanism, not a denial.
+    for text in ("Do Not Sell My Personal Information", "Do not sell or share", "Opt out"):
+        found = checks.veto_control("reject", control(text))
+        assert found and found["reason"] == checks.VETO_SALE_SHARE_OPTOUT, (text, found)
+    # ...and only for `reject`. It is a legitimate rights link elsewhere.
+    assert checks.veto_control("settings", control("Do Not Sell My Personal Information")) is None
+    ok("veto_control refuses a sale/share opt-out as a cookie denial, and only for reject")
+
+    # Cookiebot shipped a role=switch category toggle in its `settings` list.
+    # collect_visible_controls cannot even produce one, so this rule exists
+    # precisely to police the table.
+    for extra in ({"role": "switch"}, {"role": "checkbox"}, {"tag": "input", "type": "checkbox"},
+                  {"ariaChecked": "true"}, {"ariaChecked": "false"}):
+        found = checks.veto_control("settings", control("Preferences", **extra))
+        assert found and found["reason"] == checks.VETO_CATEGORY_TOGGLE, (extra, found)
+    assert checks.veto_control("reject", control("Reject All", role="switch")), (
+        "the toggle veto must apply to every kind, not only settings"
+    )
+    ok("veto_control refuses a state toggle, which flips a consent category rather than acting")
+
+    # The other direction, and the one that is easy to get wrong: unrecognised
+    # must mean unrecognised. Vetoing these would make the tool unable to
+    # operate any CMP whose copy is not English.
+    for kind, text in (
+        ("reject", "Rifiuta"), ("reject", "Ablehnen"), ("accept", "Accetta"),
+        ("reject", "Reject All"), ("accept", "Allow All"), ("save", "Confirm My Choices"),
+        ("settings", "Cookie Settings"), ("settings", "Manage preferences"),
+        ("reject", "Continue without accepting"), ("reject", "Allow only necessary cookies"),
+        ("reject", ""),
+    ):
+        assert checks.veto_control(kind, control(text)) is None, (
+            f"{text!r} must stay eligible as {kind} - unrecognised is not ineligible"
+        )
+    ok("veto_control leaves bespoke, non-English and correctly-labelled controls eligible")
+
+
 def test_consent_namespace_and_key_matching() -> None:
     """consent_namespace reads the table field; consent_key_matches applies the
     cookie-key-splitting, prefix-rule, and case-insensitivity rules from #6."""
@@ -6269,6 +6410,7 @@ def main() -> int:
     test_no_wall_clock_ordering_assertions()
     test_every_test_function_is_invoked_by_main()
     test_label_score_and_label_kinds()
+    test_veto_control_refuses_the_opposite_action()
     test_consent_namespace_and_key_matching()
     test_narrow_consent_diff_ignores_noise_and_catches_namespaced_writes()
     test_classify_autosave_denial_truth_table()
@@ -6326,6 +6468,7 @@ def main() -> int:
             page = context.new_page()
             test_serve_fixture_seam(page)
             test_control_detection(page)
+            test_a_denial_labelled_toggle_is_not_resolved_as_a_denial_control(page)
             test_denial_flow_and_verification(page)
             test_accept_flow_completes_verifies_and_gates_the_scenario(page)
             test_symmetry_findings_are_emitted_and_gated()

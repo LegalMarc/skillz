@@ -619,6 +619,87 @@ def label_kinds(text: str) -> frozenset[str]:
     return frozenset(kind for kind in CONTROL_PATTERNS if label_score(text, kind))
 
 
+VETO_SALE_SHARE_OPTOUT = "sale_share_optout_is_not_a_cookie_denial"
+VETO_OPPOSITE_ACTION = "label_states_an_incompatible_action"
+VETO_CATEGORY_TOGGLE = "candidate_toggles_a_category_rather_than_operating_a_control"
+
+#: A candidate for the key kind may never be an element whose own label reads
+#: decisively as one of the value kinds. Asymmetric on purpose: `settings` is
+#: the strictest because it is clicked *first*, before any toggle is touched,
+#: so a mis-resolved settings control commits or discards a choice before the
+#: scenario has expressed one.
+INCOMPATIBLE_KINDS: dict[str, frozenset[str]] = {
+    "reject": frozenset({"accept"}),
+    "accept": frozenset({"reject"}),
+    "save": frozenset({"accept", "reject"}),
+    "settings": frozenset({"accept", "reject", "save"}),
+}
+
+#: ARIA roles and input types whose click semantics are "flip my own state".
+_TOGGLE_ROLES = frozenset({"switch", "checkbox", "radio", "menuitemcheckbox", "menuitemradio"})
+_TOGGLE_INPUT_TYPES = frozenset({"checkbox", "radio"})
+
+
+def veto_control(kind: str, control: dict[str, Any]) -> dict[str, Any] | None:
+    """Reasons this element may never be operated as `kind`, or None.
+
+    `None` means *not disqualified* - never *fit for purpose*. Fitness is a
+    separate, positive question that the caller answers by scoring or by
+    corroboration. Keeping the two apart is what lets an unrecognised label
+    like `"Rifiuta"` stay eligible while a contradictory one like `"Allow All"`
+    under `reject` does not.
+
+    Applied identically to a candidate the CMP selector table produced and one
+    the text scorer produced. That symmetry is the whole point: a selector
+    match is evidence about *where an element is*, never about *what it does*,
+    and the table has shipped selectors that resolved to the opposite control.
+    """
+    text = str(control.get("text") or "")
+    lower = text.lower()
+
+    # A sale/share opt-out is a separate statutory mechanism with its own
+    # scope and its own remedies, not a general cookie denial. Substituting
+    # one for the other would report a denial this run never performed.
+    if kind == "reject" and ("do not sell" in lower or "opt out" in lower):
+        return {"reason": VETO_SALE_SHARE_OPTOUT, "conflicting_kind": None, "observed_label": text[:120]}
+
+    # A control whose own label states a different, incompatible action. This
+    # is the OneTrust case: a positional `reject` selector that resolved to a
+    # button reading "Allow All". It is caught by what the element says it
+    # does, not by what the table claimed it was, so it survives the table
+    # being wrong in ways nobody anticipated.
+    contradictions = label_kinds(text) & INCOMPATIBLE_KINDS.get(kind, frozenset())
+    if contradictions:
+        return {
+            "reason": VETO_OPPOSITE_ACTION,
+            "conflicting_kind": sorted(contradictions)[0],
+            "observed_label": text[:120],
+        }
+
+    # A state toggle is not a control that performs an action; clicking one
+    # flips a consent category. Cookiebot shipped `...ButtonLevelButtonPrefer
+    # ences` as a role=switch category toggle, so a `settings` click would
+    # have granted or withdrawn a category before any scenario expressed a
+    # choice. Applied to every kind: `collect_visible_controls` cannot even
+    # produce a role=switch (it selects buttons, links and button-ish inputs),
+    # so this rule exists precisely and only to police the table.
+    role = str(control.get("role") or "").lower()
+    input_type = str(control.get("type") or "").lower()
+    tag = str(control.get("tag") or "").lower()
+    is_toggle = (
+        role in _TOGGLE_ROLES
+        or (tag == "input" and input_type in _TOGGLE_INPUT_TYPES)
+        or control.get("ariaChecked") is not None
+    )
+    if is_toggle:
+        return {
+            "reason": VETO_CATEGORY_TOGGLE,
+            "conflicting_kind": None,
+            "observed_label": text[:120],
+        }
+    return None
+
+
 # --------------------------------------------------------------------------
 # E3 - symmetry and accessibility measurement
 # --------------------------------------------------------------------------

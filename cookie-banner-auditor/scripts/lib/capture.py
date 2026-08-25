@@ -301,6 +301,14 @@ def _control_metadata(locator: Locator, frame: Frame, index: int) -> dict[str, A
                 className: typeof el.className === 'string' ? el.className.slice(0, 400) : '',
                 role: el.getAttribute('role') || '',
                 ariaLabel: el.getAttribute('aria-label') || '',
+                // `type` and `ariaChecked` exist for the category-toggle veto.
+                // A control that flips its own state is not one that performs
+                // an action, and clicking it grants or withdraws a consent
+                // category. `ariaChecked` is deliberately null (not '') when
+                // absent, so "has a checked state" stays distinguishable from
+                // "is checked, currently false".
+                type: el.getAttribute('type') || '',
+                ariaChecked: el.getAttribute('aria-checked'),
                 ownText,
                 ancestorText,
                 hasFixedAncestor,
@@ -571,11 +579,11 @@ def find_control(
     for control in controls:
         text = str(control.get("text", "")).strip()
         lower = text.lower()
-        if kind == "reject":
-            # A sale/share opt-out is a separate statutory mechanism, not a
-            # general cookie denial; never substitute one for the other.
-            if "do not sell" in lower or "opt out" in lower:
-                continue
+        # Disqualification first, fitness second. A vetoed candidate is
+        # dropped whatever it scores - the two questions are separate, and
+        # the same veto is what will police the CMP table's candidates.
+        if checks.veto_control(kind, control):
+            continue
         base = checks.label_score(text, kind)
         if not base:
             continue
