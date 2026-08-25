@@ -52,6 +52,7 @@ from lib.capture import (
     VIEWPORT_PROFILES,
     ScenarioConfig,
     _SAME_CONTROL_JS,
+    _adjudication_id,
     _control_ref,
     _relation_verdict,
     _robots_allows,
@@ -1675,6 +1676,169 @@ def test_onetrust_shape_uses_the_second_layer_reject(page) -> None:
         ok("a OneTrust-shaped banner with no first-layer reject completes via the second layer")
 
 
+def test_a_wrong_table_entry_no_longer_pre_empts_the_generic_scorer(page) -> None:
+    """The two live bugs that motivated cross-checking, reproduced against their own shapes.
+
+    Both were found by hand and fixed by editing the table. Neither fix
+    addressed the reason a wrong entry could do damage at all: the table was
+    tried first and returned on the first match, so a bad selector did not
+    degrade to the safer generic path - it pre-empted it, and skipped the veto
+    the scorer applies to its own candidates on the way past.
+
+    These reproduce the *architecture*, not the two selectors. Restoring the
+    early return in `find_control` makes both fail.
+    """
+    # 1. OneTrust. `#onetrust-pc-btn-handler + button` meant "whatever button
+    #    follows Settings". On a banner with no optional reject that is
+    #    `#onetrust-accept-btn-handler`, so execute_denial clicked Allow All
+    #    and reported a completed denial. The label is what convicts it: the
+    #    element says "Allow All", whatever the table claimed it was.
+    with _serve_cmp_fixture(page, """
+        <!doctype html><html><body>
+        <div id="onetrust-consent-sdk">
+          <div id="onetrust-banner-sdk" style="position:fixed;bottom:0;padding:24px;background:#fff">
+            <p>We use cookies for analytics and advertising.</p>
+            <button id="onetrust-pc-btn-handler">Cookie Settings</button>
+            <button id="onetrust-accept-btn-handler">Allow All</button>
+          </div>
+        </div></body></html>
+    """):
+        entry = fingerprint_cmp(page, load_cmp_table())["entry"]
+        buggy = dict(entry, reject=["#onetrust-pc-btn-handler + button"])
+        control, _, resolution = find_control(page, "reject", buggy)
+
+        assert control is None, (
+            f"a positional reject selector resolving to Allow All must never be clickable, "
+            f"got {control.get('id')!r}"
+        )
+        assert resolution["clickable"] is False, resolution
+        assert resolution["decision"] == "vetoed", resolution
+        veto = resolution["veto"]
+        assert veto["reason"] == checks.VETO_OPPOSITE_ACTION, veto
+        assert veto["conflicting_kind"] == "accept", veto
+        assert veto["control_ref"]["id"] == "onetrust-accept-btn-handler", veto
+        assert veto["matched_selector"] == "#onetrust-pc-btn-handler + button", veto
+
+        # The scenario must record no denial rather than a wrong one.
+        result = _denial_for(page, buggy)
+        assert result["status"] not in COMPLETED_DENIAL_STATUSES, (
+            f"a run that could not identify a denial control must not report one: {result['status']}"
+        )
+        clicked = [r for r in result.get("action_log", []) if r.get("action") == "click_reject"]
+        assert not clicked, f"nothing may be clicked as a denial here: {clicked}"
+        assert _scenario_validity("deny", result, [])["valid"] is False, result
+        ok("OneTrust's positional reject selector is refused by the element's own label, and no denial is reported")
+
+    # 2. Klaro. With the modal open, `accept` resolved to the *save* button.
+    #    "Accept selected" matches no pattern, so nothing contradicts it - the
+    #    veto cannot see this one. It is caught only because the scorer
+    #    independently reaches a different, genuinely-accept control.
+    with _serve_cmp_fixture(page, """
+        <!doctype html><html><body>
+        <div id="klaro" style="position:fixed;bottom:0;padding:24px;background:#fff">
+          <div class="cookie-modal">
+            <p>We use cookies for analytics and advertising.</p>
+            <button class="cm-btn cm-btn-success">Accept selected</button>
+            <button class="cm-btn cm-btn-success cm-btn-accept-all">Accept all</button>
+          </div>
+        </div></body></html>
+    """):
+        buggy = {"id": "klaro", "accept": [".cm-btn-success"], "reject": [], "settings": [], "save": []}
+        control, candidates, resolution = find_control(page, "accept", buggy)
+
+        assert control is None, f"an ambiguous accept must refuse, got {control}"
+        assert resolution["decision"] == "conflict", resolution
+        assert resolution["veto"] is None, (
+            "nothing about 'Accept selected' is contradictory - if this starts being vetoed, "
+            "the conflict path is no longer what is being tested"
+        )
+        conflict = resolution["conflict"]
+        assert conflict["table_candidate"]["text"] == "Accept selected", conflict
+        assert conflict["scorer_candidate"]["text"] == "Accept all", conflict
+        assert conflict["identity_basis"] == "unrelated", conflict
+        assert conflict["adjudication_id"], "a conflict must be nameable so a verdict can match it"
+        assert resolution["corroboration"]["same_canonical_element"] is False, resolution
+        ok("Klaro's accept-vs-save ambiguity is caught by disagreement, which the veto alone could not see")
+
+        # 3. Identity that could not be established must refuse too, and for
+        #    its own recorded reason. Only a lost race produces this - a node
+        #    detached between taking its handle and comparing against it - so
+        #    it is staged rather than waited for. Treating undetermined as
+        #    agreement would click the table's candidate on the strength of a
+        #    comparison that never happened, which is the failure this whole
+        #    change exists to stop, arriving by a different door.
+        from lib import capture
+        original = capture._same_control
+        capture._same_control = lambda a, b: (None, "detached")
+        try:
+            control, _, undetermined = find_control(page, "accept", buggy)
+        finally:
+            capture._same_control = original
+        assert control is None, f"an unverifiable identity must never be clicked: {control}"
+        assert undetermined["decision"] == "conflict", undetermined
+        assert undetermined["clickable"] is False, undetermined
+        assert undetermined["conflict"]["identity_basis"] == "detached", undetermined
+        assert undetermined["corroboration"]["same_canonical_element"] is None, (
+            "undetermined must be recorded as undetermined, not flattened to a boolean"
+        )
+        ok("an identity that could not be established refuses to click, and records why")
+
+    # The id must survive a reload, or a verdict expires before the re-run it
+    # exists to unblock. Served with deliberately different geometry and
+    # padding: same controls, same labels, same selectors, every box moved.
+    # A re-render that shifts a banner by a pixel is the ordinary case, so an
+    # id derived from position would be single-use in practice while looking
+    # stable in a test that reloads an identical page.
+    with _serve_cmp_fixture(page, """
+        <!doctype html><html><body style="margin:64px">
+        <div id="klaro" style="position:fixed;top:120px;left:40px;padding:72px;background:#fff">
+          <div class="cookie-modal">
+            <p>We use cookies for analytics and advertising.</p>
+            <br><br>
+            <button class="cm-btn cm-btn-success" style="padding:18px;font-size:24px">Accept selected</button>
+            <br>
+            <button class="cm-btn cm-btn-success cm-btn-accept-all" style="padding:30px">Accept all</button>
+          </div>
+        </div></body></html>
+    """):
+        buggy = {"id": "klaro", "accept": [".cm-btn-success"], "reject": [], "settings": [], "save": []}
+        _, _, again = find_control(page, "accept", buggy)
+        assert again["conflict"]["table_candidate"]["box"] != conflict["table_candidate"]["box"], (
+            "this fixture must actually move the controls, or the stability check below is vacuous"
+        )
+        assert again["conflict"]["adjudication_id"] == conflict["adjudication_id"], (
+            "the adjudication id must be stable across loads - it is derived only from the kind, "
+            "the label, the cmp, the matched selector and the competing label, never from geometry"
+        )
+        ok("a conflict's adjudication id is stable across loads, so a verdict about it survives a re-run")
+
+    # Stability is only half of it: the id must also *distinguish* conflicts,
+    # or one verdict would silently unblock a different one. Every stable part
+    # has to contribute, and nothing unstable may.
+    base = {"kind": "accept", "label": "accept", "cmp": "klaro"}
+    scorer = {"text": "Accept all"}
+    distinct_ids = {
+        _adjudication_id(base, {"matched_selector": ".a"}, scorer),
+        _adjudication_id(base, {"matched_selector": ".b"}, scorer),
+        _adjudication_id(dict(base, kind="reject"), {"matched_selector": ".a"}, scorer),
+        _adjudication_id(dict(base, label="second_layer_reject"), {"matched_selector": ".a"}, scorer),
+        _adjudication_id(dict(base, cmp="onetrust"), {"matched_selector": ".a"}, scorer),
+        _adjudication_id(base, {"matched_selector": ".a"}, {"text": "Allow all"}),
+    }
+    assert len(distinct_ids) == 6, (
+        f"each of kind, label, cmp, matched selector and competing label must change the id, "
+        f"got {len(distinct_ids)} distinct ids from 6 distinct conflicts"
+    )
+    moved_a = _adjudication_id(base, {"matched_selector": ".a", "box": {"x": 1, "y": 2}}, dict(scorer, box={"x": 3}))
+    moved_b = _adjudication_id(base, {"matched_selector": ".a", "box": {"x": 90, "y": 80}}, dict(scorer, box={"x": 70}))
+    assert moved_a == moved_b, "geometry must not contribute - it moves between loads"
+    assert _adjudication_id(base, {"matched_selector": ".a"}, {"text": "ACCEPT ALL"}) == \
+        _adjudication_id(base, {"matched_selector": ".a"}, {"text": " Accept  all "}), (
+        "the competing label is normalised, so whitespace and case cannot fork the id"
+    )
+    ok("an adjudication id distinguishes every conflict it should, and ignores what moves between loads")
+
+
 def test_usercentrics_shape_resolves_inside_a_shadow_root(page) -> None:
     """Usercentrics renders its controls inside a shadow root; its table entry is
     flagged shadow_dom. If control collection ever stopped piercing shadow DOM,
@@ -1807,6 +1971,46 @@ def test_didomi_shape_resolves_and_save_stays_specific_to_settings(page) -> None
         premature_save, _, premature_resolution = find_control(page, "save", match["entry"])
         assert premature_save is None, premature_resolution
 
+        # The current table's accept resolves to the real agree button, and only
+        # that. Probed here, at the first layer, because that is where
+        # `execute_denial` resolves accept - before any settings click. "I agree"
+        # scores nothing (the pattern is a bare "Agree", not "I agree"), so the
+        # table is the only witness and carries it unopposed.
+        accept_control, _, accept_resolution = find_control(page, "accept", match["entry"])
+        assert accept_control is not None, accept_resolution
+        assert accept_control["id"] == "didomi-notice-agree-button", accept_control
+        assert accept_resolution["decision"] == "table_only", accept_resolution
+
+        # Structural guard against reintroduction: _locate_by_selectors returns
+        # the first visible match in list order, so if the buggy fallback were
+        # ever added back *behind* the correct id, find_control would still
+        # resolve correctly and the mutation check below (which replaces the
+        # list wholesale) would not catch it. Assert directly against the table.
+        assert "button.didomi-components-button--color[aria-label*='Agree' i]" not in match["entry"]["accept"], (
+            "the historically buggy accept fallback (matches both agree and disagree) must not return to the table"
+        )
+
+        # Mutation check: the fallback this entry used to carry -
+        # `button.didomi-components-button--color[aria-label*='Agree' i]` - is
+        # proven here to have been a live bug, not a defensive selector removed
+        # out of caution. "disagree" contains "agree" as a substring, so the old
+        # selector matched BOTH buttons; which one `.first` returned was an
+        # accident of DOM order, not a guarantee of the right one.
+        #
+        # Run at the first layer for the same reason the check above is: with
+        # the preferences panel open the purpose radios make accept conflict,
+        # and a refusal would mask which button the buggy selector reached.
+        buggy_entry = dict(match["entry"])
+        buggy_entry["accept"] = ["button.didomi-components-button--color[aria-label*='Agree' i]"]
+        buggy_control, _, buggy_resolution = find_control(page, "accept", buggy_entry)
+        assert buggy_control is not None, f"the old selector should still match something: {buggy_resolution}"
+        assert buggy_control["id"] == "didomi-notice-disagree-button", (
+            "this pins the actual historical bug: the removed accept fallback resolved "
+            f"to the DISAGREE button first, not agree - got {buggy_control.get('id')!r}. "
+            "If this ever stops reproducing, the fixture's DOM order changed, not the bug."
+        )
+        ok("the removed Didomi accept fallback is confirmed to have matched 'I disagree', not just suspected to")
+
         page.click("#didomi-notice-learn-more-button")
 
         # Now the real save control must resolve, and must resolve to itself - not
@@ -1828,29 +2032,27 @@ def test_didomi_shape_resolves_and_save_stays_specific_to_settings(page) -> None
             "the historically buggy accept fallback (matches both agree and disagree) must not return to the table"
         )
 
-        # The current table's accept resolves to the real agree button, and only
-        # that. Checked before the denial click below, which removes the host
-        # element entirely.
-        accept_control, _, accept_resolution = find_control(page, "accept", match["entry"])
-        assert accept_control is not None, accept_resolution
-        assert accept_control["id"] == "didomi-notice-agree-button", accept_control
-
-        # Mutation check: the fallback this entry used to carry -
-        # `button.didomi-components-button--color[aria-label*='Agree' i]` - is
-        # proven here to have been a live bug, not a defensive selector removed
-        # out of caution. "disagree" contains "agree" as a substring, so the old
-        # selector matched BOTH buttons; which one `.first` returned was an
-        # accident of DOM order, not a guarantee of the right one.
-        buggy_entry = dict(match["entry"])
-        buggy_entry["accept"] = ["button.didomi-components-button--color[aria-label*='Agree' i]"]
-        buggy_control, _, _ = find_control(page, "accept", buggy_entry)
-        assert buggy_control is not None, "the old selector should still match something"
-        assert buggy_control["id"] == "didomi-notice-disagree-button", (
-            "this pins the actual historical bug: the removed accept fallback resolved "
-            f"to the DISAGREE button first, not agree - got {buggy_control.get('id')!r}. "
-            "If this ever stops reproducing, the fixture's DOM order changed, not the bug."
+        # With the preferences panel open, `accept` is genuinely ambiguous and
+        # must refuse to resolve. Didomi renders each purpose as a pair of
+        # `didomi-components-radio__option` buttons reading "Agree"/"Disagree",
+        # and a bare "Agree" inside banner copy outscores everything the
+        # scorer can see - so the generic method's best accept candidate here
+        # is a per-purpose radio, not the banner's accept control.
+        #
+        # That is a real weakness in the scorer that the table used to paper
+        # over by pre-empting it. Neither resolver is trustworthy alone at this
+        # moment, so the run refuses rather than picking one. `execute_denial`
+        # is unaffected: it resolves accept at the first layer, before the
+        # settings click, which is the state asserted above.
+        panel_open, _, panel_resolution = find_control(page, "accept", match["entry"])
+        assert panel_open is None, panel_resolution
+        assert panel_resolution["decision"] == "conflict", panel_resolution
+        assert panel_resolution["conflict"]["table_candidate"]["id"] == "didomi-notice-agree-button"
+        assert panel_resolution["conflict"]["scorer_candidate"]["text"] == "Agree", (
+            "the scorer's competing candidate should be the purpose radio, which is the "
+            f"whole reason this conflicts: {panel_resolution['conflict']['scorer_candidate']}"
         )
-        ok("the removed Didomi accept fallback is confirmed to have matched 'I disagree', not just suspected to")
+        ok("Didomi's open preferences panel makes accept ambiguous, and the run refuses rather than guessing")
 
         result = _denial_for(page, match["entry"])
         assert result["status"] == "direct_reject_clicked", result
@@ -2012,11 +2214,22 @@ def test_cookiebot_shape_settings_never_resolves_to_the_category_checkbox(page) 
         # preferences".
         buggy_entry = dict(entry)
         buggy_entry["settings"] = ["#CybotCookiebotDialogBodyLevelButtonPreferences"]
-        buggy_control, _, _ = find_control(page, "settings", buggy_entry)
-        assert buggy_control is not None, "the removed selector should still match something"
-        assert buggy_control["tag"] == "input" and buggy_control.get("role") == "switch", (
-            f"this confirms the removed selector resolved to the category-toggle checkbox, not a launcher: {buggy_control}"
+        buggy_control, _, buggy_resolution = find_control(page, "settings", buggy_entry)
+        veto = buggy_resolution["veto"]
+        assert veto, f"the removed selector must be refused, not merely absent: {buggy_resolution}"
+        assert veto["reason"] == checks.VETO_CATEGORY_TOGGLE, veto
+        assert veto["matched_selector"] == "#CybotCookiebotDialogBodyLevelButtonPreferences", veto
+        assert veto["control_ref"]["tag"] == "input" and veto["control_ref"]["role"] == "switch", (
+            f"this confirms the removed selector resolved to the category-toggle checkbox, not a launcher: {veto}"
         )
+        # ...and the run degrades to the safer generic path rather than failing:
+        # the scorer supplies the real launcher the table entry was missing.
+        # Before both resolvers ran, a table match returned immediately and
+        # this click would have flipped a consent category instead.
+        assert buggy_control is not None and buggy_control["id"] == "CybotCookiebotDialogBodyLevelButtonCustomize", (
+            f"the scorer should have supplied the real launcher: {buggy_control}"
+        )
+        assert buggy_resolution["decision"] == "scorer_only", buggy_resolution
 
         # Deny is hidden until Customize is opened (the UoPeople quirk); the
         # top-level reject lookup must reflect that rather than reporting a false
@@ -2429,12 +2642,16 @@ def test_iubenda_shape_reject_uses_the_continue_without_accepting_control(page) 
         save_only_entry = dict(entry, reject=[])
         save_result = _denial_for(page, save_only_entry)
         assert save_result["status"] == "preferences_disabled_and_saved", save_result
-        assert save_result["resolution"]["save"] == {
-            "kind": "save",
-            "path": "cmp_selector_table",
-            "matched_selector": "#iubFooterBtn",
-            "cmp": "iubenda",
-        }, save_result["resolution"]
+        # Asserted field by field rather than by whole-dict equality: the
+        # resolution record now also carries the cross-check fields, and
+        # pinning the full key set in every CMP test would make each new
+        # field a dozen-file edit. The key set itself is pinned once, against
+        # the generated bundle, in test_data_schema_doc_matches_the_real_output.
+        saved = save_result["resolution"]["save"]
+        assert (saved["kind"], saved["path"], saved["matched_selector"], saved["cmp"]) == (
+            "save", "cmp_selector_table", "#iubFooterBtn", "iubenda",
+        ), saved
+        assert saved["decision"] == "table_only" and saved["clickable"] is True, saved
         assert (save_result.get("verification") or {}).get("verified") is True, save_result
         ok("the corrected iubenda save selector (#iubFooterBtn) resolves through the CMP table and completes "
            "preferences_disabled_and_saved via the settings -> toggle -> save fallback")
@@ -2467,12 +2684,12 @@ def test_iubenda_shape_reject_uses_the_continue_without_accepting_control(page) 
         before = consent_snapshot(page, page.context, entry)
         save_control, _, save_resolution = find_control(page, "save", entry)
         assert save_control is not None, save_resolution
-        assert save_resolution == {
-            "kind": "save",
-            "path": "cmp_selector_table",
-            "matched_selector": "#iubFooterBtn",
-            "cmp": "iubenda",
-        }, save_resolution
+        assert (
+            save_resolution["kind"], save_resolution["path"],
+            save_resolution["matched_selector"], save_resolution["cmp"],
+        ) == ("save", "cmp_selector_table", "#iubFooterBtn", "iubenda"), save_resolution
+        assert save_resolution["decision"] == "table_only", save_resolution
+        assert save_resolution["clickable"] is True, save_resolution
         save_control["locator"].click()
         after = consent_snapshot(page, page.context, entry)
         verification = verify_choice_registered(before, after)
@@ -6655,6 +6872,7 @@ def main() -> int:
             test_execute_denial_measures_focus_visibility_per_control(page)
             test_measure_tab_order_bounded(page)
             test_onetrust_shape_uses_the_second_layer_reject(page)
+            test_a_wrong_table_entry_no_longer_pre_empts_the_generic_scorer(page)
             test_usercentrics_shape_resolves_inside_a_shadow_root(page)
             test_sourcepoint_shape_resolves_inside_an_iframe(page)
             test_didomi_shape_resolves_and_save_stays_specific_to_settings(page)

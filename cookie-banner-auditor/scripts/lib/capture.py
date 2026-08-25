@@ -751,36 +751,43 @@ def _locate_by_selectors(page: Page, selectors: list[str] | None) -> dict[str, A
     return None
 
 
-def find_control(
-    page: Page,
-    kind: str,
-    cmp_entry: dict[str, Any] | None = None,
-) -> tuple[dict[str, Any] | None, list[dict[str, Any]], dict[str, Any]]:
-    """Resolve a consent control, CMP table first and text scoring second.
+def _adjudication_id(
+    resolution: dict[str, Any],
+    table_control: dict[str, Any] | None,
+    scorer_control: dict[str, Any] | None,
+) -> str:
+    """A stable name for one conflict, so a verdict about it can be matched back.
 
-    Returns (control, scored_candidates, resolution). `resolution` records which
-    path produced the control so the report can distinguish "no such control
-    exists on the page" from "the scanner could not identify it" - a distinction
-    that previously collapsed into a silent None.
+    Hashes only what survives a reload: the kind and call-site label, the CMP
+    id, the selector that matched, and the scorer candidate's normalised text.
+    Deliberately *not* the box or the markup - both move between loads, and an
+    id derived from them would make every verdict single-use, expiring before
+    the re-run it exists to unblock.
     """
-    resolution: dict[str, Any] = {"kind": kind, "path": "none", "matched_selector": None, "cmp": None}
+    parts = [
+        str(resolution.get("kind") or ""),
+        str(resolution.get("label") or ""),
+        str(resolution.get("cmp") or ""),
+        str((table_control or {}).get("matched_selector") or ""),
+        _untrusted_text((scorer_control or {}).get("text"), 120).lower(),
+    ]
+    return short_hash("|".join(parts))
 
-    if cmp_entry:
-        control = _locate_by_selectors(page, cmp_entry.get(kind))
-        if control:
-            resolution.update(path="cmp_selector_table", matched_selector=control.get("matched_selector"), cmp=cmp_entry.get("id"))
-            return control, [{"score": None, "source": "cmp_selector_table", **_public_control(control)}], resolution
-        resolution["cmp_table_miss"] = True
-        resolution["cmp"] = cmp_entry.get("id")
 
-    controls = collect_visible_controls(page)
+def _score_controls(page: Page, kind: str) -> list[tuple[int, dict[str, Any]]]:
+    """Every visible control that reads as `kind`, best first.
+
+    Split out of `find_control` so the generic method can be run
+    unconditionally - including when the CMP table already produced a
+    candidate, which is the whole point of cross-checking.
+    """
     scored: list[tuple[int, dict[str, Any]]] = []
-    for control in controls:
+    for control in collect_visible_controls(page):
         text = str(control.get("text", "")).strip()
         lower = text.lower()
         # Disqualification first, fitness second. A vetoed candidate is
         # dropped whatever it scores - the two questions are separate, and
-        # the same veto is what will police the CMP table's candidates.
+        # the same veto polices the CMP table's candidate below.
         if checks.veto_control(kind, control):
             continue
         base = checks.label_score(text, kind)
@@ -793,14 +800,155 @@ def find_control(
         if lower in BARE_LABELS and not _banner_associated(control):
             score -= 80
         scored.append((score, control))
-
     scored.sort(key=lambda item: item[0], reverse=True)
-    public = [{"score": score, "source": "text_scoring", **_public_control(control)} for score, control in scored[:20]]
-    if scored and scored[0][0] >= SCORE_THRESHOLD:
-        resolution.update(path="text_scoring", score=scored[0][0])
-        return scored[0][1], public, resolution
-    resolution.update(path="none", best_score=(scored[0][0] if scored else None), threshold=SCORE_THRESHOLD)
-    return None, public, resolution
+    return scored
+
+
+def find_control(
+    page: Page,
+    kind: str,
+    cmp_entry: dict[str, Any] | None = None,
+    label: str | None = None,
+) -> tuple[dict[str, Any] | None, list[dict[str, Any]], dict[str, Any]]:
+    """Resolve a consent control by cross-checking two independent resolvers.
+
+    Returns `(control, candidates, resolution)`.
+
+    The CMP selector table used to be tried first and returned on the first
+    match, before the text scorer ever ran. A wrong table entry therefore did
+    not degrade to the safer generic path - it pre-empted it, and it also
+    bypassed the veto the scorer applies to its own candidates. That is not
+    hypothetical: `#onetrust-pc-btn-handler + button` sat in OneTrust's
+    `reject` list and resolved to "Allow All" on any site without an optional
+    reject button, so a denial scenario clicked accept and reported a
+    completed denial.
+
+    Both resolvers now always run. The table is a fast path and a
+    corroborating witness, never an authority: it can say *where* an element
+    is, which is no evidence at all about *what that element does*.
+
+    `resolution["decision"]` records which of these happened, and
+    `resolution["clickable"]` is the single field callers key off so no caller
+    can re-derive the safety rule differently:
+
+      corroborated  both resolvers reached the same control
+      table_only    the table matched, the scorer recognised nothing, and the
+                    candidate is not contradicted - the ordinary case for a
+                    CMP whose copy the English pattern lists do not know
+      scorer_only   the table missed, or its candidate was vetoed
+      vetoed        the table's candidate is disqualified and nothing else
+                    resolved
+      conflict      both resolvers are confident and disagree, or identity
+                    could not be established
+      unresolved    neither resolver produced anything
+
+    Only `conflict`, `vetoed` and `unresolved` refuse to click. A conflict is
+    deliberately *not* broken by preferring one resolver: this tool produces
+    compliance evidence, and a false "we confirmed the reject button" is worse
+    than an honest "we could not identify it".
+    """
+    resolution: dict[str, Any] = {
+        "kind": kind,
+        "label": label or kind,
+        "path": "none",
+        "decision": "unresolved",
+        "clickable": False,
+        "matched_selector": None,
+        "cmp": None,
+        "veto": None,
+        "conflict": None,
+        "corroboration": None,
+    }
+
+    table_control = None
+    if cmp_entry:
+        resolution["cmp"] = cmp_entry.get("id")
+        table_control = _locate_by_selectors(page, cmp_entry.get(kind))
+        if table_control is None:
+            resolution["cmp_table_miss"] = True
+        else:
+            veto = checks.veto_control(kind, table_control)
+            if veto:
+                # Recorded even when the scorer goes on to save the run: a
+                # table entry resolving to a contradictory control is a fact
+                # about the table worth surfacing before it is an incident.
+                resolution["veto"] = {
+                    "resolver": "cmp_selector_table",
+                    "matched_selector": table_control.get("matched_selector"),
+                    "control_ref": _control_ref(table_control),
+                    **veto,
+                }
+                table_control = None
+
+    scored = _score_controls(page, kind)
+    best_score = scored[0][0] if scored else None
+    scorer_control = scored[0][1] if scored and scored[0][0] >= SCORE_THRESHOLD else None
+
+    candidates: list[dict[str, Any]] = [
+        {"score": score, "source": "text_scoring", **_public_control(control)}
+        for score, control in scored[:20]
+    ]
+    if table_control is not None:
+        candidates.insert(0, {
+            "score": None, "source": "cmp_selector_table", **_public_control(table_control),
+        })
+    resolution["best_score"] = best_score
+    resolution["threshold"] = SCORE_THRESHOLD
+
+    if table_control is not None and scorer_control is not None:
+        same, basis = _same_control(table_control, scorer_control)
+        resolution["corroboration"] = {
+            "scorer_score": scored[0][0],
+            "scorer_threshold": SCORE_THRESHOLD,
+            "same_canonical_element": same,
+            "identity_basis": basis,
+        }
+        if same is True:
+            resolution.update(
+                path="cmp_selector_table",
+                decision="corroborated",
+                clickable=True,
+                matched_selector=table_control.get("matched_selector"),
+                score=scored[0][0],
+            )
+            return table_control, candidates, resolution
+        # Disagreement, or identity that could not be established. Both refuse
+        # to click; `identity_basis` is what tells them apart afterwards.
+        resolution.update(path="none", decision="conflict", clickable=False)
+        resolution["conflict"] = {
+            "table_candidate": _control_ref(table_control),
+            "scorer_candidate": _control_ref(scorer_control),
+            "identity_basis": basis,
+            "adjudication_id": _adjudication_id(resolution, table_control, scorer_control),
+        }
+        return None, candidates, resolution
+
+    if table_control is not None:
+        # The table matched and the scorer recognised nothing above threshold.
+        # Not a disagreement - there is only one candidate, and it survived the
+        # same veto the scorer applies to its own. Requiring corroboration here
+        # would make every CMP whose copy is not English unresolvable; the
+        # provenance ratchet, not this function, is what keeps the table honest.
+        resolution.update(
+            path="cmp_selector_table",
+            decision="table_only",
+            clickable=True,
+            matched_selector=table_control.get("matched_selector"),
+        )
+        return table_control, candidates, resolution
+
+    if scorer_control is not None:
+        resolution.update(
+            path="text_scoring", decision="scorer_only", clickable=True, score=scored[0][0]
+        )
+        return scorer_control, candidates, resolution
+
+    resolution.update(
+        path="none",
+        decision="vetoed" if resolution["veto"] else "unresolved",
+        clickable=False,
+    )
+    return None, candidates, resolution
 
 
 def click_control(control: dict[str, Any], action_log: list[dict[str, Any]], kind: str) -> bool:
