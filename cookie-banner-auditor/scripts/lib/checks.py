@@ -619,6 +619,82 @@ def label_kinds(text: str) -> frozenset[str]:
     return frozenset(kind for kind in CONTROL_PATTERNS if label_score(text, kind))
 
 
+#: Wire format of a control-verdict file. Versioned because it crosses a
+#: process boundary: the file is written after one run and read by the next.
+VERDICT_FORMAT = "cookie-banner-auditor/control-verdicts"
+VERDICT_VERSION = 1
+
+VERDICT_DECISIONS = frozenset({"use_selector", "refuse"})
+
+
+def parse_control_verdicts(data: Any, target_host: str) -> dict[str, Any]:
+    """Validate a verdict file against the host being audited.
+
+    A verdict says which of two candidate controls an operator or agent
+    decided was correct, so a later run can proceed where an earlier one
+    refused. It is a *proposal*: everything here is a cheap structural gate,
+    and none of it is what makes acting on one safe. The element a verdict
+    names is re-resolved and re-vetoed at the point it would be clicked, so a
+    verdict naming an accept button cannot get that button clicked as a
+    denial however well-formed the file is.
+
+    `target_host` is a hard gate rather than a warning. A verdict authorises a
+    click on one site; carrying it to another would apply a human's judgement
+    about one page to a page they never saw.
+
+    Returns `{"verdicts", "rejected", "error"}`. Malformed entries are
+    rejected individually and recorded, rather than failing the whole file:
+    one bad entry should not discard the operator's other decisions, and
+    silently dropping it would leave them believing it applied.
+    """
+    if not isinstance(data, dict):
+        return {"verdicts": [], "rejected": [], "error": "the verdict file must contain a JSON object"}
+    if data.get("format") != VERDICT_FORMAT:
+        return {"verdicts": [], "rejected": [],
+                "error": f"unrecognised format {data.get('format')!r}; expected {VERDICT_FORMAT!r}"}
+    if data.get("version") != VERDICT_VERSION:
+        return {"verdicts": [], "rejected": [],
+                "error": f"unsupported version {data.get('version')!r}; this build reads {VERDICT_VERSION}"}
+    stated_host = str(data.get("target_host") or "").strip().lower()
+    if stated_host != (target_host or "").strip().lower():
+        return {"verdicts": [], "rejected": [],
+                "error": (f"the verdict file names host {stated_host!r} but this run audits "
+                          f"{target_host!r}; a verdict is not transferable between sites")}
+
+    verdicts: list[dict[str, Any]] = []
+    rejected: list[dict[str, Any]] = []
+    entries = data.get("verdicts")
+    if not isinstance(entries, list):
+        return {"verdicts": [], "rejected": [], "error": "`verdicts` must be a list"}
+
+    for index, entry in enumerate(entries):
+        def reject(reason: str) -> None:
+            rejected.append({"index": index, "reason": reason,
+                             "entry": entry if isinstance(entry, dict) else repr(entry)[:200]})
+        if not isinstance(entry, dict):
+            reject("not an object")
+            continue
+        decision = entry.get("decision")
+        if decision not in VERDICT_DECISIONS:
+            reject(f"unknown decision {decision!r}; expected one of {sorted(VERDICT_DECISIONS)}")
+            continue
+        kind = entry.get("kind")
+        if kind is not None and kind not in CONTROL_PATTERNS:
+            reject(f"unknown control kind {kind!r}")
+            continue
+        if not entry.get("adjudication_id") and not kind:
+            reject("needs either an adjudication_id or a kind to match against")
+            continue
+        if decision == "use_selector":
+            selector = entry.get("selector")
+            if not isinstance(selector, str) or not selector.strip():
+                reject("a use_selector verdict needs a non-empty selector")
+                continue
+        verdicts.append(entry)
+
+    return {"verdicts": verdicts, "rejected": rejected, "error": None}
+
+
 VETO_SALE_SHARE_OPTOUT = "sale_share_optout_is_not_a_cookie_denial"
 VETO_OPPOSITE_ACTION = "label_states_an_incompatible_action"
 VETO_CATEGORY_TOGGLE = "candidate_toggles_a_category_rather_than_operating_a_control"

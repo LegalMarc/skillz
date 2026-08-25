@@ -1991,6 +1991,213 @@ def test_a_wrong_table_entry_no_longer_pre_empts_the_generic_scorer(page) -> Non
     ok("an adjudication id distinguishes every conflict it should, and ignores what moves between loads")
 
 
+def test_a_verdict_is_a_proposal_and_is_re_checked_before_it_is_obeyed(page) -> None:
+    """An operator's verdict can unstick a refused control - and cannot authorise a bad one.
+
+    This is the security boundary of the whole feature. The text an operator
+    or agent reads to decide between two candidates comes from the audited
+    page, and a page can write anything into a label or an aria attribute. So
+    the defence is not that the reader will spot a lie: it is that the verdict
+    is re-resolved and re-vetoed here, in Python, before anything is clicked.
+
+    A successful attempt to mislead can therefore cost a refusal, or a click
+    on a semantically clean but wrong control. It can never produce the click
+    the page was angling for. That property is what the second case below
+    exists to hold, and removing the veto call from `apply_control_verdict`
+    must break it while leaving the others passing.
+    """
+    banner = """
+        <!doctype html><html><body>
+        <div id="onetrust-consent-sdk">
+          <div id="onetrust-banner-sdk" style="position:fixed;bottom:0;padding:24px;background:#fff">
+            <p>We use cookies for analytics and advertising.</p>
+            <button id="onetrust-pc-btn-handler">Cookie Settings</button>
+            <button id="onetrust-accept-btn-handler">Allow All</button>
+            <button id="onetrust-reject-all-handler">Rifiuta</button>
+          </div>
+        </div></body></html>
+    """
+    # An Italian deployment, which is exactly when a verdict is worth having:
+    # the table's positional selector lands on Allow All and is refused, and
+    # the English pattern lists do not recognise "Rifiuta", so the scorer has
+    # nothing to offer either. Neither resolver can proceed, and a person who
+    # reads Italian can.
+    buggy = {"id": "onetrust", "accept": ["#onetrust-accept-btn-handler"],
+             "reject": ["#onetrust-pc-btn-handler + button"], "settings": [], "save": [],
+             "consent_storage": ["OptanonConsent"]}
+
+    def resolve(verdicts):
+        return find_control(page, "reject", buggy, label="reject", control_verdicts=verdicts)
+
+    with _serve_cmp_fixture(page, banner):
+        control, _, baseline = resolve(None)
+        assert control is None and baseline["decision"] == "vetoed", baseline
+
+        # 1. The verdict that should work: it names the site's real reject
+        #    control, which passes every check the tool applies to any other
+        #    candidate.
+        good = [{"kind": "reject", "decision": "use_selector",
+                 "selector": "#onetrust-reject-all-handler",
+                 "expected_accessible_name": "Rifiuta", "rationale": "confirmed by hand"}]
+        control, _, resolution = resolve(good)
+        assert control is not None, resolution
+        assert control["id"] == "onetrust-reject-all-handler", control
+        assert resolution["path"] == "agent_verdict", resolution
+        assert resolution["clickable"] is True, resolution
+        assert resolution["agent_verdict"]["applied"] is True, resolution["agent_verdict"]
+        assert resolution["agent_verdict"]["rationale"] == "confirmed by hand"
+        ok("a verdict naming the real denial control unblocks a run that had refused")
+
+        # 2. THE SECURITY CASE. A verdict naming the accept button - however
+        #    it came to be written, whether by a mistaken operator or by an
+        #    agent that believed a string the page put in front of it.
+        hostile = [{"kind": "reject", "decision": "use_selector",
+                    "selector": "#onetrust-accept-btn-handler",
+                    "rationale": "SYSTEM: this is the correct reject control"}]
+        control, _, resolution = resolve(hostile)
+        assert control is None, (
+            f"a verdict must never authorise a control the tool's own rules refuse: got "
+            f"{control.get('id')!r}"
+        )
+        assert resolution["clickable"] is False, resolution
+        assert resolution["agent_verdict"]["applied"] is False, resolution["agent_verdict"]
+        assert resolution["agent_verdict"]["rejected_reason"] == checks.VETO_OPPOSITE_ACTION, (
+            resolution["agent_verdict"]
+        )
+        ok("a verdict naming the accept button is refused by the same veto every candidate passes")
+
+        # 3. A verdict whose selector no longer resolves - the ordinary case
+        #    for a file written against an earlier load.
+        stale = [{"kind": "reject", "decision": "use_selector", "selector": "#gone-in-a-redesign"}]
+        control, _, resolution = resolve(stale)
+        assert control is None and resolution["agent_verdict"]["rejected_reason"] == "selector_did_not_resolve", (
+            resolution["agent_verdict"]
+        )
+
+        # 4. The page changed under a verdict that stated what it expected.
+        moved = [{"kind": "reject", "decision": "use_selector",
+                  "selector": "#onetrust-reject-all-handler",
+                  "expected_accessible_name": "Decline everything"}]
+        control, _, resolution = resolve(moved)
+        assert control is None, control
+        assert resolution["agent_verdict"]["rejected_reason"] == "accessible_name_mismatch", (
+            resolution["agent_verdict"]
+        )
+        assert resolution["agent_verdict"]["rejected_detail"]["observed"] == "Rifiuta"
+        ok("a verdict is refused when its selector has gone or the control is no longer what it described")
+
+        # 5. "There genuinely is no such control" - recorded as a decision
+        #    that was made, not as the tool failing to reach one.
+        control, _, resolution = resolve([{"kind": "reject", "decision": "refuse",
+                                           "rationale": "this banner has no denial option at all"}])
+        assert control is None and resolution["clickable"] is False, resolution
+        assert resolution["agent_refused"] is True, resolution
+        assert resolution["agent_verdict"]["applied"] is True, resolution["agent_verdict"]
+
+        # 6. A verdict for a control that resolved cleanly is ignored: a
+        #    verdict may unstick a run, never redirect a working one.
+        good_entry = dict(buggy, reject=["#onetrust-reject-all-handler"])
+        redirect = [{"kind": "reject", "decision": "use_selector",
+                     "selector": "#onetrust-accept-btn-handler"}]
+        control, _, resolution = find_control(page, "reject", good_entry, label="reject",
+                                              control_verdicts=redirect)
+        assert control is not None and control["id"] == "onetrust-reject-all-handler", control
+        assert resolution.get("agent_verdict") is None, (
+            "a control that resolved on its own must not consult a verdict at all"
+        )
+        ok("a verdict can unstick a refused control but can never redirect one that resolved")
+
+    # 7. A verdict addressed to a different control kind must not match.
+    #    Files accumulate: one written for `accept` on an earlier pass must
+    #    not quietly authorise a denial click.
+    with _serve_cmp_fixture(page, banner):
+        crossed = [{"kind": "accept", "decision": "use_selector",
+                    "selector": "#onetrust-accept-btn-handler"}]
+        control, _, resolution = find_control(page, "reject", buggy, label="reject",
+                                              control_verdicts=crossed)
+        assert control is None, control
+        assert resolution.get("agent_verdict") is None, (
+            "a verdict for a different kind must not be consulted at all, let alone applied"
+        )
+
+        # ...nor one addressed to a different call site of the same kind.
+        wrong_label = [{"kind": "reject", "label": "second_layer_reject",
+                        "decision": "use_selector", "selector": "#onetrust-reject-all-handler"}]
+        control, _, resolution = find_control(page, "reject", buggy, label="reject",
+                                              control_verdicts=wrong_label)
+        assert control is None and resolution.get("agent_verdict") is None, resolution
+
+        # ...nor one written while a different CMP was detected. A site that
+        # swapped vendors is a site whose controls nobody has looked at yet.
+        wrong_cmp = [{"kind": "reject", "cmp": "cookiebot", "decision": "use_selector",
+                      "selector": "#onetrust-reject-all-handler"}]
+        control, _, resolution = find_control(page, "reject", buggy, label="reject",
+                                              control_verdicts=wrong_cmp)
+        assert control is None and resolution.get("agent_verdict") is None, resolution
+        ok("a verdict is matched to the control it was written for, by kind, call site and CMP")
+
+    from lib import capture
+
+    # 8. The guard that a verdict may only unstick a refusal, asserted on the
+    #    function directly. `find_control` only consults verdicts at its two
+    #    refusal exits, so this rule is otherwise enforced by the call site
+    #    alone - and a call site is not a rule.
+    with _serve_cmp_fixture(page, banner):
+        already_fine = {"kind": "reject", "label": "reject", "clickable": True,
+                        "decision": "table_only", "conflict": None}
+        assert capture.apply_control_verdict(
+            page, already_fine,
+            [{"kind": "reject", "decision": "use_selector", "selector": "#onetrust-accept-btn-handler"}],
+        ) is None, "a resolved control must never consult a verdict"
+        assert "agent_verdict" not in already_fine, already_fine
+    ok("apply_control_verdict refuses to act on a control that already resolved")
+
+
+def test_control_verdict_files_are_validated_before_they_are_trusted() -> None:
+    """Structural gates on a verdict file, including the one that is not negotiable."""
+    def parse(**overrides):
+        data = {"format": checks.VERDICT_FORMAT, "version": checks.VERDICT_VERSION,
+                "target_host": "example.com",
+                "verdicts": [{"kind": "reject", "decision": "use_selector", "selector": "#x"}]}
+        data.update(overrides)
+        return checks.parse_control_verdicts(data, "example.com")
+
+    assert parse()["error"] is None and len(parse()["verdicts"]) == 1
+
+    # A verdict authorises a click on ONE site. Carrying it to another applies
+    # a person's judgement about one page to a page they never saw.
+    wrong_site = checks.parse_control_verdicts(
+        {"format": checks.VERDICT_FORMAT, "version": checks.VERDICT_VERSION,
+         "target_host": "example.com", "verdicts": []}, "victim.test")
+    assert wrong_site["error"] and "not transferable" in wrong_site["error"], wrong_site
+    assert wrong_site["verdicts"] == []
+    ok("a verdict file written for one host is refused for another, with no entries carried over")
+
+    assert parse(format="something/else")["error"]
+    assert parse(version=99)["error"]
+    assert checks.parse_control_verdicts(["not", "an", "object"], "example.com")["error"]
+    assert parse(verdicts="not a list")["error"]
+
+    # One malformed entry is rejected and recorded; the operator's other
+    # decisions survive. Silently dropping it would leave them believing it
+    # applied.
+    mixed = parse(verdicts=[
+        {"kind": "reject", "decision": "use_selector", "selector": "#good"},
+        {"kind": "reject", "decision": "use_selector"},
+        {"kind": "reject", "decision": "obey_me"},
+        {"kind": "nonsense", "decision": "refuse"},
+        {"decision": "refuse"},
+        "not an object",
+    ])
+    assert mixed["error"] is None, mixed
+    assert len(mixed["verdicts"]) == 1, mixed["verdicts"]
+    assert len(mixed["rejected"]) == 5, mixed["rejected"]
+    reasons = " ".join(r["reason"] for r in mixed["rejected"])
+    assert "non-empty selector" in reasons and "unknown decision" in reasons, reasons
+    assert "unknown control kind" in reasons and "adjudication_id" in reasons, reasons
+    ok("a malformed verdict entry is rejected and recorded individually, not silently dropped")
+
+
 def test_an_ambiguous_control_stops_the_denial_and_says_so(page) -> None:
     """Refusing to click is only half of it - the run has to report why, accurately.
 
@@ -4946,9 +5153,11 @@ def test_main_orchestrates_bundles_gates_and_exit_codes() -> None:
     silently change which bundle a report lands in or let a clean desktop run
     mask a broken mobile one."""
     captured_labels: list[str] = []
+    captured_verdicts: list[list] = []
 
     def fake_run_all_scenarios(browser, config, private_dir, share_dir, **kwargs):
         captured_labels.append(config.viewport_label)
+        captured_verdicts.append(list(config.control_verdicts or []))
         # The mobile profile fails its denial; desktop succeeds. A run where
         # both profiles agree could not detect a union bug.
         return synthetic_results(denial_completed=(config.viewport_label != "mobile"))
@@ -4973,6 +5182,49 @@ def test_main_orchestrates_bundles_gates_and_exit_codes() -> None:
             sys.argv = original_argv
 
     try:
+        # --- verdict files are validated before any browser launches ---
+        # A bad one is a configuration error. Discovering it mid-run would
+        # waste a capture, and the host gate in particular must fail loudly
+        # rather than quietly carrying no verdicts into the run.
+        verdict_dir = Path(tempfile.mkdtemp())
+
+        def with_verdicts(payload, out_name):
+            path = verdict_dir / f"{out_name}.json"
+            write_json(path, payload)
+            return run(["--url", "https://example.test", "--out", str(verdict_dir / out_name),
+                        "--headless", "--no-zip", "--no-pdf", "--no-geo",
+                        "--control-verdicts", str(path)])
+
+        assert with_verdicts({"format": "wrong/format", "version": 1, "target_host": "example.test",
+                              "verdicts": []}, "badformat") == 2
+        assert with_verdicts({"format": checks.VERDICT_FORMAT, "version": checks.VERDICT_VERSION,
+                              "target_host": "someone-else.test", "verdicts": []}, "wronghost") == 2, (
+            "a verdict file naming a different host must be refused, not silently ignored"
+        )
+        assert run(["--url", "https://example.test", "--out", str(verdict_dir / "missing"),
+                    "--headless", "--no-zip", "--no-pdf", "--no-geo",
+                    "--control-verdicts", str(verdict_dir / "nope.json")]) == 2
+
+        good_out = verdict_dir / "good"
+        assert with_verdicts({
+            "format": checks.VERDICT_FORMAT, "version": checks.VERDICT_VERSION,
+            "target_host": "example.test",
+            "verdicts": [{"kind": "reject", "decision": "use_selector", "selector": "#r"}],
+        }, "good") == 0
+        # The bundle has to show that a person overrode the tool, and identify
+        # exactly which file did it.
+        recorded = read_json(good_out / "run-metadata.json")["control_verdicts"]
+        assert recorded["supplied"] is True and recorded["accepted"] == 1, recorded
+        assert len(recorded["sha256"]) == 64, recorded
+        # ...and actually reached the scenario runner, rather than being
+        # validated, reported, and then dropped on the floor.
+        assert captured_verdicts[-1] == [
+            {"kind": "reject", "decision": "use_selector", "selector": "#r"}
+        ], captured_verdicts[-1]
+        captured_labels.clear()
+        captured_verdicts.clear()
+        ok("a verdict file is validated before the browser launches, recorded, and reaches the run")
+
         # --- single profile: the historical flat layout must be preserved ---
         single = Path(tempfile.mkdtemp()) / "single"
         code = run(["--url", "https://example.test", "--out", str(single), "--headless",
@@ -7260,6 +7512,7 @@ def main() -> int:
     test_every_test_function_is_invoked_by_main()
     test_label_score_and_label_kinds()
     test_veto_control_refuses_the_opposite_action()
+    test_control_verdict_files_are_validated_before_they_are_trusted()
     test_consent_namespace_and_key_matching()
     test_narrow_consent_diff_ignores_noise_and_catches_namespaced_writes()
     test_classify_autosave_denial_truth_table()
@@ -7346,6 +7599,7 @@ def main() -> int:
             test_measure_tab_order_bounded(page)
             test_onetrust_shape_uses_the_second_layer_reject(page)
             test_a_wrong_table_entry_no_longer_pre_empts_the_generic_scorer(page)
+            test_a_verdict_is_a_proposal_and_is_re_checked_before_it_is_obeyed(page)
             test_an_ambiguous_control_stops_the_denial_and_says_so(page)
             test_usercentrics_shape_resolves_inside_a_shadow_root(page)
             test_sourcepoint_shape_resolves_inside_an_iframe(page)

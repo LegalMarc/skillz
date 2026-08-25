@@ -23,6 +23,7 @@ except ImportError:
     raise SystemExit(2)
 
 from lib.analysis import analyze_and_write, preconsent_tracking_assertion_hits
+from lib.checks import parse_control_verdicts
 from lib.capture import (
     ScenarioConfig,
     annotate_controls,
@@ -41,6 +42,8 @@ from lib.util import (
     discover_browser_executable,
     ensure_dir,
     host_from_url,
+    read_json,
+    sha256_file,
     run_fingerprint,
     slugify,
     timestamp_slug,
@@ -105,6 +108,13 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--no-policy-capture", action="store_true",
                         help="Skip archiving the text of the site's linked cookie/privacy policies")
     parser.add_argument("--no-geo", action="store_true", help="Do not resolve the public egress region")
+    parser.add_argument("--control-verdicts", metavar="PATH",
+                        help=(
+                            "JSON file of decisions about controls a previous pre-flight could not "
+                            "resolve (see the conflicts file it writes). Each verdict is re-resolved "
+                            "and re-checked against the same rules before anything is clicked, so it "
+                            "can unblock a refused control but cannot authorise one those rules refuse."
+                        ))
     parser.add_argument("--detect-only", action="store_true",
                         help="Load the page, report the detected consent platform and every candidate control, then exit without auditing")
     parser.add_argument("--zip-shareable-only", action="store_true", help="Build the archive without evidence-private/ (redacted evidence only)")
@@ -604,6 +614,8 @@ def main() -> int:
             "manual_fallback": args.manual,
             "gpc_included": not args.no_gpc,
             "accept_control_included": args.accept_control,
+            # A bundle where a person overrode the tool must show the override.
+            "control_verdicts": verdict_audit,
             "persistence_check_included": not args.no_persistence,
             "policy_capture_included": not args.no_policy_capture,
             "forms_exercised": thorough and not args.no_forms,
@@ -631,6 +643,33 @@ def main() -> int:
         }
     patterns_path = Path(__file__).resolve().parents[1] / "references" / "vendor-patterns.json"
 
+    # Read and validate before any browser launches: a bad verdict file is a
+    # configuration error, and finding that out mid-run would waste a capture.
+    control_verdicts: list[dict] = []
+    verdict_audit: dict = {"supplied": False}
+    if args.control_verdicts:
+        verdict_path = Path(args.control_verdicts).expanduser()
+        try:
+            verdict_data = read_json(verdict_path)
+        except Exception as error:
+            print(f"Configuration error: could not read {verdict_path}: {error}", file=sys.stderr)
+            return 2
+        parsed = parse_control_verdicts(verdict_data, host_from_url(target_url))
+        if parsed["error"]:
+            print(f"Configuration error: {parsed['error']}", file=sys.stderr)
+            return 2
+        control_verdicts = parsed["verdicts"]
+        for entry in parsed["rejected"]:
+            print(f"Ignoring verdict {entry['index']}: {entry['reason']}", file=sys.stderr)
+        verdict_audit = {
+            "supplied": True,
+            "path": str(verdict_path),
+            "sha256": sha256_file(verdict_path),
+            "accepted": len(control_verdicts),
+            "rejected": [{"index": e["index"], "reason": e["reason"]} for e in parsed["rejected"]],
+        }
+        print(f"Loaded {len(control_verdicts)} control verdict(s) from {verdict_path}")
+
     def build_config(label: str) -> ScenarioConfig:
         profile = viewport_profile(label)
         return ScenarioConfig(
@@ -650,6 +689,7 @@ def main() -> int:
             has_touch=profile["has_touch"],
             device_scale_factor=profile["device_scale_factor"],
             device_user_agent=profile["user_agent"],
+            control_verdicts=control_verdicts,
             thorough=thorough,
             dwell_ms=args.dwell_ms,
             exercise_forms=thorough and not args.no_forms,

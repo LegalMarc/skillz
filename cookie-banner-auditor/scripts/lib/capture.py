@@ -114,6 +114,11 @@ class ScenarioConfig:
     has_touch: bool = False
     device_scale_factor: float = 1.0
     device_user_agent: str | None = None
+    #: Operator or agent decisions about controls an earlier run refused to
+    #: resolve. Each is re-resolved and re-vetoed at the point it would be
+    #: acted on (see `apply_control_verdict`), so this can unstick a run and
+    #: cannot authorise a control the tool's own rules refuse.
+    control_verdicts: list[dict[str, Any]] | None = None
     # Thoroughness profile
     thorough: bool = True
     dwell_ms: int = 15000
@@ -877,11 +882,152 @@ def _score_controls(page: Page, kind: str, max_per_frame: int = 220) -> list[tup
     return scored
 
 
+def _matching_verdict(resolution: dict[str, Any], verdicts: list[dict[str, Any]]) -> dict[str, Any] | None:
+    """The verdict addressed to this unresolved control, if any.
+
+    Matched by `adjudication_id` first, which names one conflict exactly. The
+    `(kind, label, cmp)` fallback exists because a re-run can legitimately
+    produce a differently-hashed conflict - a vendor changed the competing
+    label, say - and an operator who has already decided should not have to
+    decide again because a string moved.
+    """
+    conflict_id = (resolution.get("conflict") or {}).get("adjudication_id")
+    for verdict in verdicts:
+        if conflict_id and verdict.get("adjudication_id") == conflict_id:
+            return verdict
+    for verdict in verdicts:
+        if verdict.get("adjudication_id"):
+            continue
+        if verdict.get("kind") != resolution.get("kind"):
+            continue
+        if verdict.get("label") not in (None, resolution.get("label")):
+            continue
+        if verdict.get("cmp") not in (None, resolution.get("cmp")):
+            continue
+        return verdict
+    return None
+
+
+def apply_control_verdict(
+    page: Page,
+    resolution: dict[str, Any],
+    verdicts: list[dict[str, Any]] | None,
+) -> dict[str, Any] | None:
+    """Act on an operator's decision about a control this run could not resolve.
+
+    **A verdict is a proposal, never an instruction.** Everything it names is
+    re-established here, against the page as it is now:
+
+      1. The selector is re-resolved. A verdict written against an earlier
+         load may name an element that has moved or gone.
+      2. The resolved element goes through `checks.veto_control` - the same
+         gate every other candidate passes. This is the rule that matters: a
+         verdict naming the accept button cannot get it clicked as a denial,
+         whatever the file says and whoever wrote it.
+      3. If the verdict states an expected accessible name, the element has to
+         still have it. Cheap check that the page did not change underneath.
+      4. The element must not be what the scorer independently reads as an
+         incompatible kind. This catches the case rule 2 cannot see: an
+         unlabelled control whose own text says nothing, but which the page
+         plainly uses as its accept button.
+
+    That ordering is deliberate and is the whole security argument. The text
+    an operator or agent read to make this decision came from the audited
+    page, and a page can write anything into a label or an aria attribute. A
+    successful attempt to mislead can therefore cost a refusal, or a click on
+    a semantically clean but wrong control - it can never produce the click
+    the page was angling for, because the refusal is enforced here in Python
+    rather than requested in a prompt.
+
+    Only ever called for a control that is already not clickable, so a verdict
+    can unstick a run and never redirect a working one.
+    """
+    if not verdicts or resolution.get("clickable"):
+        return None
+    verdict = _matching_verdict(resolution, verdicts or [])
+    if verdict is None:
+        return None
+
+    kind = str(resolution.get("kind"))
+    record: dict[str, Any] = {
+        "applied": False,
+        "decision": verdict.get("decision"),
+        "selector": verdict.get("selector"),
+        "rationale": _untrusted_text(verdict.get("rationale"), 300),
+        "matched_by": "adjudication_id" if verdict.get("adjudication_id") else "kind_label_cmp",
+        "rejected_reason": None,
+    }
+    resolution["agent_verdict"] = record
+
+    if verdict.get("decision") == "refuse":
+        # "There genuinely is no such control here" is a different statement
+        # from "the tool could not tell", and a materially different sentence
+        # for a compliance reader. Recorded, still not clicked.
+        record["applied"] = True
+        resolution["agent_refused"] = True
+        return None
+
+    control = _locate_by_selectors(page, [str(verdict.get("selector"))])
+    if control is None:
+        record["rejected_reason"] = "selector_did_not_resolve"
+        return None
+
+    veto = checks.veto_control(kind, control)
+    if veto:
+        record["rejected_reason"] = veto["reason"]
+        record["rejected_detail"] = {"conflicting_kind": veto.get("conflicting_kind"),
+                                     "observed_label": veto.get("observed_label")}
+        return None
+
+    expected = verdict.get("expected_accessible_name")
+    if expected:
+        seen = _untrusted_text(control.get("text"), 300).casefold()
+        if _untrusted_text(expected, 300).casefold() != seen:
+            record["rejected_reason"] = "accessible_name_mismatch"
+            record["rejected_detail"] = {"expected": _untrusted_text(expected, 120),
+                                         "observed": _untrusted_text(control.get("text"), 120)}
+            return None
+
+    # There is deliberately no further check that this element is not the one
+    # the scorer reads as an incompatible kind. Such a check would be
+    # unreachable: the scorer only ranks an element it recognises, so any
+    # element it reads as `accept` has a non-zero accept label score, and
+    # `veto_control` above refuses exactly those for `reject`. The rule would
+    # be strictly weaker than the veto that already ran, and an unreachable
+    # branch is one nothing can prove still works.
+
+    record["applied"] = True
+    control["matched_selector"] = str(verdict.get("selector"))
+    resolution.update(
+        path="agent_verdict",
+        decision="agent_verdict",
+        clickable=True,
+        matched_selector=str(verdict.get("selector")),
+    )
+    return control
+
+
+def _verdict_or(
+    page: Page,
+    resolution: dict[str, Any],
+    control_verdicts: list[dict[str, Any]] | None,
+) -> dict[str, Any] | None:
+    """Give an operator's verdict a chance to unstick a refused control.
+
+    Returns the control if one was authorised, `None` otherwise - so a
+    refusal with no verdict, a verdict that does not match, and a verdict that
+    failed re-checking all collapse to the same safe answer, each having
+    recorded a different reason for it.
+    """
+    return apply_control_verdict(page, resolution, control_verdicts)
+
+
 def find_control(
     page: Page,
     kind: str,
     cmp_entry: dict[str, Any] | None = None,
     label: str | None = None,
+    control_verdicts: list[dict[str, Any]] | None = None,
 ) -> tuple[dict[str, Any] | None, list[dict[str, Any]], dict[str, Any]]:
     """Resolve a consent control by cross-checking two independent resolvers.
 
@@ -994,7 +1140,7 @@ def find_control(
             "identity_basis": basis,
             "adjudication_id": _adjudication_id(resolution, table_control, scorer_control),
         }
-        return None, candidates, resolution
+        return _verdict_or(page, resolution, control_verdicts), candidates, resolution
 
     if table_control is not None:
         # The table matched and the scorer recognised nothing above threshold.
@@ -1021,7 +1167,7 @@ def find_control(
         decision="vetoed" if resolution["veto"] else "unresolved",
         clickable=False,
     )
-    return None, candidates, resolution
+    return _verdict_or(page, resolution, control_verdicts), candidates, resolution
 
 
 def click_control(control: dict[str, Any], action_log: list[dict[str, Any]], kind: str) -> bool:
@@ -1883,6 +2029,7 @@ def probe_autosave(
     action_log: list[dict[str, Any]],
     share_scenario_dir: Path,
     phase_ref: dict[str, str] | None = None,
+    control_verdicts: list[dict[str, Any]] | None = None,
 ) -> dict[str, Any]:
     """Reload and re-observe optional toggles to check whether an unsaved
     settings-panel denial was actually kept.
@@ -1948,7 +2095,8 @@ def probe_autosave(
 
     probe["banner_visible_after_reload"] = banner_visible(page, cmp_entry)
 
-    settings_control, _settings_candidates, settings_resolution = find_control(page, "settings", cmp_entry)
+    settings_control, _settings_candidates, settings_resolution = find_control(page, "settings", cmp_entry, label="settings_reopen_probe",
+                                                                     control_verdicts=control_verdicts)
     probe["settings_resolution"] = settings_resolution
     if settings_control and click_control(settings_control, action_log, "settings_reopen_probe"):
         probe["settings_reopened"] = True
@@ -1970,11 +2118,14 @@ def execute_denial(
     share_scenario_dir: Path,
     cmp_entry: dict[str, Any] | None = None,
     phase_ref: dict[str, str] | None = None,
+    control_verdicts: list[dict[str, Any]] | None = None,
 ) -> dict[str, Any]:
     action_log: list[dict[str, Any]] = []
     before = consent_snapshot(page, context, cmp_entry)
-    accept_control, accept_candidates, accept_resolution = find_control(page, "accept", cmp_entry)
-    reject_control, reject_candidates, reject_resolution = find_control(page, "reject", cmp_entry)
+    accept_control, accept_candidates, accept_resolution = find_control(
+        page, "accept", cmp_entry, label="accept", control_verdicts=control_verdicts)
+    reject_control, reject_candidates, reject_resolution = find_control(
+        page, "reject", cmp_entry, label="reject", control_verdicts=control_verdicts)
 
     # E3 - measure real tab order and focus visibility while both controls are
     # still resolved and before either is clicked (a click may dismiss the
@@ -2034,7 +2185,8 @@ def execute_denial(
     if reject_control and click_control(reject_control, action_log, "reject"):
         return finish("direct_reject_clicked", 1)
 
-    settings_control, settings_candidates, settings_resolution = find_control(page, "settings", cmp_entry)
+    settings_control, settings_candidates, settings_resolution = find_control(
+        page, "settings", cmp_entry, label="settings", control_verdicts=control_verdicts)
     result["settings_candidates"] = settings_candidates
     result["resolution"]["settings"] = settings_resolution
     toggle_result: dict[str, Any] | None = None
@@ -2047,14 +2199,16 @@ def execute_denial(
             page.screenshot(path=str(share_scenario_dir / "preferences-open.png"), full_page=False, animations="disabled")
         except Exception:
             pass
-        second_reject, second_reject_candidates, second_resolution = find_control(page, "reject", cmp_entry)
+        second_reject, second_reject_candidates, second_resolution = find_control(
+            page, "reject", cmp_entry, label="second_layer_reject", control_verdicts=control_verdicts)
         result["second_layer_reject_candidates"] = second_reject_candidates
         result["resolution"]["second_layer_reject"] = second_resolution
         if second_reject and click_control(second_reject, action_log, "reject"):
             return finish("second_layer_reject_clicked", result["click_count"] + 1)
         toggle_result = disable_optional_toggles(page, action_log)
         result["toggle_result"] = toggle_result
-        save_control, save_candidates, save_resolution = find_control(page, "save", cmp_entry)
+        save_control, save_candidates, save_resolution = find_control(
+            page, "save", cmp_entry, label="save", control_verdicts=control_verdicts)
         result["save_candidates"] = save_candidates
         result["resolution"]["save"] = save_resolution
         if save_control and click_control(save_control, action_log, "save"):
@@ -2081,6 +2235,7 @@ def execute_denial(
         narrow_diff = checks.narrow_consent_diff(before, unsaved["consent_snapshot_after"], namespace)
         autosave_probe = probe_autosave(
             page, context, cmp_entry, wait_ms, action_log, share_scenario_dir, phase_ref,
+            control_verdicts,
         )
         classification = checks.classify_autosave_denial(toggle_result, narrow_diff, autosave_probe)
 
@@ -2150,10 +2305,12 @@ def execute_accept(
     context: BrowserContext,
     wait_ms: int,
     cmp_entry: dict[str, Any] | None = None,
+    control_verdicts: list[dict[str, Any]] | None = None,
 ) -> dict[str, Any]:
     action_log: list[dict[str, Any]] = []
     before = consent_snapshot(page, context, cmp_entry)
-    control, candidates, resolution = find_control(page, "accept", cmp_entry)
+    control, candidates, resolution = find_control(
+        page, "accept", cmp_entry, label="accept", control_verdicts=control_verdicts)
     result: dict[str, Any] = {
         "status": "accept_not_found",
         "click_count": 0,
@@ -2940,12 +3097,13 @@ def run_scenario(
 
         if action == "deny":
             phase_ref["name"] = "denial_interaction"
-            action_result = execute_denial(page, context, config.wait_ms, config.manual, share_scenario, cmp_entry, phase_ref)
+            action_result = execute_denial(page, context, config.wait_ms, config.manual, share_scenario,
+                                           cmp_entry, phase_ref, config.control_verdicts)
             phase_ref["name"] = "post_denial"
             checkpoints.append(capture_checkpoint(page, context, scenario, "02-post-denial", private_dir, share_dir))
         elif action == "accept":
             phase_ref["name"] = "accept_interaction"
-            action_result = execute_accept(page, context, config.wait_ms, cmp_entry)
+            action_result = execute_accept(page, context, config.wait_ms, cmp_entry, config.control_verdicts)
             phase_ref["name"] = "post_accept"
             checkpoints.append(capture_checkpoint(page, context, scenario, "02-post-accept", private_dir, share_dir))
         elif action == "none":
