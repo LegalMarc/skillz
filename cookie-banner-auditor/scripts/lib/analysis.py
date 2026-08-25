@@ -10,11 +10,7 @@ from typing import Any
 from urllib.parse import urlsplit
 
 from . import checks
-from .capture import (
-    ACCEPT_PATTERNS,
-    COMPLETED_DENIAL_STATUSES,
-    REJECT_PATTERNS,
-)
+from .capture import COMPLETED_DENIAL_STATUSES
 from .util import (
     escape_markdown_cell,
     markdown_to_html,
@@ -233,11 +229,11 @@ def _cookies_at(cookie_rows: list[dict[str, Any]], scenario: str, checkpoint_pre
 
 
 def _is_accept_text(text: str) -> bool:
-    return any(pattern.search(text or "") for pattern in ACCEPT_PATTERNS)
+    return bool(checks.label_score(text or "", "accept"))
 
 
 def _is_reject_text(text: str) -> bool:
-    return any(pattern.search(text or "") for pattern in REJECT_PATTERNS)
+    return bool(checks.label_score(text or "", "reject"))
 
 
 def _banner_visible(checkpoint: dict[str, Any]) -> bool:

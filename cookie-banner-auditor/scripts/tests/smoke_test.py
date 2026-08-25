@@ -3868,6 +3868,70 @@ def test_denial_controls_are_not_resolved_by_position() -> None:
     ok(f"no denial-side selector resolves by position ({scanned} reject/save selectors scanned)")
 
 
+def test_label_score_and_label_kinds() -> None:
+    """The control-label vocabulary scores by specificity and stays silent on the unknown.
+
+    Two properties matter, and they pull in opposite directions.
+
+    The ladder (`120 - index * 5`) is what lets a more specific label beat a
+    less specific one from the same list while both still clear
+    `SCORE_THRESHOLD` on their own - flatten it and "Reject All" stops
+    outranking a bare "Reject", which is the ordering the scorer's whole
+    ranking depends on.
+
+    `label_kinds` returning the empty set for unrecognised copy is equally
+    load-bearing, in the other direction: it is about to be the input to a
+    veto, and there the difference between "this label says accept" and "this
+    label says nothing I know" is the difference between refusing a control
+    and refusing every non-English CMP on the web.
+    """
+    assert checks.label_score("Reject All", "reject") == 120
+    assert checks.label_score("Reject", "reject") == 115
+    assert checks.label_score("Reject All", "reject") > checks.label_score("Reject", "reject"), (
+        "a bare 'Reject' must not tie with 'Reject All' - the ladder is what ranks them"
+    )
+    assert checks.label_score("Reject", "reject") >= SCORE_THRESHOLD, (
+        "every label the vocabulary recognises must clear the threshold on its own"
+    )
+    assert checks.label_score("Allow All", "reject") == 0
+    # Every rung of every ladder, not just the first. Found by mutation: with
+    # only "Allow All" asserted, deleting the bare accept/allow/agree pattern
+    # left the whole suite green - and a bare "Accept" is what most CMPs
+    # actually ship.
+    for label, kind, rung in (
+        ("Accept", "accept", 115), ("Allow", "accept", 115), ("Agree", "accept", 115),
+        ("Only Necessary", "reject", 110), ("Essential Cookies Only", "reject", 105),
+        ("Continue without accepting", "reject", 100), ("Do Not Accept", "reject", 95),
+        ("Save and Reject", "reject", 90),
+        ("Manage preferences", "settings", 115), ("Customize", "settings", 110),
+        ("Save Preferences", "save", 120), ("Confirm", "save", 115), ("Submit", "save", 110),
+    ):
+        assert checks.label_score(label, kind) == rung, (
+            f"{label!r} should score {rung} as {kind}, got {checks.label_score(label, kind)} - "
+            "a pattern was removed or the ladder reordered"
+        )
+    ok("label_score ranks by specificity and every recognised label clears the threshold")
+
+    assert checks.label_kinds("Allow All") == frozenset({"accept"})
+    assert checks.label_kinds("Reject All") == frozenset({"reject"})
+    assert checks.label_kinds("Confirm My Choices") == frozenset({"save"})
+    assert checks.label_kinds("Cookie Settings") == frozenset({"settings"})
+    # Italian for "Reject" - Iubenda ships it, and REJECT_PATTERNS is
+    # English-only. Unrecognised must mean unrecognised, never "not a denial".
+    assert checks.label_kinds("Rifiuta") == frozenset(), (
+        "non-English copy must read as no kind at all, not as some wrong kind"
+    )
+    assert checks.label_kinds("") == frozenset()
+
+    try:
+        checks.label_score("Reject All", "nonsense")
+    except ValueError:
+        pass
+    else:  # pragma: no cover - the assert below reports it
+        raise AssertionError("an unknown kind must raise, not silently score 0")
+    ok("label_kinds reads bespoke and non-English copy as unrecognised, and an unknown kind raises")
+
+
 def test_consent_namespace_and_key_matching() -> None:
     """consent_namespace reads the table field; consent_key_matches applies the
     cookie-key-splitting, prefix-rule, and case-insensitivity rules from #6."""
@@ -6204,6 +6268,7 @@ def main() -> int:
     test_denial_controls_are_not_resolved_by_position()
     test_no_wall_clock_ordering_assertions()
     test_every_test_function_is_invoked_by_main()
+    test_label_score_and_label_kinds()
     test_consent_namespace_and_key_matching()
     test_narrow_consent_diff_ignores_noise_and_catches_namespaced_writes()
     test_classify_autosave_denial_truth_table()

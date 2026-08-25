@@ -552,6 +552,74 @@ def scan_rights_mechanisms(page_text: str, links: list[dict[str, Any]], cmp_stat
 
 
 # --------------------------------------------------------------------------
+# A - consent-control label vocabulary
+# --------------------------------------------------------------------------
+# What a control's own label says it does. Lives here rather than in
+# `capture.py` because it is a decision about text, not a browser operation:
+# the same vocabulary has to be applied to a candidate the CMP selector table
+# produced and to one the text scorer produced, and the table's candidates are
+# resolved by a browser while the rule about them must be testable without one.
+#
+# Order within each list is the score ladder - earlier is more specific and
+# scores higher (see `label_score`), so `"Reject All"` outranks a bare
+# `"Reject"`. Keep the most specific pattern first when adding to a list.
+
+CONTROL_PATTERNS: dict[str, list[re.Pattern[str]]] = {
+    "reject": [
+        re.compile(r"^\s*(reject|decline|deny)\s+all(?:\s+cookies?)?\s*$", re.I),
+        re.compile(r"^\s*(reject|decline|deny)(?:\s+cookies?)?\s*$", re.I),
+        re.compile(r"^\s*(only|use only|allow only)\s+(necessary|essential)(?:\s+cookies?)?\s*$", re.I),
+        re.compile(r"^\s*(necessary|essential)(?:\s+cookies?)?\s+only\s*$", re.I),
+        re.compile(r"^\s*continue\s+without\s+(accepting|agreeing)\s*$", re.I),
+        re.compile(r"^\s*do\s+not\s+accept\s*$", re.I),
+        re.compile(r"^\s*save\s+and\s+reject\s*$", re.I),
+    ],
+    "settings": [
+        re.compile(r"\b(cookie|privacy|consent)\s+(settings|preferences|choices|options)\b", re.I),
+        re.compile(r"\b(manage|customi[sz]e|change|review)\s+(settings|preferences|choices|options|cookies)\b", re.I),
+        re.compile(r"^\s*(settings|preferences|options|customi[sz]e)\s*$", re.I),
+    ],
+    "save": [
+        re.compile(r"^\s*(save|confirm|apply)(?:\s+(my|selected|current))?\s+(choices|preferences|settings|selections)\s*$", re.I),
+        re.compile(r"^\s*(save|confirm|apply)\s*$", re.I),
+        re.compile(r"^\s*submit\s*$", re.I),
+    ],
+    "accept": [
+        re.compile(r"^\s*(accept|allow|agree)\s+all(?:\s+cookies?)?\s*$", re.I),
+        re.compile(r"^\s*(accept|allow|agree)(?:\s+cookies?)?\s*$", re.I),
+    ],
+}
+
+CONTROL_KINDS = frozenset(CONTROL_PATTERNS)
+
+
+def label_score(text: str, kind: str) -> int:
+    """How strongly this label reads as `kind`, 0 when it does not at all.
+
+    The ladder is `120 - index * 5`, so a more specific pattern beats a less
+    specific one from the same list and every match still clears a threshold
+    on its own. Raises for an unknown kind rather than scoring 0: a typo in a
+    caller must not silently mean "nothing matches".
+    """
+    if kind not in CONTROL_PATTERNS:
+        raise ValueError(f"Unknown control kind: {kind}")
+    for index, pattern in enumerate(CONTROL_PATTERNS[kind]):
+        if pattern.search(text):
+            return 120 - index * 5
+    return 0
+
+
+def label_kinds(text: str) -> frozenset[str]:
+    """Every kind this label reads as - usually zero or one, sometimes more.
+
+    Zero is the common, unremarkable case: button copy is frequently bespoke
+    or not in English, and `"Rifiuta"` reading as no kind means *unrecognised*,
+    never *ineligible*. Only a non-empty result is evidence of anything.
+    """
+    return frozenset(kind for kind in CONTROL_PATTERNS if label_score(text, kind))
+
+
+# --------------------------------------------------------------------------
 # E3 - symmetry and accessibility measurement
 # --------------------------------------------------------------------------
 

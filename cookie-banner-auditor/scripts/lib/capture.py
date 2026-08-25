@@ -215,29 +215,11 @@ OPTIONAL_CATEGORY = re.compile(
 )
 NECESSARY_CATEGORY = re.compile(r"\b(strictly necessary|necessary|essential|required|security|fraud|authentication|load balancing)\b", re.I)
 
-REJECT_PATTERNS = [
-    re.compile(r"^\s*(reject|decline|deny)\s+all(?:\s+cookies?)?\s*$", re.I),
-    re.compile(r"^\s*(reject|decline|deny)(?:\s+cookies?)?\s*$", re.I),
-    re.compile(r"^\s*(only|use only|allow only)\s+(necessary|essential)(?:\s+cookies?)?\s*$", re.I),
-    re.compile(r"^\s*(necessary|essential)(?:\s+cookies?)?\s+only\s*$", re.I),
-    re.compile(r"^\s*continue\s+without\s+(accepting|agreeing)\s*$", re.I),
-    re.compile(r"^\s*do\s+not\s+accept\s*$", re.I),
-    re.compile(r"^\s*save\s+and\s+reject\s*$", re.I),
-]
-SETTINGS_PATTERNS = [
-    re.compile(r"\b(cookie|privacy|consent)\s+(settings|preferences|choices|options)\b", re.I),
-    re.compile(r"\b(manage|customi[sz]e|change|review)\s+(settings|preferences|choices|options|cookies)\b", re.I),
-    re.compile(r"^\s*(settings|preferences|options|customi[sz]e)\s*$", re.I),
-]
-SAVE_PATTERNS = [
-    re.compile(r"^\s*(save|confirm|apply)(?:\s+(my|selected|current))?\s+(choices|preferences|settings|selections)\s*$", re.I),
-    re.compile(r"^\s*(save|confirm|apply)\s*$", re.I),
-    re.compile(r"^\s*submit\s*$", re.I),
-]
-ACCEPT_PATTERNS = [
-    re.compile(r"^\s*(accept|allow|agree)\s+all(?:\s+cookies?)?\s*$", re.I),
-    re.compile(r"^\s*(accept|allow|agree)(?:\s+cookies?)?\s*$", re.I),
-]
+#: The consent-control label vocabulary (what a button's own text says it does)
+#: lives in `checks.CONTROL_PATTERNS`. It is a decision about text rather than a
+#: browser operation, and it has to be applied identically to a candidate the
+#: CMP selector table produced and one the text scorer produced.
+
 DANGEROUS_LINK = re.compile(
     r"(?:logout|log-out|signout|sign-out|delete|remove|checkout|cart|basket|payment|pay-now|purchase|order|unsubscribe|subscribe|account|profile|admin|wp-login|login|log-in|signin|sign-in|signup|sign-up)",
     re.I,
@@ -462,13 +444,6 @@ def _public_control(control: dict[str, Any]) -> dict[str, Any]:
     return {k: v for k, v in control.items() if k not in {"locator", "frame"}}
 
 
-def _pattern_score(text: str, patterns: list[re.Pattern[str]]) -> int:
-    for index, pattern in enumerate(patterns):
-        if pattern.search(text):
-            return 120 - index * 5
-    return 0
-
-
 SCORE_THRESHOLD = 70
 BARE_LABELS = {"reject", "decline", "deny", "refuse", "accept", "allow", "agree", "save", "confirm", "ok"}
 
@@ -601,15 +576,7 @@ def find_control(
             # general cookie denial; never substitute one for the other.
             if "do not sell" in lower or "opt out" in lower:
                 continue
-            base = _pattern_score(text, REJECT_PATTERNS)
-        elif kind == "settings":
-            base = _pattern_score(text, SETTINGS_PATTERNS)
-        elif kind == "save":
-            base = _pattern_score(text, SAVE_PATTERNS)
-        elif kind == "accept":
-            base = _pattern_score(text, ACCEPT_PATTERNS)
-        else:
-            raise ValueError(f"Unknown control kind: {kind}")
+        base = checks.label_score(text, kind)
         if not base:
             continue
         score = base + _banner_context_score(control)
