@@ -38,6 +38,7 @@ Scenarios: clean baseline, denial, GPC, optional accept control, baseline repeat
 | 2 | Configuration error. |
 | 3 | Capture failed; partial evidence written. |
 | 4 | **Run incomplete.** A required interaction did not complete and verify. Findings depending on it were withheld into `suppressed-findings.json`. |
+| 6 | **Pre-flight only.** A control could not be resolved unambiguously; the CMP table and the text scorer disagreed. Both candidates are listed in `detect-only-<host>-<profile>-conflicts.json`. No audit ran. |
 | 130 | Interrupted. |
 
 Exit 4 is not a crash. It means the audit ran but cannot answer some of what it was asked. Fix the cause — usually by adding selectors to `references/cmp-selectors.json` — and re-run.

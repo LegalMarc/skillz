@@ -3836,12 +3836,16 @@ def test_run_detect_only_reports_and_annotates_a_real_control() -> None:
     import threading
     from http.server import BaseHTTPRequestHandler, HTTPServer
 
+    # Mutable so the same server can serve a second, conflicted banner below
+    # without standing up another one.
+    served = {"html": HUBSPOT_BANNER}
+
     class _Handler(BaseHTTPRequestHandler):
         def log_message(self, *args) -> None:
             pass
 
         def do_GET(self) -> None:
-            body = HUBSPOT_BANNER.encode("utf-8")
+            body = served["html"].encode("utf-8")
             self.send_response(200)
             self.send_header("Content-Type", "text/html")
             self.send_header("Content-Length", str(len(body)))
@@ -3871,6 +3875,12 @@ def test_run_detect_only_reports_and_annotates_a_real_control() -> None:
                 assert code == 0, output
                 assert "Consent platform detected: HubSpot cookie banner" in output, output
                 assert "[reject] resolved via: cmp_selector_table" in output, output
+                # The decision, not just the path: a control both resolvers
+                # agreed on and one the table carried alone are different
+                # amounts of evidence and read identically without it.
+                assert "[reject] resolved via: cmp_selector_table  decision: corroborated" in output, output
+                for kind in ("accept", "settings", "save"):
+                    assert f"[{kind}] resolved via:" in output and "decision:" in output, (kind, output)
                 assert "WOULD CLICK: 'Decline'" in output, output
                 assert "No audit was performed" in output, output
 
@@ -3879,9 +3889,64 @@ def test_run_detect_only_reports_and_annotates_a_real_control() -> None:
                 # image is captioned as annotated and no fallback note fires.
                 assert "Annotated screenshot:" in output, output
                 assert "NOTE:" not in output, output
+
+                # Written even with nothing to report: a file that only appears
+                # sometimes is one a caller forgets to look for, and its absence
+                # then reads as "no conflicts" whether or not anything ran.
+                conflicts_file = Path(temp) / "conflicts.json"
+                with contextlib.redirect_stdout(io.StringIO()):
+                    audit_site.run_detect_only(
+                        target_url=f"http://127.0.0.1:{port}/", executable=executable,
+                        headless=True, timeout_ms=8000, viewport_label="desktop",
+                        screenshot_path=Path(temp) / "clean.png", conflicts_path=conflicts_file,
+                    )
+                assert conflicts_file.exists(), "the conflicts file must be written even when empty"
+                assert read_json(conflicts_file)["conflicts"] == [], read_json(conflicts_file)
+            ok("run_detect_only fingerprints a real CMP, resolves every control kind, and writes an annotated screenshot")
+
+            # A conflicted banner: two controls both reading as a denial, with
+            # the table naming the one the scorer does not prefer. The clean
+            # case above still exits 0, which is what makes this discriminating.
+            served["html"] = """
+                <!doctype html><html><body>
+                <div id="hs-eu-cookie-confirmation" style="position:fixed;bottom:0;padding:24px;background:#fff">
+                  <p>We use cookies for analytics and advertising.</p>
+                  <button id="hs-eu-confirmation-button">Accept All</button>
+                  <button id="hs-eu-decline-button">Decline</button>
+                  <button id="hs-eu-decline-button-2">Reject All</button>
+                </div></body></html>
+            """
+            with tempfile.TemporaryDirectory(prefix="cookie-auditor-conflict-") as temp:
+                conflicts_file = Path(temp) / "conflicts.json"
+                buffer = io.StringIO()
+                with contextlib.redirect_stdout(buffer):
+                    code = audit_site.run_detect_only(
+                        target_url=f"http://127.0.0.1:{port}/", executable=executable,
+                        headless=True, timeout_ms=8000, viewport_label="desktop",
+                        screenshot_path=Path(temp) / "conflict.png", conflicts_path=conflicts_file,
+                    )
+                output = buffer.getvalue()
+
+                assert code == audit_site.EXIT_CONTROL_CONFLICT, (code, output)
+                assert code not in {0, 2, 3, 4, 5, 130}, "a conflict needs an exit code of its own"
+                assert "UNRESOLVED CONFLICT" in output, output
+                assert "adjudication_id:" in output, output
+                assert "[cmp_selector_table]" in output and "[text_scoring]" in output, output
+                assert "WOULD NOT CLICK - conflict" in output, output
+                assert "--control-verdicts" in output, "the operator must be told how to resolve it"
+                assert "untrusted" in output, (
+                    "candidate text is page-authored and must be labelled as such where it is read"
+                )
+
+                recorded = read_json(conflicts_file)
+                assert len(recorded["conflicts"]) >= 1, recorded
+                first = recorded["conflicts"][0]
+                assert first["kind"] == "reject", first
+                assert first["adjudication_id"], first
+                assert first["table_candidate"] and first["scorer_candidate"], first
         finally:
             server.shutdown()
-    ok("run_detect_only fingerprints a real CMP, resolves every control kind, and writes an annotated screenshot")
+    ok("a pre-flight conflict prints both candidates, records them, and exits 6 rather than 0")
 
 
 # ---------------------------------------------------------------------------
@@ -5104,8 +5169,10 @@ def test_main_validates_manual_flag_and_wires_detect_only() -> None:
     original_detect = audit_site.run_detect_only
     captured: dict = {}
 
-    def fake_run_detect_only(target_url, executable, headless, timeout_ms, viewport_label, screenshot_path):
-        captured.update(target_url=target_url, viewport_label=viewport_label, screenshot_path=screenshot_path)
+    def fake_run_detect_only(target_url, executable, headless, timeout_ms, viewport_label,
+                             screenshot_path, conflicts_path=None):
+        captured.update(target_url=target_url, viewport_label=viewport_label,
+                        screenshot_path=screenshot_path, conflicts_path=conflicts_path)
         return 0
 
     audit_site.run_detect_only = fake_run_detect_only
@@ -5118,6 +5185,12 @@ def test_main_validates_manual_flag_and_wires_detect_only() -> None:
             f"--viewport both has no meaning for a one-rendering preview; must fall back to mobile: {captured}"
         )
         assert "mobile" in captured["screenshot_path"].name, captured["screenshot_path"]
+        assert captured["conflicts_path"] is not None, (
+            "the pre-flight must be given somewhere to record conflicts - a caller that is never "
+            "handed a path can never write the file the agent is told to read"
+        )
+        assert captured["conflicts_path"].name.endswith("-conflicts.json"), captured["conflicts_path"]
+        assert captured["conflicts_path"].parent == captured["screenshot_path"].parent
 
         # A bogus --browser must be refused before run_detect_only is even reached.
         captured.clear()
