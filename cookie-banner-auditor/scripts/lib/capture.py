@@ -1825,6 +1825,55 @@ COMPLETED_DENIAL_STATUSES = {
 #:   save to Allow All, which is the same hazard as the first case.
 UNSAVED_PREFERENCE_STATUS = checks.AUTOSAVE_NO_SAVE_CONTROL
 
+#: `find_control` decisions that mean "this control was not identified well
+#: enough to operate", as distinct from "no such control is on the page".
+AMBIGUOUS_DECISIONS = frozenset({"conflict", "vetoed"})
+
+#: A denial control could not be operated because it could not be identified
+#: with confidence - the CMP table and the text scorer disagreed, or the
+#: table's candidate was disqualified by its own label or role.
+#:
+#: Deliberately a sibling of `manual_required` rather than a reuse of it.
+#: `manual_required` means candidates were visible and none was confident
+#: enough; `analysis.py` keys `denial-control-unresolved` off that status and
+#: words it as "none reached the confidence threshold", which is simply untrue
+#: of a conflict - there the scorer was confident, and so was the table, about
+#: different elements. Reporting one as the other would describe the run
+#: inaccurately in the very finding meant to explain why it stopped.
+#:
+#: Absent from COMPLETED_DENIAL_STATUSES, so the scenario is invalid and
+#: withholds every finding that depends on it. That is the point: a run that
+#: could not identify the denial control must not report a denial.
+DENIAL_CONTROL_AMBIGUOUS = "denial_control_ambiguous"
+
+#: The accept scenario's equivalent. Lower stakes - accept is a differential
+#: control, not a compliance requirement - but the same rule applies: never
+#: report an interaction that was not performed as described.
+ACCEPT_CONTROL_AMBIGUOUS = "accept_control_ambiguous"
+
+#: Statuses whose own verification note explains the invalidity better than
+#: `_scenario_validity`'s generic "the required <x> did not complete" template.
+_STATUSES_WITH_THEIR_OWN_REASON = frozenset({
+    checks.AUTOSAVE_NO_SAVE_CONTROL,
+    DENIAL_CONTROL_AMBIGUOUS,
+    ACCEPT_CONTROL_AMBIGUOUS,
+})
+
+
+def ambiguous_resolution_labels(resolution_map: dict[str, Any] | None) -> list[str]:
+    """Call-site labels whose control could not be identified with confidence.
+
+    Reads `decision`, not `clickable`: an unresolved control (nothing on the
+    page reads as one) is a fact about the *site* and keeps its existing
+    status, while a conflicted or vetoed one is a fact about the *scanner's
+    confidence* and needs saying differently.
+    """
+    return sorted(
+        label
+        for label, resolution in (resolution_map or {}).items()
+        if (resolution or {}).get("decision") in AMBIGUOUS_DECISIONS
+    )
+
 
 def probe_autosave(
     page: Page,
@@ -2075,9 +2124,24 @@ def execute_denial(
             if disabled:
                 return classify_toggle_denial()
 
-    result["status"] = "manual_required"
+    # Nothing was operated. *Why* not decides which status this is: a control
+    # nobody could identify with confidence is a different fact from a page
+    # where no denial control was found, and the two produce different
+    # findings and different advice.
+    ambiguous = ambiguous_resolution_labels(result["resolution"])
+    if ambiguous:
+        result["status"] = DENIAL_CONTROL_AMBIGUOUS
+        result["ambiguous_controls"] = ambiguous
+        note = (
+            "No denial control was operated: "
+            + ", ".join(ambiguous)
+            + " could not be identified with confidence, so nothing was clicked."
+        )
+    else:
+        result["status"] = "manual_required"
+        note = "No denial control was operated, so there is nothing to verify."
     result["consent_snapshot_after"] = consent_snapshot(page, context, cmp_entry)
-    result["verification"] = {"verified": False, "note": "No denial control was operated, so there is nothing to verify."}
+    result["verification"] = {"verified": False, "note": note}
     return result
 
 
@@ -2106,7 +2170,15 @@ def execute_accept(
         result["consent_snapshot_after"] = after
         result["verification"] = verify_choice_registered(before, after)
     else:
-        result["verification"] = {"verified": False, "note": "No accept control was operated, so there is nothing to verify."}
+        ambiguous = ambiguous_resolution_labels(result["resolution"])
+        if ambiguous:
+            # Not "not found" - found twice, or found and disqualified.
+            result["status"] = ACCEPT_CONTROL_AMBIGUOUS
+            result["ambiguous_controls"] = ambiguous
+            note = "The accept control could not be identified with confidence, so nothing was clicked."
+        else:
+            note = "No accept control was operated, so there is nothing to verify."
+        result["verification"] = {"verified": False, "note": note}
     return result
 
 
@@ -2756,7 +2828,11 @@ def _scenario_validity(action: str, action_result: dict[str, Any], errors: list[
         verification = action_result.get("verification") or {}
         verified = bool(verification.get("verified"))
         if not completed:
-            note = verification.get("note") if status == checks.AUTOSAVE_NO_SAVE_CONTROL else None
+            # These statuses carry a note that says something the generic
+            # template cannot: which controls were ambiguous, or that page
+            # state was mutated even though nothing was saved. The template's
+            # "did not complete" is true but uninformative next to that.
+            note = verification.get("note") if status in _STATUSES_WITH_THEIR_OWN_REASON else None
             reason = note or f"The required {required} did not complete (status: {status or 'unknown'})."
         elif not verified:
             reason = (

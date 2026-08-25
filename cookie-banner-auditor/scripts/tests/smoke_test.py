@@ -47,6 +47,7 @@ from lib.analysis import (
 from lib.capture import (
     ANNOTATION_LAYER_ID,
     COMPLETED_DENIAL_STATUSES,
+    DENIAL_CONTROL_AMBIGUOUS,
     SCORE_THRESHOLD,
     UNSAVED_PREFERENCE_STATUS,
     VIEWPORT_PROFILES,
@@ -1865,6 +1866,16 @@ def test_a_wrong_table_entry_no_longer_pre_empts_the_generic_scorer(page) -> Non
         assert result["status"] not in COMPLETED_DENIAL_STATUSES, (
             f"a run that could not identify a denial control must not report one: {result['status']}"
         )
+        # A disqualified control is ambiguity, not absence: candidates were
+        # found, one was refused. `manual_required` would say nothing was
+        # operated because nothing was confident enough, which is the wrong
+        # account of a control that was rejected on its own label.
+        assert result["status"] == DENIAL_CONTROL_AMBIGUOUS, result["status"]
+        # Both denial call sites consult the same entry, so both are refused,
+        # and the record names both rather than only the first.
+        assert result["ambiguous_controls"] == ["reject", "second_layer_reject"], (
+            result.get("ambiguous_controls")
+        )
         clicked = [r for r in result.get("action_log", []) if r.get("action") == "click_reject"]
         assert not clicked, f"nothing may be clicked as a denial here: {clicked}"
         assert _scenario_validity("deny", result, [])["valid"] is False, result
@@ -1978,6 +1989,91 @@ def test_a_wrong_table_entry_no_longer_pre_empts_the_generic_scorer(page) -> Non
         "the competing label is normalised, so whitespace and case cannot fork the id"
     )
     ok("an adjudication id distinguishes every conflict it should, and ignores what moves between loads")
+
+
+def test_an_ambiguous_control_stops_the_denial_and_says_so(page) -> None:
+    """Refusing to click is only half of it - the run has to report why, accurately.
+
+    `find_control` returning None already stops the click; every caller
+    handles it. What it did not do was distinguish *why* nothing happened. The
+    fall-through status was `manual_required`, and `analysis.py` words that as
+    "candidate controls were visible but none reached the confidence
+    threshold" - untrue of a conflict, where both resolvers were confident,
+    about different elements. The finding that exists to explain why the run
+    stopped would have described the run inaccurately.
+
+    Settings is the call site that matters most. It is clicked *first*, before
+    any toggle is touched, so a mis-resolved settings control mutates consent
+    state before the scenario has expressed a choice. Cookiebot shipped a
+    role=switch category toggle in its settings list; Klaro's `.cm-btn-info`
+    resolved to save, committing the panel before anything was changed.
+    """
+    with _serve_cmp_fixture(page, """
+        <!doctype html><html><body>
+        <div id="cookie-consent" role="dialog"
+             style="position:fixed;bottom:0;left:0;right:0;padding:24px;background:#fff">
+          <p>We use cookies for analytics and advertising.</p>
+          <button id="prefs" class="cmp-open">Cookie Settings</button>
+          <button id="decoy" class="cmp-open">Manage preferences</button>
+        </div>
+        <script>
+          for (const id of ['prefs', 'decoy']) {
+            document.getElementById(id).addEventListener('click', () => {
+              document.cookie = 'category_flipped=yes; path=/';
+            });
+          }
+        </script></body></html>
+    """):
+        # A stale entry naming an element that still exists but is the wrong
+        # one - the shape a vendor redesign actually produces. Both read as
+        # settings, so nothing is contradictory and the veto cannot help;
+        # they are simply two different elements, and the scorer prefers the
+        # more specific label ("Cookie Settings" outranks "Manage
+        # preferences"). That disagreement is the only signal available.
+        entry = {"id": "fixturecmp", "accept": [], "reject": [], "save": [],
+                 "settings": ["#decoy"], "consent_storage": ["fixture_"]}
+        control, _, resolution = find_control(page, "settings", entry, label="settings")
+        assert control is None, f"an ambiguous settings control must never be clicked: {control}"
+        assert resolution["decision"] == "conflict", resolution
+
+        result = execute_denial(page, page.context, wait_ms=50, manual=False,
+                                share_scenario_dir=Path(tempfile.mkdtemp()), cmp_entry=entry)
+
+        assert "category_flipped" not in page.evaluate("() => document.cookie"), (
+            "nothing may be clicked when the settings control is ambiguous - clicking one "
+            "would mutate consent state before the scenario has expressed a choice"
+        )
+        assert not [r for r in result["action_log"] if r.get("action") == "click_settings"], (
+            f"no settings click may be logged: {result['action_log']}"
+        )
+        assert result["status"] == DENIAL_CONTROL_AMBIGUOUS, result["status"]
+        assert result["status"] not in COMPLETED_DENIAL_STATUSES
+        assert result["ambiguous_controls"] == ["settings"], result.get("ambiguous_controls")
+        ok("an ambiguous settings control is never clicked, and the run reports ambiguity rather than absence")
+
+        # The scenario is invalid, and its reason names the control rather than
+        # falling back to the generic "did not complete" template.
+        validity = _scenario_validity("deny", result, [])
+        assert validity["valid"] is False, validity
+        assert "settings" in validity["invalid_reason"], validity
+        assert "confidence threshold" not in validity["invalid_reason"], (
+            "a conflict must not be described as a scoring failure - both resolvers were "
+            f"confident, about different elements: {validity['invalid_reason']}"
+        )
+        ok("an ambiguous denial names the control that was ambiguous, not a generic scoring failure")
+
+    # Contrast: a page with no denial control at all is a fact about the site,
+    # keeps `manual_required`, and must not be relabelled as ambiguity.
+    with _serve_cmp_fixture(page, """
+        <!doctype html><html><body><p>No banner here.</p></body></html>
+    """):
+        entry = {"id": "fixturecmp", "accept": [], "reject": [], "save": [],
+                 "settings": [], "consent_storage": ["fixture_"]}
+        absent = execute_denial(page, page.context, wait_ms=50, manual=False,
+                                share_scenario_dir=Path(tempfile.mkdtemp()), cmp_entry=entry)
+        assert absent["status"] == "manual_required", absent["status"]
+        assert "ambiguous_controls" not in absent, absent.get("ambiguous_controls")
+        ok("a page with no denial control keeps manual_required - absence is not ambiguity")
 
 
 def test_usercentrics_shape_resolves_inside_a_shadow_root(page) -> None:
@@ -7015,6 +7111,7 @@ def main() -> int:
             test_measure_tab_order_bounded(page)
             test_onetrust_shape_uses_the_second_layer_reject(page)
             test_a_wrong_table_entry_no_longer_pre_empts_the_generic_scorer(page)
+            test_an_ambiguous_control_stops_the_denial_and_says_so(page)
             test_usercentrics_shape_resolves_inside_a_shadow_root(page)
             test_sourcepoint_shape_resolves_inside_an_iframe(page)
             test_didomi_shape_resolves_and_save_stays_specific_to_settings(page)
