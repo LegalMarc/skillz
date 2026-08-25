@@ -424,6 +424,42 @@ def annotation_layer_present(page: Page) -> bool:
         return False
 
 
+#: What counts as a candidate control. Shared by the full collector and the
+#: cheap prescreen so both walk exactly the same element set in the same order
+#: - `_score_controls` addresses prescreened rows by index, and the two would
+#: silently disagree about which element index 7 is if they ever diverged.
+CONTROL_SELECTOR = "button, [role='button'], a, input[type='button'], input[type='submit']"
+
+#: Fields cheap enough to fetch for every control on the page in one round
+#: trip. Deliberately exactly what `veto_control` and `label_score` need and
+#: nothing more: geometry and ancestor copy cost a round trip each, and are
+#: only worth paying for on a control that already reads as the kind sought.
+#:
+#: `text` replicates `_element_text`'s ladder (innerText, then aria-label,
+#: value, title; first non-empty wins, whitespace collapsed) and its 300-char
+#: bound. If the two ever diverge, a control would be scored on one string and
+#: recorded with another - so the alignment is asserted by test.
+_PRESCREEN_JS = r"""
+(els, cap) => els.slice(0, cap).map((el, i) => {
+  const clean = v => String(v == null ? '' : v).replace(/\s+/g, ' ').trim();
+  let text = '';
+  for (const source of [el.innerText, el.getAttribute('aria-label'),
+                        el.getAttribute('value'), el.getAttribute('title')]) {
+    const cleaned = clean(source);
+    if (cleaned) { text = cleaned; break; }
+  }
+  return {
+    index: i,
+    text: text.slice(0, 300),
+    tag: el.tagName.toLowerCase(),
+    role: el.getAttribute('role') || '',
+    type: el.getAttribute('type') || '',
+    ariaChecked: el.getAttribute('aria-checked'),
+  };
+})
+"""
+
+
 def collect_visible_controls(page: Page, max_per_frame: int = 220) -> list[dict[str, Any]]:
     """Collect candidate controls across every frame.
 
@@ -434,10 +470,9 @@ def collect_visible_controls(page: Page, max_per_frame: int = 220) -> list[dict[
     any automation and are reported as a detection limitation.
     """
     controls: list[dict[str, Any]] = []
-    selector = "button, [role='button'], a, input[type='button'], input[type='submit']"
     for frame in page.frames:
         try:
-            locator = frame.locator(selector)
+            locator = frame.locator(CONTROL_SELECTOR)
             count = min(locator.count(), max_per_frame)
         except Exception:
             continue
@@ -774,32 +809,70 @@ def _adjudication_id(
     return short_hash("|".join(parts))
 
 
-def _score_controls(page: Page, kind: str) -> list[tuple[int, dict[str, Any]]]:
+def _score_controls(page: Page, kind: str, max_per_frame: int = 220) -> list[tuple[int, dict[str, Any]]]:
     """Every visible control that reads as `kind`, best first.
 
-    Split out of `find_control` so the generic method can be run
-    unconditionally - including when the CMP table already produced a
-    candidate, which is the whole point of cross-checking.
+    Split out of `find_control` so the generic method can run unconditionally
+    - including when the CMP table already produced a candidate, which is the
+    whole point of cross-checking.
+
+    Two passes, because running always made the cost matter. Building full
+    metadata for every control costs about four round trips each (visibility,
+    text, geometry, and a computed-style evaluate), which measured at ~18ms
+    per control - and the candidate selector counts every anchor on the page,
+    so real sites reach the 220 cap easily. Six find_control calls per denial
+    scenario turned that into tens of seconds of pure overhead.
+
+    So the first pass fetches only what disqualifies or recognises a control -
+    its label, tag, role, type and checked state - for the whole page in one
+    round trip. Only controls that survive the veto *and* read as this kind
+    get the expensive treatment. On a real banner that is a handful of
+    elements rather than hundreds.
+
+    This is a pure speed change: the surviving set and its scores are
+    identical, because a control scoring zero was discarded anyway. The veto
+    is applied twice, cheaply, so a divergence between the prescreen's view of
+    an element and the full metadata's could never let a vetoed control
+    through.
     """
     scored: list[tuple[int, dict[str, Any]]] = []
-    for control in collect_visible_controls(page):
-        text = str(control.get("text", "")).strip()
-        lower = text.lower()
-        # Disqualification first, fitness second. A vetoed candidate is
-        # dropped whatever it scores - the two questions are separate, and
-        # the same veto polices the CMP table's candidate below.
-        if checks.veto_control(kind, control):
+    for frame in page.frames:
+        try:
+            rows = frame.eval_on_selector_all(CONTROL_SELECTOR, _PRESCREEN_JS, max_per_frame) or []
+        except Exception:
             continue
-        base = checks.label_score(text, kind)
-        if not base:
+        shortlist: list[int] = []
+        for row in rows:
+            # No early-out for a textless control: `label_score` already scores
+            # it zero, so skipping it here would only duplicate that decision
+            # in a second place, untested, where the two could drift apart.
+            #
+            # Disqualification first, fitness second. A vetoed candidate is
+            # dropped whatever it scores - the two questions are separate, and
+            # the same veto polices the CMP table's candidate in find_control.
+            if checks.veto_control(kind, row):
+                continue
+            if checks.label_score(row["text"], kind):
+                shortlist.append(int(row["index"]))
+        if not shortlist:
             continue
-        score = base + _banner_context_score(control)
-        # Penalise a bare label only when nothing ties it to a consent banner.
-        # Applying it whenever the label itself lacks consent wording would
-        # reject the plain "Accept"/"Decline" buttons most CMPs actually ship.
-        if lower in BARE_LABELS and not _banner_associated(control):
-            score -= 80
-        scored.append((score, control))
+        locator = frame.locator(CONTROL_SELECTOR)
+        for index in shortlist:
+            control = _control_metadata(locator.nth(index), frame, index)
+            if not control or checks.veto_control(kind, control):
+                continue
+            text = str(control.get("text", "")).strip()
+            base = checks.label_score(text, kind)
+            if not base:
+                continue
+            score = base + _banner_context_score(control)
+            # Penalise a bare label only when nothing ties it to a consent
+            # banner. Applying it whenever the label itself lacks consent
+            # wording would reject the plain "Accept"/"Decline" buttons most
+            # CMPs actually ship.
+            if text.lower() in BARE_LABELS and not _banner_associated(control):
+                score -= 80
+            scored.append((score, control))
     scored.sort(key=lambda item: item[0], reverse=True)
     return scored
 

@@ -51,11 +51,15 @@ from lib.capture import (
     UNSAVED_PREFERENCE_STATUS,
     VIEWPORT_PROFILES,
     ScenarioConfig,
+    CONTROL_SELECTOR,
+    _PRESCREEN_JS,
     _SAME_CONTROL_JS,
     _adjudication_id,
+    _control_metadata,
     _control_ref,
     _relation_verdict,
     _robots_allows,
+    _score_controls,
     _same_control,
     _scenario_validity,
     _untrusted_text,
@@ -65,6 +69,7 @@ from lib.capture import (
     banner_visible,
     build_context_options,
     capture_checkpoint,
+    collect_visible_controls,
     consent_snapshot,
     dwell_and_nudge,
     execute_accept,
@@ -296,6 +301,142 @@ def test_control_detection(page) -> None:
     control, _, resolution = find_control(page, "reject", None)
     assert control is not None, f"shadow-DOM control should be reachable: {resolution}"
     ok("controls inside an open shadow root are reachable")
+
+
+def test_the_prescreen_sees_the_same_controls_as_the_full_collector(page) -> None:
+    """The cheap first pass must agree with the expensive one, element for element.
+
+    `_score_controls` fetches labels and roles for the whole page in one round
+    trip, decides from those which controls are worth the four round trips of
+    full metadata, and then addresses the survivors by *index*. That only works
+    if both passes walk the same element set in the same order and derive the
+    same label. A divergence would not raise - it would score one element and
+    then measure a different one, silently, which is exactly the class of
+    quiet wrongness this tool exists to avoid.
+
+    Both halves are pinned here: the index alignment, and the label ladder
+    (innerText, then aria-label, value, title - first non-empty wins), because
+    the ladder is duplicated in JS and could drift from `_element_text`.
+    """
+    page.set_content("""
+        <!doctype html><html><head><style>
+          button, a, input { display: inline-block; min-width: 80px; min-height: 24px; }
+        </style></head><body>
+          <button>Plain inner text</button>
+          <button aria-label="From aria label"></button>
+          <input type="submit" value="From value">
+          <a href="#" title="From title"></a>
+          <button>   Collapsed   across
+                  lines   </button>
+          <button role="switch" aria-checked="true">A toggle</button>
+          <!-- innerText is already whitespace-normalised by the browser, so
+               the collapsing only shows on an attribute rung, where the raw
+               value comes back exactly as authored. -->
+          <button aria-label="Ragged   attribute
+                     value"></button>
+          <!-- Longer than the 300-char bound both passes must apply. -->
+          <button>REJECTPADDINGREJECTPADDINGREJECTPADDINGREJECTPADDINGREJECTPADDING
+                  REJECTPADDINGREJECTPADDINGREJECTPADDINGREJECTPADDINGREJECTPADDING
+                  REJECTPADDINGREJECTPADDINGREJECTPADDINGREJECTPADDINGREJECTPADDING
+                  REJECTPADDINGREJECTPADDINGREJECTPADDINGREJECTPADDINGREJECTPADDING
+                  REJECTPADDINGREJECTPADDINGREJECTPADDINGREJECTPADDINGREJECTPADDING
+                  REJECTPADDINGREJECTPADDINGREJECTPADDINGREJECTPADDINGREJECTPADDING</button>
+          <div id="host"></div>
+          <script>
+            document.getElementById('host').attachShadow({mode: 'open'})
+              .innerHTML = '<button>Inside a shadow root</button>';
+          </script>
+        </body></html>
+    """)
+    frame = page.main_frame
+    rows = frame.eval_on_selector_all(CONTROL_SELECTOR, _PRESCREEN_JS, 220)
+    full = collect_visible_controls(page)
+
+    # The prescreen is deliberately the more permissive of the two: it does no
+    # visibility check, because every control it shortlists is re-examined by
+    # `_control_metadata` anyway. Being permissive is the safe direction - it
+    # can only ever cost a round trip, never hide a control.
+    assert len(rows) >= len(full) > 0, (len(rows), len(full))
+    assert any(r["text"] == "Inside a shadow root" for r in rows), (
+        "the prescreen must pierce open shadow roots, as the full collector does - "
+        "Usercentrics renders its whole banner into one"
+    )
+
+    # The alignment that `_score_controls` actually depends on: resolving a
+    # prescreened row's index through the same selector must reach the very
+    # element the prescreen described.
+    locator = frame.locator(CONTROL_SELECTOR)
+    checked = 0
+    for row in rows:
+        control = _control_metadata(locator.nth(row["index"]), frame, row["index"])
+        if control is None:
+            continue
+        checked += 1
+        assert row["text"] == control["text"], (
+            f"index {row['index']}: prescreen read {row['text']!r} but the full metadata "
+            f"read {control['text']!r} - the label ladders have drifted apart"
+        )
+        for field in ("tag", "role", "type", "ariaChecked"):
+            assert row[field] == control[field], (row["index"], field, row[field], control[field])
+    assert checked == len(full), (
+        f"only {checked} of {len(full)} collectable controls were reached by index - "
+        "the two passes are walking different element sets"
+    )
+
+    by_text = {r["text"]: r for r in rows}
+    assert by_text["From aria label"]["tag"] == "button"
+    assert by_text["From value"]["type"] == "submit"
+    assert "From title" in by_text, "the title rung of the label ladder must be reachable"
+    assert "Collapsed across lines" in by_text, "whitespace must be collapsed the same way in both"
+    assert "Ragged attribute value" in by_text, (
+        "an attribute rung returns its value exactly as authored, so the collapsing has to "
+        "happen in the prescreen itself rather than being inherited from innerText"
+    )
+    assert by_text["A toggle"]["ariaChecked"] == "true"
+    assert max(len(r["text"]) for r in rows) == 300, (
+        "both passes bound the label at 300 characters; a longer one must be truncated, "
+        "not carried at full length into the score"
+    )
+    ok("the cheap prescreen and the full collector agree on every control, its index and its label")
+
+    # And the point of the split: the expensive pass is not paid for controls
+    # that could never have scored.
+    noise = "".join(f"<button>Unrelated {i}</button>" for i in range(150))
+    page.set_content(f"""
+        <!doctype html><html><body>{noise}
+        <div id="cookie-consent" role="dialog"
+             style="position:fixed;bottom:0;left:0;right:0;padding:24px;background:#fff">
+          <p>We use cookies for analytics and advertising.</p>
+          <button id="reject">Reject All</button>
+        </div></body></html>
+    """)
+    # Counted, not timed: a wall-clock assertion would be a flaky way to state
+    # this, and `_control_metadata` is precisely the expensive thing (four
+    # round trips per element) the prescreen exists to avoid paying for.
+    from lib import capture
+    original = capture._control_metadata
+    builds: list[int] = []
+
+    def counting(locator, frame, index):
+        builds.append(index)
+        return original(locator, frame, index)
+
+    capture._control_metadata = counting
+    try:
+        scored = _score_controls(page, "reject")
+    finally:
+        capture._control_metadata = original
+
+    assert [c["id"] for _, c in scored] == ["reject"], (
+        f"only the control that reads as a denial should have been measured: {scored}"
+    )
+    total = len(collect_visible_controls(page))
+    assert total > 150, "this fixture must actually be control-heavy, or the check below proves nothing"
+    assert len(builds) == 1, (
+        f"full metadata was built {len(builds)} times for a page of {total} controls; the "
+        "prescreen should have shortlisted exactly the one control that reads as a denial"
+    )
+    ok(f"a page of {total} controls costs one round trip and one metadata build, not {total}")
 
 
 def test_a_denial_labelled_toggle_is_not_resolved_as_a_denial_control(page) -> None:
@@ -6847,6 +6988,7 @@ def main() -> int:
             page = context.new_page()
             test_serve_fixture_seam(page)
             test_control_detection(page)
+            test_the_prescreen_sees_the_same_controls_as_the_full_collector(page)
             test_a_denial_labelled_toggle_is_not_resolved_as_a_denial_control(page)
             test_same_control_distinguishes_nesting_from_disagreement(page)
             test_control_ref_is_re_resolvable_and_bounds_page_text(page)
