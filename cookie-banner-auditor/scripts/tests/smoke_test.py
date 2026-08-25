@@ -5644,6 +5644,31 @@ def test_denial_not_committed_finding() -> None:
     # The remediation must warn about the accept-as-save trap that caused these
     # CMPs' save lists to be emptied in the first place.
     assert "not the accept control" in matched[0]["recommendation"], matched[0]
+
+    # Third shape: a save control that WAS resolved, twice, and refused for
+    # ambiguity. The threshold wording above would be false here - a conflict
+    # never sets a best score, so the sentence would have asserted
+    # "best score None against a threshold of None" as its evidence.
+    conflicted = findings_for({
+        "status": UNSAVED_PREFERENCE_STATUS,
+        "toggle_result": {"disabled": [{"label": "Analytics"}]},
+        "resolution": {"save": {
+            "kind": "save", "label": "save", "decision": "conflict", "clickable": False,
+            "conflict": {"table_candidate": {"text": "Save"}, "scorer_candidate": {"text": "Confirm"},
+                         "identity_basis": "unrelated", "adjudication_id": "x1"},
+        }},
+        "save_candidates": [{"ownText": "Save", "score": None}, {"ownText": "Confirm", "score": 115}],
+    })
+    matched = [f for f in conflicted if f["check_type"] == "denial-not-committed"]
+    assert len(matched) == 1, [f["check_type"] for f in conflicted]
+    assert "could not be reconciled" in matched[0]["observation"], matched[0]["observation"]
+    assert "confidence threshold" not in matched[0]["observation"], (
+        "a conflict must not be described as a scoring failure: " + matched[0]["observation"]
+    )
+    assert "None" not in matched[0]["observation"], (
+        "the threshold wording would render 'best score None against a threshold of None' here: "
+        + matched[0]["observation"]
+    )
     ok("an unsaved preference panel produces its own accurate finding, not the unresolved-control one")
 
 
@@ -5790,6 +5815,141 @@ def test_autosave_findings_draw_no_legal_conclusions() -> None:
         "no longer reaching the findings it exists to police"
     )
     ok("autosave findings state observations only, naming no authority and never exceeding severity high")
+
+
+def test_self_diagnostic_findings_assert_no_authority() -> None:
+    """Every finding about the tool's own limits stays out of the legal matrix, and out of legal language.
+
+    The rule above is generalised here. It existed as a prose comment naming
+    the exempt check types, plus one test that scanned only the two beginning
+    `denial-autosave` - so a self-diagnostic finding added later inherited the
+    convention's *description* and none of its enforcement. That is the case
+    that matters: whoever adds the next one is the least likely to know the
+    convention exists.
+
+    Two rules, and both are needed. A check type in the matrix contributes an
+    authority row; a check type out of the matrix can still write the
+    conclusion into its own prose, which is how `denial-autosave-discarded`
+    first shipped ("a strong FTC Section 5 deception fact pattern", at
+    `critical`). The matrix's silence and the finding's wording have to agree.
+    """
+    assert checks.SELF_DIAGNOSTIC_CHECK_TYPES, "the set must not be empty"
+
+    mapped: set[str] = set()
+    for authority in checks.ISSUE_MATRIX_AUTHORITIES:
+        for topic in authority.get("topics", []):
+            mapped |= set(topic.get("check_types") or ())
+    overlap = sorted(checks.SELF_DIAGNOSTIC_CHECK_TYPES & mapped)
+    assert not overlap, (
+        f"these self-diagnostic check types also appear in ISSUE_MATRIX_AUTHORITIES: {overlap}. "
+        "A finding about the scanner's own limits must never contribute a legal authority row."
+    )
+
+    # Every member must be a check type something can actually emit, or the
+    # set rots into a list of names that no longer mean anything.
+    emitted = _all_emitted_check_types()
+    unknown = sorted(checks.SELF_DIAGNOSTIC_CHECK_TYPES - emitted)
+    assert not unknown, (
+        f"these are listed as self-diagnostic but no _finding call emits them: {unknown}"
+    )
+    ok(f"all {len(checks.SELF_DIAGNOSTIC_CHECK_TYPES)} self-diagnostic check types are real and unmapped")
+
+
+def test_control_resolution_conflict_finding() -> None:
+    """A conflict is reported, survives the invalidity it causes, and claims nothing legal."""
+    results = {"denial": {"checkpoints": [], "action_result": {
+        "status": "denial_control_ambiguous",
+        "ambiguous_controls": ["reject", "save"],
+        "resolution": {
+            "reject": {
+                "kind": "reject", "label": "reject", "decision": "conflict", "clickable": False,
+                "conflict": {
+                    "table_candidate": {"text": "Allow All", "id": "accept-btn"},
+                    "scorer_candidate": {"text": "Reject All", "id": "reject-btn"},
+                    "identity_basis": "unrelated", "adjudication_id": "abc123",
+                },
+            },
+            "save": {
+                "kind": "save", "label": "save", "decision": "vetoed", "clickable": False,
+                "veto": {
+                    "reason": checks.VETO_OPPOSITE_ACTION, "conflicting_kind": "accept",
+                    "matched_selector": "#save", "control_ref": {"text": "Accept All"},
+                },
+            },
+            "accept": {"kind": "accept", "label": "accept", "decision": "corroborated", "clickable": True},
+        },
+    }}}
+    findings = generate_findings(results, [], [])
+    conflicts = [f for f in findings if f["check_type"] == "control-resolution-conflict"]
+
+    assert len(conflicts) == 2, [f["title"] for f in conflicts]
+    assert {f["severity"] for f in conflicts} == {"high"}, conflicts
+    assert all(f["certainty"] == "high" for f in conflicts), conflicts
+    assert len({f["id"] for f in conflicts}) == 2, "ids must not collide across call sites"
+
+    reject_finding = next(f for f in conflicts if "`reject`" in f["title"])
+    assert "Allow All" in reject_finding["observation"], reject_finding["observation"]
+    assert "Reject All" in reject_finding["observation"], reject_finding["observation"]
+    save_finding = next(f for f in conflicts if "`save`" in f["title"])
+    assert checks.VETO_OPPOSITE_ACTION in save_finding["observation"], save_finding["observation"]
+    assert "#save" in save_finding["observation"], save_finding["observation"]
+
+    # A corroborated control is not a conflict and must produce nothing.
+    assert not [f for f in conflicts if "`accept`" in f["title"]], (
+        "a control both resolvers agreed on must not be reported as a conflict"
+    )
+    ok("a resolution conflict is reported per call site, naming both candidates or the veto")
+
+    # The finding must survive the scenario invalidity it is explaining -
+    # otherwise the report goes silent exactly where the reader needs it.
+    assert all(f["depends_on_scenarios"] == [] for f in conflicts), conflicts
+    reported, suppressed = partition_findings(findings, {"denial": {"valid": False, "invalid_reason": "x"}})
+    kept = [f for f in reported if f["check_type"] == "control-resolution-conflict"]
+    assert len(kept) == 2, (
+        f"the conflict findings were suppressed by the very invalidity they explain: "
+        f"{[f['check_type'] for f in suppressed]}"
+    )
+    ok("a conflict finding survives the scenario invalidity it explains, rather than being suppressed by it")
+
+    # Section 4 is where a reader learns how the controls were resolved at
+    # all. `path` alone reads identically for a control both resolvers agreed
+    # on and one the table supplied unopposed, which are different amounts of
+    # evidence; the decision is what separates them.
+    report = render_markdown_report(
+        Path(tempfile.gettempdir()), "https://example.test/", _metadata(), findings, [], [], results
+    )
+    section = report.split("## 4.", 1)[1].split("## 5.", 1)[0]
+    assert "Denial control resolved via:" in section, section
+    assert "conflict" in section, (
+        f"section 4 must say the denial control was conflicted, not just name a path: {section}"
+    )
+    assert "corroborated" in section, (
+        f"section 4 must distinguish a corroborated accept from one the table carried alone: {section}"
+    )
+    ok("the report says whether the two resolvers agreed, not just which one supplied the control")
+
+
+def _all_emitted_check_types() -> set[str]:
+    """Every `check_type` literal passed to `_finding`, read from the source.
+
+    Read with `ast` rather than by running every branch: several findings need
+    a specific scenario shape to emit at all, and a set that only knew about
+    the reachable ones would police the easy half.
+    """
+    source = (SCRIPT_DIR / "lib" / "analysis.py").read_text()
+    names: set[str] = set()
+    for node in ast.walk(ast.parse(source)):
+        if (
+            isinstance(node, ast.Call)
+            and isinstance(node.func, ast.Name)
+            and node.func.id == "_finding"
+            and node.args
+            and isinstance(node.args[0], ast.Constant)
+            and isinstance(node.args[0].value, str)
+        ):
+            names.add(node.args[0].value)
+    assert len(names) > 15, f"the _finding scan found only {len(names)} check types; it has broken"
+    return names
 
 
 def test_autosave_reload_reverted_reports_a_confirmed_discard() -> None:
@@ -7051,6 +7211,8 @@ def main() -> int:
     test_autosave_no_controls_examined_does_not_claim_a_mutation()
     test_autosave_reload_reverted_reports_a_confirmed_discard()
     test_autosave_findings_draw_no_legal_conclusions()
+    test_self_diagnostic_findings_assert_no_authority()
+    test_control_resolution_conflict_finding()
     test_autosave_status_emits_exactly_one_check_type()
     test_verified_autosave_statuses_emit_neither_unconfirmed_nor_not_registered()
     test_asymmetric_choice_fires_for_manual_required_regression_and_now_autosave()

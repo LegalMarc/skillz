@@ -855,19 +855,38 @@ def measure_symmetry(accept: dict[str, Any] | None, reject: dict[str, Any] | Non
 # "law-specific anchors" of `references/legal-baseline.md`; that file remains
 # the source of authority text and is not duplicated here beyond short labels.
 #
-# Deliberately unmapped: `denial-control-unresolved`, `capture-errors`,
-# `unstable-tag-behaviour`, `insecure-auth-cookie`, and `unresolved-purposes`.
-# Each of those findings says explicitly that no legal inference should be
-# drawn from it (tooling gaps, security hygiene, or an unresolved research
-# item), so they contribute no row here even when present. `denial-autosave-
-# unconfirmed` and `denial-autosave-discarded` (#8) join that list deliberately:
-# the first says the tool cannot tell whether the choice was recorded, and the
-# second is an interface observation whose legal weight depends on banner and
-# policy language this tool never reads. Neither may assert an authority in its
-# own `potential_legal_relevance` text either - `test_autosave_findings_draw_no
-# _legal_conclusions` enforces that. An unrecognised `check_type` behaves the
-# same way: it matches no topic and is silently skipped rather than raising or
-# producing a bogus authority row.
+# Deliberately unmapped: see SELF_DIAGNOSTIC_CHECK_TYPES below. An
+# unrecognised `check_type` behaves the same way: it matches no topic and is
+# silently skipped rather than raising or producing a bogus authority row.
+
+#: Findings that report the *tool's own* limitations rather than anything the
+#: audited site did. Each says in its own text that no legal inference should
+#: be drawn from it, and none may appear in ISSUE_MATRIX_AUTHORITIES: a
+#: scanner gap must never contribute a row to the legal issue matrix, and a
+#: run whose only findings are these produces an empty Section 9.
+#:
+#: This was a comment for a long time, listing the same names in prose. A
+#: comment cannot fail. Making it a set means the no-overlap rule and the
+#: no-legal-conclusions prose rule are both enforced against every member,
+#: including ones added later - which is the case that matters, since the
+#: person adding a self-diagnostic finding is the least likely to know the
+#: convention exists.
+#:
+#: `insecure-auth-cookie` is here for a slightly different reason from the
+#: rest: it is security hygiene rather than a tooling gap, but it likewise
+#: supports no consent-law theory and must assert none.
+SELF_DIAGNOSTIC_CHECK_TYPES: frozenset[str] = frozenset({
+    "capture-errors",
+    "control-resolution-conflict",
+    "denial-autosave-discarded",
+    "denial-autosave-unconfirmed",
+    "denial-control-unresolved",
+    "denial-not-committed",
+    "insecure-auth-cookie",
+    "unresolved-purposes",
+    "unstable-tag-behaviour",
+})
+
 ISSUE_MATRIX_AUTHORITIES: list[dict[str, Any]] = [
     {
         "authority": "FTC Act s5 (deception)",

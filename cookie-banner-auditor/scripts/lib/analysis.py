@@ -445,8 +445,15 @@ def generate_findings(results: dict[str, Any], cookie_rows: list[dict[str, Any]]
                 "high",
                 (
                     f"The scanner opened the preferences layer and switched {len(disabled)} "
-                    "optional-category toggle(s) off, but no save control could be resolved "
+                    "optional-category toggle(s) off, but no save control could be operated "
                     + (
+                        # A save control that WAS found, twice, and refused for
+                        # ambiguity is not the same fact as one nothing scored
+                        # confidently enough - and the old wording asserted a
+                        # best score and threshold that a conflict never set.
+                        "because two candidates were resolved and could not be reconciled, so "
+                        "clicking either risked committing something other than the choice made."
+                        if save_resolution.get("decision") in {"conflict", "vetoed"} else
                         f"(candidates were visible but none reached the confidence threshold; "
                         f"best score {save_resolution.get('best_score')} against a threshold of "
                         f"{save_resolution.get('threshold')})."
@@ -594,6 +601,75 @@ def generate_findings(results: dict[str, Any], cookie_rows: list[dict[str, Any]]
             "Review the candidate list and screenshots. If a denial control exists, add its selectors to references/cmp-selectors.json so future runs resolve it directly; if none exists, that is itself a UI finding to raise with the site owner.",
             certainty="high",
         ))
+
+    # One finding per call site whose control could not be identified with
+    # confidence, whether or not it stopped the run. A conflict on `accept`
+    # blocks nothing (accept is a differential control, never clicked during a
+    # denial) but still says the vendor table and the generic method disagree
+    # about this site, which is the signal that keeps the table honest.
+    #
+    # Deliberately NOT gated on scenario validity. `depends_on_scenarios=[]`
+    # for the same reason the autosave findings use it: if this depended on
+    # `denial`, the conflict would invalidate that scenario, which would
+    # suppress the finding explaining why - silence exactly where the reader
+    # needs the explanation.
+    for scenario_name, scenario_result in sorted(results.items()):
+        # Not every value here is a scenario dict - the baseline repeats are a
+        # list - so guard as the other passes over `results` do.
+        if not isinstance(scenario_result, dict):
+            continue
+        scenario_action = scenario_result.get("action_result") or {}
+        for label, control_resolution in sorted((scenario_action.get("resolution") or {}).items()):
+            control_resolution = control_resolution or {}
+            decision = control_resolution.get("decision")
+            if decision not in {"conflict", "vetoed"}:
+                continue
+            conflict = control_resolution.get("conflict") or {}
+            veto = control_resolution.get("veto") or {}
+            if decision == "conflict":
+                detail = (
+                    "The vendor selector table and the generic text scorer each resolved a "
+                    f"control for `{label}`, and they resolved different elements "
+                    f"({conflict.get('table_candidate', {}).get('text')!r} from the table, "
+                    f"{conflict.get('scorer_candidate', {}).get('text')!r} from scoring). "
+                    if conflict.get("identity_basis") != "detached" else
+                    f"Two candidate controls for `{label}` could not be compared, because one "
+                    "stopped being present on the page while they were being checked. "
+                )
+            else:
+                detail = (
+                    f"The vendor selector table's candidate for `{label}` was disqualified: "
+                    f"{veto.get('reason')}"
+                    + (f" (its own label reads as `{veto.get('conflicting_kind')}`)"
+                       if veto.get("conflicting_kind") else "")
+                    + f". The selector was `{veto.get('matched_selector')}`. "
+                )
+            findings.append(_finding(
+                "control-resolution-conflict",
+                f"The auditor could not identify the `{label}` control with confidence",
+                # Denial-side controls stop the scenario; `accept` does not.
+                "medium" if label == "accept" else "high",
+                detail + "Nothing was clicked for this control.",
+                "Cannot be assessed. No interaction was performed with this control.",
+                (
+                    "No legal inference should be drawn. This is a limitation of the scanner's "
+                    "control detection, not an observation about the site. It does bear on how "
+                    "much weight any finding depending on this scenario can carry."
+                ),
+                [v for v in (conflict.get("table_candidate"), conflict.get("scorer_candidate"),
+                             veto.get("control_ref")) if v],
+                (
+                    "Confirm by hand which element is the real control, then correct "
+                    "references/cmp-selectors.json against a live capture and record the date "
+                    "and URL in that entry's notes. Do not resolve this by widening a selector "
+                    "until it matches - a selector that matches the wrong element is what "
+                    "produced this."
+                ),
+                certainty="high",
+                depends_on_scenarios=[],
+                id_parts=(scenario_name, label),
+            ))
+
     if action.get("direct_accept_available") and status not in {"direct_reject_clicked", "manual_required"}:
         clicks = int(action.get("click_count") or 0)
         findings.append(_finding(
@@ -1150,11 +1226,23 @@ def render_markdown_report(
     if banner_text:
         lines.extend(["**Banner text, as displayed:**", "", "> " + banner_text[:2000].replace("\n", "\n> "), ""])
     resolution = denial_action.get("resolution") or {}
+
+    def _resolved_via(label: str) -> str:
+        entry = resolution.get(label) or {}
+        line = str(entry.get("path", "not resolved"))
+        if entry.get("matched_selector"):
+            line += f" (`{entry['matched_selector']}`)"
+        # The decision is what says whether the two resolvers agreed, one
+        # carried it alone, or the run refused. `path` alone reads the same
+        # for a corroborated control and one the table supplied unopposed.
+        if entry.get("decision"):
+            line += f" - {entry['decision']}"
+        return line
+
     lines.extend([
         f"- Consent platform: {', '.join(cmp_names) if cmp_names else 'not identified'}",
-        f"- Denial control resolved via: {(resolution.get('reject') or {}).get('path', 'not resolved')}"
-        + (f" (`{(resolution.get('reject') or {}).get('matched_selector')}`)" if (resolution.get('reject') or {}).get('matched_selector') else ""),
-        f"- Accept control resolved via: {(resolution.get('accept') or {}).get('path', 'not resolved')}",
+        f"- Denial control resolved via: {_resolved_via('reject')}",
+        f"- Accept control resolved via: {_resolved_via('accept')}",
         f"- Denial status: `{denial_action.get('status')}` after {denial_action.get('click_count', 0)} interaction(s)",
         f"- Choice verified as registered: {(denial_action.get('verification') or {}).get('verified')}"
         + (f" - {(denial_action.get('verification') or {}).get('note', '')}" if (denial_action.get('verification') or {}).get('note') else ""),
