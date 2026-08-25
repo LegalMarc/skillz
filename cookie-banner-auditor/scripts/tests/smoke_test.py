@@ -3636,6 +3636,62 @@ def test_no_wall_clock_ordering_assertions() -> None:
     ok(f"no test asserts an ordering from wall-clock readings ({len(test_files)} test source(s) scanned)")
 
 
+def test_every_test_function_is_invoked_by_main() -> None:
+    """Every `test_*` defined in this module is actually called by `main`.
+
+    `main` invokes tests by explicit name across three literal call lists,
+    while the advertised total at the end of `main` is derived by
+    introspection over `globals()`. Nothing connects the two, so a new
+    `test_*` that is defined but never registered is counted as coverage and
+    never runs - and `_assert_readme_states_the_real_counts` cannot catch it,
+    because the function count it compares against is the inflated one. The
+    README check then *demands* the inflated number, so the fix that makes the
+    suite green is to write the larger claim into the README. A check that
+    exists to stop a coverage claim drifting instead launders it.
+
+    Found by accident: a test added this session was counted for a while
+    before it was wired in. Parsed with `ast` rather than grepped so a call
+    inside the `with sync_playwright()` / `try` nesting is seen the same way
+    as a top-level one, and so a name appearing in a comment or a docstring
+    is not mistaken for a call.
+    """
+    source = Path(__file__).read_text()
+    main_node = next(
+        (node for node in ast.walk(ast.parse(source))
+         if isinstance(node, ast.FunctionDef) and node.name == "main"),
+        None,
+    )
+    assert main_node is not None, "main() not found in this module; fix this check or restore main()"
+
+    invoked = {
+        node.func.id
+        for node in ast.walk(main_node)
+        if isinstance(node, ast.Call) and isinstance(node.func, ast.Name)
+        and node.func.id.startswith("test_")
+    }
+    defined = {
+        name for name, value in globals().items()
+        if name.startswith("test_") and callable(value)
+    }
+
+    # Anti-vacuity: if the AST matching ever stops recognising the call lists,
+    # `invoked` collapses to a small set and every comparison below passes or
+    # fails for the wrong reason. The suite is well past 100 tests; a parse
+    # that finds fewer has broken, not shrunk.
+    assert len(invoked) >= 100, (
+        f"only {len(invoked)} test calls found inside main() - the scan is no longer reaching the "
+        "call lists it exists to police"
+    )
+
+    never_run = sorted(defined - invoked)
+    assert not never_run, (
+        f"these test functions are defined and counted but never called by main(), so they have never "
+        f"run: {never_run}. Add them to the appropriate call list in main() - do NOT resolve this by "
+        "raising the README's test-function count, which would advertise coverage that does not execute."
+    )
+    ok(f"every one of the {len(defined)} defined test functions is invoked by main()")
+
+
 #: CMP entries whose `notes` carry no dated live-capture reference. This is a
 #: debt list, not a permitted state: the rule for this table is that a selector
 #: is verified against a real browser capture and the capture's date and URL go
@@ -6147,6 +6203,7 @@ def main() -> int:
     test_cmp_selectors_record_their_provenance()
     test_denial_controls_are_not_resolved_by_position()
     test_no_wall_clock_ordering_assertions()
+    test_every_test_function_is_invoked_by_main()
     test_consent_namespace_and_key_matching()
     test_narrow_consent_diff_ignores_noise_and_catches_namespaced_writes()
     test_classify_autosave_denial_truth_table()
