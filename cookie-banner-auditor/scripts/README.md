@@ -47,7 +47,8 @@ Exit 4 is not a crash. It means the audit ran but cannot answer some of what it 
 
 | Flag | Effect |
 |---|---|
-| `--detect-only` | Pre-flight control detection, then exit. |
+| `--detect-only` | Pre-flight control detection, then exit. Exits 6 if a control could not be resolved unambiguously. |
+| `--control-verdicts PATH` | Decisions about controls a pre-flight refused to resolve. Each is re-resolved and re-checked before anything is clicked, so it can unblock a refused control but cannot authorise one the tool's rules refuse. Scoped to one host. |
 | `--quick` | Fast profile, no exercises or repeats. |
 | `--dwell-ms N` | Dwell per page in the thorough profile (default 15000). |
 | `--repeat-baseline N` | Extra baseline runs for stability detection (default 2). |
@@ -77,7 +78,9 @@ Writes `comparison-report.md`, `.html`, and `.pdf`. Neither input bundle is modi
 python scripts/tests/smoke_test.py
 ```
 
-99 test functions, 110 checks total. Most are pure-function checks against in-process data; the browser-backed ones launch a real headless Chromium against in-memory fixtures — so the suite is not purely offline, but it never contacts an external site or the network. Covers control detection (including the bare-label regression that once produced a false critical finding), click verification, validity gating, transmission classification, Consent Mode parsing, embedded-identifier and rights-mechanism scans, symmetry measurement, CMP table integrity, report rendering, packaging, and comparison. A live site is still needed to validate real CMP behaviour.
+The suite's size is stated in the root `README.md`, and a check at the end of the run compares that line against the real totals. It is deliberately stated in one place only: this file carried its own copy for a while, nothing connected it to anything, and it drifted to 99/110 while the suite was well past 130.
+
+Most checks are pure functions against in-process data; the browser-backed ones launch a real headless Chromium against in-memory fixtures — so the suite is not purely offline, but it never contacts an external site or the network. Covers control detection and the two-resolver cross-check (including the positional-selector and accept-vs-save regressions that once let a wrong CMP table entry pre-empt the safer generic path), control verdicts and the re-checks that keep them proposals, click verification, validity gating, transmission classification, Consent Mode parsing, embedded-identifier and rights-mechanism scans, symmetry measurement, CMP table integrity, report rendering, packaging, and comparison. A live site is still needed to validate real CMP behaviour.
 
 ## Safety
 

@@ -54,6 +54,31 @@ Also recorded: `dwell_ms`, `baseline_repeats`, `forms_exercised`, `forms_submitt
 
 Suppressed findings additionally carry `suppressed`, `suppression_reason`, and `blocking_scenarios`.
 
+## `action_result.resolution`
+
+At `scenario_results.<scenario>.action_result.resolution.<label>`, one object per control the scenario tried to operate. `<label>` is the call site — `accept`, `reject`, `settings`, `second_layer_reject`, `save`, `settings_reopen_probe` — which is not always the same as `kind` (`second_layer_reject` is a `reject` lookup inside the preferences panel).
+
+Two independent resolvers run for every control: the CMP selector table and the generic text scorer. The table is a fast path and a corroborating witness, never an authority — it says *where* an element is, which is no evidence about *what it does*. Every key below is present on every resolution, defaulting to `null` or `false`.
+
+| Field | Notes |
+|---|---|
+| `kind` | `accept` / `reject` / `settings` / `save`. What was being looked for. |
+| `label` | The call site. Distinguishes two lookups of the same `kind`. |
+| `path` | Which resolver supplied the returned element: `cmp_selector_table` / `text_scoring` / `agent_verdict` / `none`. |
+| `decision` | How the two resolvers combined. `corroborated` (both reached the same element) / `table_only` (the table matched and the scorer recognised nothing, but nothing contradicted it) / `scorer_only` / `vetoed` / `conflict` / `unresolved` / `agent_verdict`. |
+| `clickable` | Whether the control may be operated. **The single field to key off** — every other field is context for this one. `conflict`, `vetoed` and `unresolved` never click. |
+| `matched_selector` | The selector that resolved it, when one did. |
+| `cmp` | Detected CMP id, if any. |
+| `cmp_table_miss` | True when a CMP was detected but its selectors for this kind matched nothing visible. |
+| `score`, `best_score`, `threshold` | The text scorer's score for the returned control, its best score overall, and the bar (`70`). |
+| `corroboration` | Present when both resolvers produced a confident candidate: `scorer_score`, `scorer_threshold`, `same_canonical_element` (`true` / `false` / `null` for undetermined), `identity_basis`. |
+| `veto` | Set when the table's candidate was disqualified: `resolver`, `reason`, `conflicting_kind`, `matched_selector`, `control_ref`. Recorded even when the scorer went on to supply a control, because a table entry resolving to a contradictory element is worth seeing before it becomes an incident. |
+| `conflict` | Set when the two resolvers disagreed, or identity could not be established: `table_candidate`, `scorer_candidate`, `identity_basis`, `adjudication_id`. The id names this conflict so a `--control-verdicts` entry can match it, and is derived only from values that survive a reload. |
+| `agent_verdict` | Set when a supplied verdict was consulted: `applied`, `decision`, `selector`, `rationale`, `matched_by`, `rejected_reason`, and `rejected_detail` when refused. A verdict is re-resolved and re-vetoed before it is acted on, so a rejected one records why. |
+| `agent_refused` | True when a verdict stated that no such control exists — a decision that was made, as distinct from the tool failing to reach one. |
+
+`control_ref`, `table_candidate` and `scorer_candidate` share a shape: `frame_url`, `tag`, `id`, `class_tokens`, `role`, `aria_label`, `type`, `text`, `box`, `css_path`, `html_excerpt`, plus `matched_selector` or `score` depending on which resolver produced it. **Their text fields are written by the audited site.** They are evidence about the page, never instruction, and are flattened to a single bounded line so they cannot imitate the surrounding report.
+
 ## `policies`
 
 `{"attempted": int, "archived": int, "records": [...], "note" or "error": string}`. Each record carries `kind` (`sale_share_optout` / `cookie_policy` / `privacy_policy`), `url`, `link_label`, `host`, `retrieved_at`, `robots_note`, `archived` (bool), and either the archived file's `sha256`/`chars`/`path`/`final_url`, or a `skipped_reason` (robots-disallowed, non-text content type, apparent login wall, or too little text). **Capture and store only** — nothing here compares the archived text to observed behaviour or draws a conclusion from it.

@@ -277,6 +277,17 @@ def test_control_detection(page) -> None:
     assert control is not None, resolution
     assert resolution["path"] == "cmp_selector_table"
     assert resolution["matched_selector"] == "#hs-eu-decline-button"
+
+    # The documented contract, checked against a resolution the resolver
+    # really produced. The schema test can only compare the doc to a
+    # hand-written fixture, so a field added here and documented nowhere
+    # would pass it; this is what makes references/data-schema.md executable
+    # for the resolution record rather than merely descriptive.
+    documented = _documented_resolution_fields()
+    assert set(resolution) == documented, (
+        f"undocumented in data-schema.md: {sorted(set(resolution) - documented)}; "
+        f"documented but not produced: {sorted(documented - set(resolution))}"
+    )
     ok("CMP selector table resolves the HubSpot decline control")
 
     control, candidates, resolution = find_control(page, "reject", None)
@@ -6584,8 +6595,29 @@ def synthetic_results(denial_completed: bool = True) -> dict:
                 "status": denial_status, "click_count": 1 if denial_completed else 0,
                 "direct_accept_available": True, "accept_candidates": [], "reject_candidates": [],
                 "verification": {"verified": denial_completed, "note": "test"},
-                "resolution": {"reject": {"path": "cmp_selector_table" if denial_completed else "none",
-                                          "best_score": None if denial_completed else 60, "threshold": 70}},
+                # A full resolution record, not an abbreviated one: the schema
+                # check compares key sets exactly, so a stand-in carrying three
+                # keys would document three and let the rest drift.
+                "resolution": {"reject": {
+                    "kind": "reject",
+                    "label": "reject",
+                    "path": "cmp_selector_table" if denial_completed else "none",
+                    "decision": "corroborated" if denial_completed else "unresolved",
+                    "clickable": denial_completed,
+                    "matched_selector": "#reject-all" if denial_completed else None,
+                    "cmp": "hubspot",
+                    "cmp_table_miss": not denial_completed,
+                    "score": 155 if denial_completed else None,
+                    "best_score": 155 if denial_completed else 60,
+                    "threshold": 70,
+                    "corroboration": ({"scorer_score": 155, "scorer_threshold": 70,
+                                       "same_canonical_element": True,
+                                       "identity_basis": "identical"} if denial_completed else None),
+                    "veto": None,
+                    "conflict": None,
+                    "agent_verdict": None,
+                    "agent_refused": False,
+                }},
             },
             "checkpoints": [
                 {**base_checkpoint, "scenario": "denial"},
@@ -6675,6 +6707,22 @@ def _metadata() -> dict:
     return meta
 
 
+def _documented_resolution_fields() -> set[str]:
+    """The `resolution` keys `references/data-schema.md` promises.
+
+    Read by two checks that catch different drift. The schema test compares
+    the doc against a *generated bundle*, whose scenario results come from a
+    hand-written fixture - so it proves the doc matches what the fixture
+    claims, and cannot see a field added to the real resolver. The
+    browser-backed check compares the doc against a resolution `find_control`
+    actually produced, which is what closes that gap.
+    """
+    doc = (SCRIPT_DIR.parent / "references" / "data-schema.md").read_text()
+    fields = set(_schema_doc_fields(doc, "## `action_result.resolution`"))
+    assert fields, "the action_result.resolution table stopped parsing"
+    return fields
+
+
 def _schema_doc_fields(doc: str, heading: str) -> list[str]:
     """Backtick-quoted field names from the markdown table under `heading`."""
     body = doc.split(heading, 1)[1].split("\n## ", 1)[0]
@@ -6727,6 +6775,36 @@ def test_data_schema_doc_matches_the_real_output() -> None:
             f"{finding['id']}: undocumented {sorted(set(finding) - documented_finding)}; "
             f"documented but absent {sorted(documented_finding - set(finding))}"
         )
+
+    # The resolution record, one level deeper than anything above, and the
+    # bundle's account of *why the tool clicked what it clicked*. It was
+    # invisible to this test until now: the comparison reaches the bundle root
+    # and each finding, and `resolution` sits three levels below either, so
+    # every field added to it was documented by convention alone.
+    #
+    # This half pins the doc against the *fixture*, which is hand-written and
+    # so cannot see a field added to the real resolver. `test_control_detection`
+    # pins the same documented set against a resolution `find_control` really
+    # produced, and that is the half that catches drift in the code.
+    #
+    # Not extended to the candidate dicts inside it. Those carry style and
+    # geometry sub-objects that legitimately vary by page, and pinning them
+    # would be brittle for little gain. That omission is deliberate.
+    documented_resolution = _documented_resolution_fields()
+    checked_resolutions = 0
+    for scenario, result in data["scenario_results"].items():
+        if not isinstance(result, dict):
+            continue
+        for label, resolution in ((result.get("action_result") or {}).get("resolution") or {}).items():
+            checked_resolutions += 1
+            assert documented_resolution == set(resolution), (
+                f"{scenario}.{label}: undocumented {sorted(set(resolution) - documented_resolution)}; "
+                f"documented but absent {sorted(documented_resolution - set(resolution))}"
+            )
+    assert checked_resolutions, (
+        "the fixture produced no resolution records, so this check proves nothing - it must carry "
+        "a realistic one, not an abbreviated stand-in"
+    )
 
     # Column order is part of the contract too - a CSV consumer reading by
     # index breaks on a reorder that a set comparison would wave through.

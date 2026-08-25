@@ -1074,9 +1074,21 @@ def find_control(
         "clickable": False,
         "matched_selector": None,
         "cmp": None,
+        # Every key is present on every resolution, defaulting to None or
+        # False, rather than appearing only when it has something to say. A
+        # consumer should never have to distinguish "this run had no conflict"
+        # from "this build did not record conflicts", and the schema check in
+        # the suite compares key sets exactly - a sometimes-key would make the
+        # documented contract unenforceable in the direction that matters.
+        "cmp_table_miss": False,
+        "score": None,
+        "best_score": None,
+        "threshold": SCORE_THRESHOLD,
         "veto": None,
         "conflict": None,
         "corroboration": None,
+        "agent_verdict": None,
+        "agent_refused": False,
     }
 
     table_control = None
