@@ -441,7 +441,8 @@ CONTROL_SELECTOR = "button, [role='button'], a, input[type='button'], input[type
 #: only worth paying for on a control that already reads as the kind sought.
 #:
 #: `text` replicates `_element_text`'s ladder (innerText, then aria-label,
-#: value, title; first non-empty wins, whitespace collapsed) and its 300-char
+#: value, title; first non-empty wins, whitespace collapsed) plus
+#: `_control_metadata`'s 300-char bound on it - `_element_text` itself has no
 #: bound. If the two ever diverge, a control would be scored on one string and
 #: recorded with another - so the alignment is asserted by test.
 _PRESCREEN_JS = r"""
@@ -688,7 +689,6 @@ def _same_control(a: dict[str, Any] | None, b: dict[str, Any] | None) -> tuple[b
             _sleep_ms(250)
             continue
         return None, basis
-    return None, "unknown"
 
 
 SCORE_THRESHOLD = 70
@@ -834,11 +834,22 @@ def _score_controls(page: Page, kind: str, max_per_frame: int = 220) -> list[tup
     get the expensive treatment. On a real banner that is a handful of
     elements rather than hundreds.
 
-    This is a pure speed change: the surviving set and its scores are
-    identical, because a control scoring zero was discarded anyway. The veto
-    is applied twice, cheaply, so a divergence between the prescreen's view of
-    an element and the full metadata's could never let a vetoed control
-    through.
+    This is a speed change, not a guarantee that the two passes see identical
+    text. Two real divergences exist between the prescreen's JS extraction and
+    `_element_text`'s Python one: Python's `re` `\\s` matches `\\x1c`-`\\x1f`
+    and `\\x85` but not U+FEFF (BOM/ZWNBSP), while JS `\\s` is the reverse, so
+    a label like `"Reject\\ufeffAll"` collapses to a clean match in the
+    prescreen and does not in `_element_text`; and `_element_text` wraps each
+    rung of its ladder in a `timeout=750` and swallows the exception, so a
+    busy page can fall through to a different rung than the prescreen's
+    single, timeout-free `evaluate` saw. Both are fail-safe, not absent: the
+    veto and the score are both re-run from scratch on whatever text
+    `_control_metadata` actually captures, so a control that only shortlisted
+    because of a divergence still has to earn its score - and clear the veto
+    - on that real text before either counts for anything. What a divergence
+    can cost is a control dropping out of the surviving set it would
+    otherwise have earned a place in, never a vetoed control passing or a
+    score standing that the metadata text does not itself support.
     """
     scored: list[tuple[int, dict[str, Any]]] = []
     for frame in page.frames:
@@ -926,10 +937,6 @@ def apply_control_verdict(
          whatever the file says and whoever wrote it.
       3. If the verdict states an expected accessible name, the element has to
          still have it. Cheap check that the page did not change underneath.
-      4. The element must not be what the scorer independently reads as an
-         incompatible kind. This catches the case rule 2 cannot see: an
-         unlabelled control whose own text says nothing, but which the page
-         plainly uses as its accept button.
 
     That ordering is deliberate and is the whole security argument. The text
     an operator or agent read to make this decision came from the audited
@@ -938,6 +945,26 @@ def apply_control_verdict(
     a semantically clean but wrong control - it can never produce the click
     the page was angling for, because the refusal is enforced here in Python
     rather than requested in a prompt.
+
+    That leaves a natural question: why only three steps? A fourth was written
+    and removed as unreachable in `14f11f8` - that the element is not what the
+    scorer independently reads as an incompatible kind. Whatever kind Y the
+    scorer would score a control as requires `label_score(text, Y) > 0`, which
+    by definition puts Y in `label_kinds(text)` - the very set step 2's veto
+    already tests against `INCOMPATIBLE_KINDS[kind]`. That was true only for
+    `reject` against an accept-scoring element when this was first reasoned
+    about, because `INCOMPATIBLE_KINDS` was then a hand-maintained, asymmetric
+    set. Since issue #24 made it a complete mutual-exclusion relation - every
+    kind excludes every other kind - the same redundancy now holds for every
+    kind pair the scorer can produce, so a restored fourth check would still
+    add nothing there either. The one place the two are not simply equivalent
+    - `veto_control`'s narrow "Save and Reject" carve-out for `save` (issue
+    #25c) - is not an opening for one: a check built from the raw relation,
+    blind to that carve-out, would re-veto exactly the control the carve-out
+    exists to let through. Restoring rule 4 would mean reimplementing that
+    exception a second time to avoid being wrong rather than merely
+    redundant, which is reason to leave it out, not a reason it is missing by
+    oversight.
 
     Only ever called for a control that is already not clickable, so a verdict
     can unstick a run and never redirect a working one.
@@ -1000,13 +1027,12 @@ def apply_control_verdict(
                                          "observed": _untrusted_text(control.get("text"), 120)}
             return None
 
-    # There is deliberately no further check that this element is not the one
-    # the scorer reads as an incompatible kind. Such a check would be
-    # unreachable: the scorer only ranks an element it recognises, so any
-    # element it reads as `accept` has a non-zero accept label score, and
-    # `veto_control` above refuses exactly those for `reject`. The rule would
-    # be strictly weaker than the veto that already ran, and an unreachable
-    # branch is one nothing can prove still works.
+    # There is deliberately no fourth check that this element is not what the
+    # scorer independently reads as an incompatible kind - see the docstring
+    # above for why it is redundant with the veto at step 2 for every kind
+    # pair `INCOMPATIBLE_KINDS` now covers (issue #24), and why `veto_control`'s
+    # "Save and Reject" carve-out (issue #25c) means a naive version of it
+    # would be wrong rather than merely redundant.
 
     record["applied"] = True
     control["matched_selector"] = str(verdict.get("selector"))
