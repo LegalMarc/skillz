@@ -10,7 +10,7 @@ from typing import Any
 from urllib.parse import urlsplit
 
 from . import checks
-from .capture import COMPLETED_DENIAL_STATUSES
+from .capture import COMPLETED_DENIAL_STATUSES, _untrusted_text, effective_decision
 from .util import (
     escape_markdown_cell,
     markdown_to_html,
@@ -621,8 +621,24 @@ def generate_findings(results: dict[str, Any], cookie_rows: list[dict[str, Any]]
         scenario_action = scenario_result.get("action_result") or {}
         for label, control_resolution in sorted((scenario_action.get("resolution") or {}).items()):
             control_resolution = control_resolution or {}
-            decision = control_resolution.get("decision")
-            if decision not in {"conflict", "vetoed"}:
+            agent_verdict = control_resolution.get("agent_verdict") or {}
+            # `effective_decision` looks behind a successful verdict to the
+            # `conflict`/`vetoed`/`unresolved` decision it replaced (see its
+            # docstring in capture.py). Reading `control_resolution["decision"]`
+            # directly here was issue #26: `apply_control_verdict` overwrites
+            # it to `"agent_verdict"` on success, which silently dropped this
+            # finding the instant an operator's verdict unstuck a run,
+            # leaving a human-overridden report indistinguishable from one
+            # the tool resolved cleanly on its own.
+            decision = effective_decision(control_resolution)
+            # `applied` on its own (regardless of what `decision` used to be)
+            # is enough to require a finding: a verdict applied against an
+            # `unresolved` control - neither resolver found anything at all -
+            # is still an operator's click standing in for the automation,
+            # and AC1 requires that be reported too, not only the `conflict`/
+            # `vetoed` cases the issue's own repro happened to use.
+            applied = bool(agent_verdict.get("applied")) and control_resolution.get("decision") == "agent_verdict"
+            if not applied and decision not in {"conflict", "vetoed"}:
                 continue
             conflict = control_resolution.get("conflict") or {}
             veto = control_resolution.get("veto") or {}
@@ -636,7 +652,7 @@ def generate_findings(results: dict[str, Any], cookie_rows: list[dict[str, Any]]
                     f"Two candidate controls for `{label}` could not be compared, because one "
                     "stopped being present on the page while they were being checked. "
                 )
-            else:
+            elif decision == "vetoed":
                 detail = (
                     f"The vendor selector table's candidate for `{label}` was disqualified: "
                     f"{veto.get('reason')}"
@@ -644,27 +660,124 @@ def generate_findings(results: dict[str, Any], cookie_rows: list[dict[str, Any]]
                        if veto.get("conflicting_kind") else "")
                     + f". The selector was `{veto.get('matched_selector')}`. "
                 )
-            findings.append(_finding(
-                "control-resolution-conflict",
-                f"The auditor could not identify the `{label}` control with confidence",
-                # Denial-side controls stop the scenario; `accept` does not.
-                "medium" if label == "accept" else "high",
-                detail + "Nothing was clicked for this control.",
-                "Cannot be assessed. No interaction was performed with this control.",
-                (
-                    "No legal inference should be drawn. This is a limitation of the scanner's "
-                    "control detection, not an observation about the site. It does bear on how "
-                    "much weight any finding depending on this scenario can carry."
-                ),
-                [v for v in (conflict.get("table_candidate"), conflict.get("scorer_candidate"),
-                             veto.get("control_ref")) if v],
-                (
+            else:
+                # `decision == "unresolved"`, only reachable here because
+                # `applied` is True (see the gate above): neither resolver
+                # identified anything on its own, and an operator's verdict
+                # is the entire reason this control has an identity at all.
+                detail = (
+                    f"Neither the vendor selector table nor the generic text scorer identified a "
+                    f"`{label}` control on this page on their own. "
+                )
+
+            # What became of the ambiguity is a materially different fact for
+            # a compliance reader than merely that it existed, so it changes
+            # the title, severity and closing sentence rather than being
+            # folded into one generic wording:
+            #
+            #  - applied: the control the automation could not identify was
+            #    clicked anyway, on an operator's word that was re-resolved
+            #    and re-vetoed before anything happened (`apply_control_verdict`
+            #    is the security property that makes this safe to report
+            #    rather than a limitation). That is disclosure, not a scanner
+            #    failure, so the finding survives at `informational` rather
+            #    than being dropped (dropping it was the bug) or kept at the
+            #    original severity (which would overstate a run that in fact
+            #    completed the interaction).
+            #  - rejected: a verdict was supplied and failed the same
+            #    re-checking - the operator was actively wrong about this
+            #    control - and, as before, nothing was clicked. Said
+            #    explicitly, at the original severity, since the run's
+            #    outcome did not change.
+            #  - refused, or no verdict at all: unchanged from before this
+            #    ticket, in wording as well as severity. The issue is
+            #    explicit that the refuse path "is fine - it leaves decision
+            #    alone", so it gets no distinct treatment here; a resolution
+            #    with `agent_refused=True` reads exactly as one nothing ever
+            #    consulted a verdict for.
+            unresolved_severity = "medium" if label == "accept" else "high"  # accept never stops the scenario
+            if applied:
+                title = f"The `{label}` control was identified only by an operator's verdict, not by the auditor alone"
+                severity = "informational"
+                rationale = agent_verdict.get("rationale")
+                # The selector is operator/agent-authored, not page-authored,
+                # but it is still text a verdict file controls, and this
+                # sentence is a new place it would otherwise land in the
+                # report unsanitized - collapse it the same way `rationale`
+                # already is, so it cannot open a code span or a paragraph
+                # break it does not close.
+                selector = _untrusted_text(agent_verdict.get("selector"), 300)
+                adjudication_id = conflict.get("adjudication_id")
+                closing = (
+                    f"An operator's verdict named `{selector}` as the real control"
+                    + (f" for the conflict recorded as adjudication id `{adjudication_id}`" if adjudication_id else "")
+                    + (f" ({rationale})" if rationale else "")
+                    + ". That selector was re-resolved against the live page and re-run through the same "
+                    "veto every other candidate passes before it was used - see `apply_control_verdict`."
+                )
+                baseline = (
+                    "Not itself a compliance failure. The interaction that followed used a control an "
+                    "operator identified and this tool independently re-verified, not one the automation "
+                    "found on its own; see this run's other findings for whether that interaction registered."
+                )
+                legal = (
+                    "No legal inference should be drawn from the disambiguation itself. It does bear on "
+                    "how the rest of this run's evidence should be read: this control's identification "
+                    "rests on an operator's judgment, re-checked against the same rules as any other "
+                    "candidate, rather than on the automation alone."
+                )
+                recommendation = (
+                    "Confirm the operator's verdict against a live capture, then add the selector to "
+                    "references/cmp-selectors.json so a future run resolves it without needing a verdict."
+                )
+            elif agent_verdict.get("rejected_reason"):
+                title = f"The auditor could not identify the `{label}` control with confidence, and an operator's verdict for it was rejected"
+                severity = unresolved_severity
+                closing = (
+                    f"An operator's verdict for this control was supplied and rejected on re-checking "
+                    f"({agent_verdict.get('rejected_reason')}); nothing was clicked."
+                )
+                baseline = "Cannot be assessed. No interaction was performed with this control."
+                legal = (
+                    "No legal inference should be drawn. This is a limitation of the scanner's control "
+                    "detection, not an observation about the site. It does bear on how much weight any "
+                    "finding depending on this scenario can carry."
+                )
+                recommendation = (
+                    "Confirm by hand which element is the real control, then correct "
+                    "references/cmp-selectors.json against a live capture and record the date and URL in "
+                    "that entry's notes. Do not resolve this by widening the rejected verdict's selector "
+                    "until it matches - a selector that matches the wrong element is what produced this, "
+                    "for an operator's guess exactly as much as for the table's."
+                )
+            else:
+                title = f"The auditor could not identify the `{label}` control with confidence"
+                severity = unresolved_severity
+                closing = "Nothing was clicked for this control."
+                baseline = "Cannot be assessed. No interaction was performed with this control."
+                legal = (
+                    "No legal inference should be drawn. This is a limitation of the scanner's control "
+                    "detection, not an observation about the site. It does bear on how much weight any "
+                    "finding depending on this scenario can carry."
+                )
+                recommendation = (
                     "Confirm by hand which element is the real control, then correct "
                     "references/cmp-selectors.json against a live capture and record the date "
                     "and URL in that entry's notes. Do not resolve this by widening a selector "
                     "until it matches - a selector that matches the wrong element is what "
                     "produced this."
-                ),
+                )
+
+            findings.append(_finding(
+                "control-resolution-conflict",
+                title,
+                severity,
+                detail + closing,
+                baseline,
+                legal,
+                [v for v in (conflict.get("table_candidate"), conflict.get("scorer_candidate"),
+                             veto.get("control_ref")) if v],
+                recommendation,
                 certainty="high",
                 depends_on_scenarios=[],
                 id_parts=(scenario_name, label),

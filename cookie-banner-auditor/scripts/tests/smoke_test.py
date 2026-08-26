@@ -64,6 +64,7 @@ from lib.capture import (
     _same_control,
     _scenario_validity,
     _untrusted_text,
+    ambiguous_resolution_labels,
     annotate_controls,
     annotation_layer_present,
     assert_clean_context,
@@ -73,6 +74,7 @@ from lib.capture import (
     collect_visible_controls,
     consent_snapshot,
     dwell_and_nudge,
+    effective_decision,
     execute_accept,
     execute_denial,
     exercise_forms,
@@ -2147,6 +2149,17 @@ def test_a_verdict_is_a_proposal_and_is_re_checked_before_it_is_obeyed(page) -> 
         assert resolution["agent_verdict"]["applied"] is True, resolution["agent_verdict"]
         assert resolution["agent_verdict"]["rationale"] == "confirmed by hand"
         ok("a verdict naming the real denial control unblocks a run that had refused")
+
+        # Issue #26: `decision` was just overwritten to `"agent_verdict"`, and
+        # `agent_verdict["prior_decision"]` is the only place the `"vetoed"`
+        # it replaced still exists - without it, a report cannot tell this
+        # control apart from one that never needed a verdict at all.
+        assert resolution["agent_verdict"]["prior_decision"] == "vetoed", resolution["agent_verdict"]
+        assert effective_decision(resolution) == "vetoed", (
+            f"effective_decision must look behind the overwritten decision to what this "
+            f"resolution was a moment before the verdict was applied: {resolution}"
+        )
+        ok("apply_control_verdict records the pre-verdict decision so it survives being overwritten")
 
         # 2. THE SECURITY CASE. A verdict naming the accept button - however
         #    it came to be written, whether by a mistaken operator or by an
@@ -6460,6 +6473,262 @@ def test_control_resolution_conflict_finding() -> None:
     ok("the report says whether the two resolvers agreed, not just which one supplied the control")
 
 
+def test_control_resolution_conflict_survives_a_verdict() -> None:
+    """Issue #26: an applied verdict must not silently delete the conflict finding.
+
+    `apply_control_verdict` overwrites `resolution["decision"]` to
+    `"agent_verdict"` on success, which is exactly what lets the run proceed -
+    but before this fix that overwrite also made `generate_findings` skip the
+    `control-resolution-conflict` finding entirely, because its gate read
+    `decision` directly. A human-overridden report then looked identical to
+    one the tool resolved cleanly on its own, for `conflict`, `vetoed`, and
+    (reviewer finding 2) `unresolved` originals alike. Covers: applied from
+    each of those three, rejected on re-check, an explicit refusal (which
+    must read exactly as if no verdict existed - reviewer finding 4), a
+    hostile selector that must be sanitized the same way `rationale` already
+    is (reviewer finding 3), and that `ambiguous_resolution_labels` never
+    reports a verdict-resolved, actually-clickable control as ambiguous
+    (reviewer finding 1 - the severe one: that function is read by
+    `execute_denial` *after* other labels in the same resolution map may
+    already have been clicked, so gating it on the pre-verdict decision
+    reported a real click as "nothing was clicked").
+    """
+    results = {"denial": {"checkpoints": [], "action_result": {"resolution": {
+        # Applied: the table and the scorer disagreed, and an operator's
+        # verdict - re-resolved and re-vetoed by `apply_control_verdict`
+        # before anything happened - picked the real one.
+        "reject": {
+            "kind": "reject", "label": "reject", "decision": "agent_verdict", "clickable": True,
+            "path": "agent_verdict", "matched_selector": "#real-reject",
+            "conflict": {
+                "table_candidate": {"text": "Allow All", "id": "accept-btn"},
+                "scorer_candidate": {"text": "Reject All", "id": "reject-btn"},
+                "identity_basis": "unrelated", "adjudication_id": "abc123",
+            },
+            "agent_verdict": {
+                "applied": True, "decision": "use_selector", "selector": "#real-reject",
+                "rationale": "confirmed by hand against the live page", "matched_by": "adjudication_id",
+                "rejected_reason": None, "prior_decision": "conflict",
+            },
+        },
+        # Applied: the table's candidate was vetoed and nothing else resolved,
+        # and an operator's verdict supplied the real save control.
+        "save": {
+            "kind": "save", "label": "save", "decision": "agent_verdict", "clickable": True,
+            "path": "agent_verdict", "matched_selector": "#real-save",
+            "veto": {
+                "reason": checks.VETO_OPPOSITE_ACTION, "conflicting_kind": "accept",
+                "matched_selector": "#save", "control_ref": {"text": "Accept All"},
+            },
+            "agent_verdict": {
+                "applied": True, "decision": "use_selector", "selector": "#real-save",
+                "rationale": None, "matched_by": "kind_label_cmp",
+                "rejected_reason": None, "prior_decision": "vetoed",
+            },
+        },
+        # Applied from `unresolved` (reviewer finding 2): neither resolver
+        # found anything at all - not a disagreement, not a disqualified
+        # candidate - and an operator's verdict is the entire reason this
+        # control has an identity in this run. This is exactly the shape
+        # `apply_control_verdict` produces for the second-layer reject lookup
+        # inside a preferences panel when nothing in it reads as English.
+        "second_layer_reject": {
+            "kind": "reject", "label": "second_layer_reject", "decision": "agent_verdict", "clickable": True,
+            "path": "agent_verdict", "matched_selector": "#deep-reject",
+            "agent_verdict": {
+                "applied": True, "decision": "use_selector", "selector": "#deep-reject",
+                "rationale": "the real deny button inside the panel, unlabelled in English",
+                "matched_by": "kind_label_cmp", "rejected_reason": None, "prior_decision": "unresolved",
+            },
+        },
+        # Applied, with a selector an operator's file (or an agent reading
+        # page text) could contain anything in (reviewer finding 3): an
+        # embedded newline that would otherwise split this sentence into a
+        # fake paragraph and let arbitrary markdown render after it.
+        "settings_reopen_probe": {
+            "kind": "settings", "label": "settings_reopen_probe", "decision": "agent_verdict", "clickable": True,
+            "path": "agent_verdict", "matched_selector": "#hostile-selector",
+            "conflict": {
+                "table_candidate": {"text": "Manage Options", "id": "manage-btn"},
+                "scorer_candidate": {"text": "Settings", "id": "settings-btn"},
+                "identity_basis": "unrelated", "adjudication_id": "hostile-id",
+            },
+            "agent_verdict": {
+                "applied": True, "decision": "use_selector",
+                "selector": "#hostile-selector\ninjected paragraph break\n**bold claim**",
+                "rationale": None, "matched_by": "kind_label_cmp",
+                "rejected_reason": None, "prior_decision": "conflict",
+            },
+        },
+        # Rejected: an operator's verdict was supplied and failed the same
+        # re-check every candidate goes through - the operator was actively
+        # wrong. Nothing was clicked, exactly as if no verdict existed.
+        "accept": {
+            "kind": "accept", "label": "accept", "decision": "conflict", "clickable": False,
+            "conflict": {
+                "table_candidate": {"text": "Allow All", "id": "accept-btn-2"},
+                "scorer_candidate": {"text": "Reject All", "id": "reject-btn-2"},
+                "identity_basis": "unrelated", "adjudication_id": "xyz789",
+            },
+            "agent_verdict": {
+                "applied": False, "decision": "use_selector", "selector": "#accept-btn-2",
+                "rationale": None, "matched_by": "kind_label_cmp",
+                "rejected_reason": checks.VETO_OPPOSITE_ACTION, "prior_decision": "conflict",
+            },
+        },
+        # Refused: an operator's verdict stated no such control exists. The
+        # issue's own note calls the refuse path "fine - it leaves decision
+        # alone" and out of scope, so (reviewer finding 4) this must read
+        # exactly as if no verdict had ever been consulted, not get bespoke
+        # wording nobody asked for.
+        "settings": {
+            "kind": "settings", "label": "settings", "decision": "vetoed", "clickable": False,
+            "veto": {
+                "reason": checks.VETO_CATEGORY_TOGGLE, "conflicting_kind": None,
+                "matched_selector": "#settings-checkbox", "control_ref": {"text": "toggle"},
+            },
+            "agent_verdict": {
+                "applied": True, "decision": "refuse", "selector": None,
+                "rationale": "this banner has no settings panel", "matched_by": "kind_label_cmp",
+                "rejected_reason": None, "prior_decision": "vetoed",
+            },
+            "agent_refused": True,
+        },
+    }}}}
+    findings = generate_findings(results, [], [])
+    conflicts = {f["title"].split("`")[1]: f for f in findings if f["check_type"] == "control-resolution-conflict"}
+    assert set(conflicts) == {
+        "reject", "save", "second_layer_reject", "settings_reopen_probe", "accept", "settings",
+    }, f"a verdict must never make this finding disappear, whatever it did: {sorted(conflicts)}"
+    ok("a conflict finding is emitted whatever a verdict did: applied, rejected, refused, or untouched")
+
+    applied_reject = conflicts["reject"]
+    applied_save = conflicts["save"]
+    for f in (applied_reject, applied_save):
+        assert f["severity"] == "informational", (
+            "an applied verdict resolved the ambiguity; reporting it at the original blocking severity "
+            f"would overstate a run that in fact completed the interaction: {f}"
+        )
+        assert f["certainty"] == "high", f
+    # Both original candidates, and the id an operator's --control-verdicts
+    # entry would have matched, must still be readable from the finding.
+    assert "Allow All" in applied_reject["observation"] and "Reject All" in applied_reject["observation"], (
+        applied_reject["observation"]
+    )
+    assert "abc123" in applied_reject["observation"], (
+        f"the adjudication id must survive so a reader can match it to the verdict file: {applied_reject['observation']}"
+    )
+    assert {c.get("id") for c in applied_reject["evidence"]} == {"accept-btn", "reject-btn"}, applied_reject["evidence"]
+    assert "#real-reject" in applied_reject["observation"], applied_reject["observation"]
+    assert checks.VETO_OPPOSITE_ACTION in applied_save["observation"], applied_save["observation"]
+    assert "#real-save" in applied_save["observation"], applied_save["observation"]
+    ok("an applied verdict's finding still names both original candidates and the adjudication id")
+
+    # Reviewer finding 2: a verdict applied against a control neither
+    # resolver identified at all must still be reported, not silently
+    # treated as though the automation had resolved it.
+    from_unresolved = conflicts["second_layer_reject"]
+    assert from_unresolved["severity"] == "informational", from_unresolved
+    assert "neither the vendor selector table nor the generic text scorer" in from_unresolved["observation"].lower(), (
+        f"a verdict applied to a control nothing else ever found must say so: {from_unresolved['observation']}"
+    )
+    assert "#deep-reject" in from_unresolved["observation"], from_unresolved["observation"]
+    ok("an applied verdict is reported even when neither resolver identified anything on its own")
+
+    # Reviewer finding 3: an operator's selector must be sanitized before
+    # landing in this new sentence, the same way `rationale` already is -
+    # in particular, it must not be able to inject a paragraph break.
+    hostile = conflicts["settings_reopen_probe"]
+    assert "\n" not in hostile["observation"], (
+        f"a verdict's selector must not be able to split this sentence into a fake paragraph break: "
+        f"{hostile['observation']!r}"
+    )
+    assert "#hostile-selector injected paragraph break **bold claim**" in hostile["observation"], (
+        hostile["observation"]
+    )
+    assert "hostile-id" in hostile["observation"], hostile["observation"]
+    ok("an applied verdict's selector is collapsed to one line before being embedded, same as rationale")
+
+    rejected = conflicts["accept"]
+    assert rejected["severity"] == "medium", "accept never stops the scenario, same as before this ticket"
+    assert checks.VETO_OPPOSITE_ACTION in rejected["observation"], (
+        f"the operator was actively wrong here, and the rejection reason must say so: {rejected['observation']}"
+    )
+    assert "nothing was clicked" in rejected["observation"].lower(), rejected["observation"]
+    # Reviewer finding 4: this is the reader most likely to widen the
+    # selector next, having just watched their own guess get refused for
+    # naming the wrong element - the warning against doing that must survive.
+    assert "widening" in rejected["recommendation"].lower(), (
+        f"the warning against widening a selector until it matches must not have been dropped from the "
+        f"rejected-verdict branch: {rejected['recommendation']}"
+    )
+    ok("a rejected verdict still reports the conflict, with the warning against widening a selector intact")
+
+    # Reviewer finding 4: the refuse path is explicitly out of scope ("fine -
+    # it leaves decision alone"), so this finding must be indistinguishable
+    # from one where no verdict was ever offered - same title, same "nothing
+    # was clicked" wording, no bespoke "an operator confirmed none exists".
+    refused = conflicts["settings"]
+    untouched_title = "The auditor could not identify the `settings` control with confidence"
+    assert refused["title"] == untouched_title, (
+        f"a refused verdict must read exactly like an untouched one, per the issue's own note: {refused['title']}"
+    )
+    assert refused["severity"] == "high"
+    assert "Nothing was clicked for this control." in refused["observation"], refused["observation"]
+    assert "no such control exists" not in refused["observation"].lower(), (
+        f"the refuse path must not get wording this ticket was never asked to add: {refused['observation']}"
+    )
+    ok("a refused verdict's finding is indistinguishable from one no verdict was ever offered for")
+
+    # `depends_on_scenarios=[]` must survive every one of these outcomes, not
+    # just the untouched case the other test covers - otherwise the finding
+    # that explains a scenario's invalidity is exactly what invalidity hides.
+    assert all(f["depends_on_scenarios"] == [] for f in conflicts.values()), conflicts
+    reported, suppressed = partition_findings(findings, {"denial": {"valid": False, "invalid_reason": "x"}})
+    kept = {f["id"] for f in reported if f["check_type"] == "control-resolution-conflict"}
+    assert kept == {f["id"] for f in conflicts.values()}, (
+        f"a verdict outcome must not change whether this finding survives scenario invalidity: {suppressed}"
+    )
+    ok("every verdict outcome's conflict finding survives the scenario invalidity it explains")
+
+    # `effective_decision` is what makes all of the above possible for
+    # `generate_findings`: it must look behind a successful verdict to what
+    # `decision` was a moment earlier - including `unresolved` - and be a
+    # no-op for a resolution no verdict ever touched.
+    resolution_map = results["denial"]["action_result"]["resolution"]
+    assert effective_decision(resolution_map["reject"]) == "conflict"
+    assert effective_decision(resolution_map["save"]) == "vetoed"
+    assert effective_decision(resolution_map["second_layer_reject"]) == "unresolved"
+    assert effective_decision({"decision": "table_only"}) == "table_only"
+    assert effective_decision({"decision": "conflict", "agent_verdict": None}) == "conflict"
+    assert effective_decision(None) is None
+    ok("effective_decision recovers the pre-verdict decision, and is a no-op with no verdict")
+
+    # Reviewer finding 1, the severe one: `ambiguous_resolution_labels` must
+    # NOT use `effective_decision`. It is read by `execute_denial` only after
+    # the whole denial sequence has already given up, by which point other
+    # labels in this same map may have been clicked successfully - a
+    # verdict-resolved, `clickable=True` control (every `agent_verdict`
+    # decision here) must never be reported as ambiguous, or a real click
+    # gets described as "nothing was clicked", contradicting `click_count`
+    # and silently dropping `denial-control-unresolved` in favour of a status
+    # with no handler in `generate_findings` at all - relocating, not fixing,
+    # the exact bug this ticket exists to close.
+    assert ambiguous_resolution_labels(resolution_map) == ["accept", "settings"], (
+        f"a control a verdict successfully resolved - `clickable=True`, and possibly already clicked by "
+        f"the time this is consulted - must never be reported as ambiguous: {ambiguous_resolution_labels(resolution_map)}"
+    )
+    assert ambiguous_resolution_labels({"accept": {"decision": "table_only"}}) == [], (
+        "a cleanly resolved control must never be reported as ambiguous"
+    )
+    assert ambiguous_resolution_labels({"x": {"decision": "agent_verdict", "clickable": True,
+                                               "agent_verdict": {"prior_decision": "vetoed"}}}) == [], (
+        "a verdict-resolved control must not be reported as ambiguous merely because it once was - "
+        "this is the exact regression reviewer finding 1 caught"
+    )
+    ok("ambiguous_resolution_labels excludes every verdict-resolved control, never looking behind decision")
+
+
 def _all_emitted_check_types() -> set[str]:
     """Every `check_type` literal passed to `_finding`, read from the source.
 
@@ -7812,6 +8081,7 @@ def main() -> int:
     test_autosave_findings_draw_no_legal_conclusions()
     test_self_diagnostic_findings_assert_no_authority()
     test_control_resolution_conflict_finding()
+    test_control_resolution_conflict_survives_a_verdict()
     test_autosave_status_emits_exactly_one_check_type()
     test_verified_autosave_statuses_emit_neither_unconfirmed_nor_not_registered()
     test_asymmetric_choice_fires_for_manual_required_regression_and_now_autosave()

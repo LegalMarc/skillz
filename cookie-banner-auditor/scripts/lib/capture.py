@@ -956,6 +956,18 @@ def apply_control_verdict(
         "rationale": _untrusted_text(verdict.get("rationale"), 300),
         "matched_by": "adjudication_id" if verdict.get("adjudication_id") else "kind_label_cmp",
         "rejected_reason": None,
+        # Captured before anything below can overwrite `resolution["decision"]`.
+        # A successful verdict replaces `decision` with `"agent_verdict"` so
+        # callers know a click may proceed, but that overwrite must not erase
+        # the fact that this control was `conflict`, `vetoed`, or `unresolved`
+        # a moment ago - a reader, via `generate_findings` (through
+        # `effective_decision` below), needs to be able to tell a
+        # human-adjudicated control apart from one the tool resolved without
+        # help, and the only place that earlier value still exists once
+        # `decision` is overwritten is here. `ambiguous_resolution_labels`
+        # deliberately does NOT read this field - see its own docstring for
+        # why looking behind the verdict is wrong for that function.
+        "prior_decision": resolution.get("decision"),
     }
     resolution["agent_verdict"] = record
 
@@ -2018,6 +2030,37 @@ _STATUSES_WITH_THEIR_OWN_REASON = frozenset({
 })
 
 
+def effective_decision(resolution: dict[str, Any] | None) -> Any:
+    """The `decision` a resolution had before any verdict could touch it.
+
+    A successful `apply_control_verdict` overwrites `resolution["decision"]`
+    with `"agent_verdict"` so callers know the control may be clicked - that
+    overwrite is exactly what unsticks the run. But it must not be the only
+    place anyone can tell whether the control got there from `conflict` or
+    `vetoed`, or resolved cleanly on its own; `apply_control_verdict` records
+    the value it is about to overwrite as `agent_verdict["prior_decision"]`
+    for this reason. Read that back first, falling through to the live
+    `decision` for a resolution no verdict ever touched - which is also why
+    this cannot simply read `agent_verdict.get("prior_decision") or ...`:
+    `resolution["decision"]` is always the right answer when there is no
+    verdict to look behind.
+
+    For *reporting* what a control's identification rested on - which is
+    all `generate_findings` uses this for - "before the verdict" is the right
+    question to ask. It is the wrong question for anything that decides
+    whether a control was actually operated: `clickable` and `action_log` are
+    the only things that can answer that, because a successful verdict really
+    did make the control clickable and a caller really did click it. Do not
+    reach for this function to gate that kind of logic - see
+    `ambiguous_resolution_labels` below for a place this went wrong.
+    """
+    resolution = resolution or {}
+    agent_verdict = resolution.get("agent_verdict")
+    if isinstance(agent_verdict, dict) and "prior_decision" in agent_verdict:
+        return agent_verdict["prior_decision"]
+    return resolution.get("decision")
+
+
 def ambiguous_resolution_labels(resolution_map: dict[str, Any] | None) -> list[str]:
     """Call-site labels whose control could not be identified with confidence.
 
@@ -2025,6 +2068,24 @@ def ambiguous_resolution_labels(resolution_map: dict[str, Any] | None) -> list[s
     page reads as one) is a fact about the *site* and keeps its existing
     status, while a conflicted or vetoed one is a fact about the *scanner's
     confidence* and needs saying differently.
+
+    Deliberately reads `decision` directly rather than `effective_decision`,
+    even though both are exported from this module and an earlier version of
+    this ticket's fix used the latter here. That was wrong: this function is
+    called from `execute_denial` after the *whole* denial sequence has given
+    up, by which point several other labels in the same `resolution_map` may
+    already have been clicked successfully (`settings` and
+    `second_layer_reject` are ordinary examples - a settings panel can open
+    and click, and the run still falls through to "nothing was operated"
+    later because no reject or save control followed it). A verdict-resolved
+    `settings` control is `clickable=True` and was, in fact, clicked - using
+    `effective_decision` reported it as ambiguous and "nothing was clicked"
+    regardless, which is false, self-contradicting against `click_count`, and
+    silently drops the real `denial-control-unresolved` finding by reporting
+    the wrong status. `decision` alone is correct here: once a verdict is
+    applied it reads `"agent_verdict"`, outside `AMBIGUOUS_DECISIONS`, which
+    is exactly right - a control a verdict resolved is no longer a case of
+    the scanner failing to identify it.
     """
     return sorted(
         label
