@@ -19,3 +19,7 @@ cookie-audit-*/
 cookie-inventory.csv
 request-inventory.csv
 evidence-private/
+
+# Ad-hoc dated backups made while editing in place (e.g. foo.js.bak-2026-08-25).
+# The file stays on disk; git just stops offering to commit it.
+*.bak-*

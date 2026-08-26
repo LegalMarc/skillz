@@ -100,6 +100,13 @@ const cfg = {
   reviewerAgentType: A.reviewerAgentType || 'general-purpose',
   reviewerModel: A.reviewerModel || '',
   reviewerEffort: A.reviewerEffort || 'xhigh',
+  // Per-ticket reviewer-effort overrides: { "<issue number>": "low|medium|high|xhigh|max" }.
+  // Lets a run spend xhigh on the load-bearing tickets while dropping mechanical ones
+  // (grep-gated deletions, pure moves) to a cheaper tier — the reviewer is where a run's
+  // tokens concentrate, and a deletion's correctness is carried by the gate, not by depth
+  // of reasoning. Absent/unknown ticket => cfg.reviewerEffort. The FINAL fix round ignores
+  // this and still escalates to cfg.reviewerEffort (see escalatedOpts).
+  reviewerEffortByTicket: A.reviewerEffortByTicket || {},
   onBlocked: A.onBlocked === 'halt' ? 'halt' : 'skip',
   blockedLabel: A.blockedLabel || 'afk-blocked',
   // Run journal + end-of-run report target: "auto" (DEFAULT) = create/reuse an issue
@@ -187,10 +194,12 @@ const coderOpts = (extra) => ({
   effort: cfg.coderEffort,
   ...extra,
 })
-const reviewerOpts = (extra) => ({
+const reviewerEffortFor = (ticketNumber) =>
+  cfg.reviewerEffortByTicket[String(ticketNumber)] || cfg.reviewerEffort
+const reviewerOpts = (extra, ticketNumber) => ({
   agentType: cfg.reviewerAgentType,
   ...(cfg.reviewerModel ? { model: cfg.reviewerModel } : {}),
-  effort: cfg.reviewerEffort,
+  effort: reviewerEffortFor(ticketNumber),
   ...extra,
 })
 // Discovery, landing, and parking are mechanical git/gh work — medium effort suffices.
@@ -1335,7 +1344,7 @@ async function runTicketInWorkspace(ticket, ws, branch, journalIssue) {
   for (let iter = 1; iter <= cfg.maxReviewIterations; iter++) {
     reviewRounds = iter
     const reviewed = await tryAgent(reviewerPrompt(ticket, iter, noChangeNeeded, ws), {
-      ...reviewerOpts({ label: `review-${ticket.number}-i${iter}`, phase: 'Review' }),
+      ...reviewerOpts({ label: `review-${ticket.number}-i${iter}`, phase: 'Review' }, ticket.number),
       schema: REVIEWER_SCHEMA,
     })
     if (!reviewed) {
@@ -1901,7 +1910,7 @@ for (let round = 1; round <= MAX_ROUNDS && !halted; round++) {
     for (let iter = 1; iter <= cfg.maxReviewIterations; iter++) {
       reviewRounds = iter
       const reviewed = await tryAgent(reviewerPrompt(ticket, iter, noChangeNeeded), {
-        ...reviewerOpts({ label: `review-${ticket.number}-i${iter}`, phase: 'Review' }),
+        ...reviewerOpts({ label: `review-${ticket.number}-i${iter}`, phase: 'Review' }, ticket.number),
         schema: REVIEWER_SCHEMA,
       })
 
