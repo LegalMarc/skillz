@@ -4936,6 +4936,33 @@ def test_veto_control_refuses_the_opposite_action() -> None:
         assert found and found["reason"] == checks.VETO_OPPOSITE_ACTION, (kind, text, found)
     ok("veto_control disqualifies a candidate whose own label states an incompatible action")
 
+    # Issue #24: INCOMPATIBLE_KINDS["reject"] excluded only "accept", so a
+    # `reject` selector that drifted onto a save or settings control passed
+    # the veto with no corroboration at all and, on a panel with no English
+    # reject copy, would have clicked it - committing the vendor's defaults
+    # while the run reported a completed denial. Same incident class as the
+    # OneTrust positional selector, reached through save/settings instead of
+    # accept.
+    for text in ("Save Preferences", "Confirm My Choices", "Save", "Submit", "Apply"):
+        found = checks.veto_control("reject", control(text))
+        assert found and found["reason"] == checks.VETO_OPPOSITE_ACTION, ("reject", text, found)
+        assert found["conflicting_kind"] == "save", (text, found)
+    for text in ("Cookie Settings", "Manage preferences", "Settings"):
+        found = checks.veto_control("reject", control(text))
+        assert found and found["reason"] == checks.VETO_OPPOSITE_ACTION, ("reject", text, found)
+        assert found["conflicting_kind"] == "settings", (text, found)
+    # The relation is derived from a single mutual-exclusion statement now,
+    # so it cannot go asymmetric again: assert that directly rather than only
+    # through the one direction the incident used.
+    for kind in checks.CONTROL_KINDS:
+        for other in checks.CONTROL_KINDS:
+            if kind == other:
+                continue
+            assert other in checks.INCOMPATIBLE_KINDS[kind], (
+                f"{kind!r} must exclude {other!r} - INCOMPATIBLE_KINDS must stay a complete relation"
+            )
+    ok("veto_control refuses a reject candidate whose own label reads as save or settings")
+
     # A sale/share opt-out is a separate statutory mechanism, not a denial.
     for text in ("Do Not Sell My Personal Information", "Do not sell or share", "Opt out"):
         found = checks.veto_control("reject", control(text))

@@ -700,16 +700,25 @@ VETO_OPPOSITE_ACTION = "label_states_an_incompatible_action"
 VETO_CATEGORY_TOGGLE = "candidate_toggles_a_category_rather_than_operating_a_control"
 
 #: A candidate for the key kind may never be an element whose own label reads
-#: decisively as one of the value kinds. Asymmetric on purpose: `settings` is
-#: the strictest because it is clicked *first*, before any toggle is touched,
-#: so a mis-resolved settings control commits or discards a choice before the
-#: scenario has expressed one.
+#: decisively as one of the value kinds. Derived from a single mutual-exclusion
+#: statement - every kind excludes every other kind - rather than four
+#: hand-maintained sets, because hand-maintained sets went asymmetric without
+#: anyone noticing: `reject` excluded `accept` but not `save` or `settings`, so
+#: a `reject` selector that drifted onto a save/settings control (the OneTrust
+#: incident class, reached through a different pair) passed the veto and
+#: committed the vendor's defaults while the run reported a completed denial
+#: (issue #24). A label that plainly states kind Y is evidence the element
+#: does not do kind X, for every X != Y - there is no pair of *different*
+#: kinds where that stops being true, so completeness is the correct relation,
+#: not an approximation of one.
 INCOMPATIBLE_KINDS: dict[str, frozenset[str]] = {
-    "reject": frozenset({"accept"}),
-    "accept": frozenset({"reject"}),
-    "save": frozenset({"accept", "reject"}),
-    "settings": frozenset({"accept", "reject", "save"}),
+    kind: frozenset(CONTROL_KINDS - {kind}) for kind in CONTROL_KINDS
 }
+assert all(
+    kind in INCOMPATIBLE_KINDS.get(other, frozenset())
+    for kind, excluded in INCOMPATIBLE_KINDS.items()
+    for other in excluded
+), "INCOMPATIBLE_KINDS must be symmetric: if A excludes B, B must exclude A"
 
 #: ARIA roles and input types whose click semantics are "flip my own state".
 _TOGGLE_ROLES = frozenset({"switch", "checkbox", "radio", "menuitemcheckbox", "menuitemradio"})
