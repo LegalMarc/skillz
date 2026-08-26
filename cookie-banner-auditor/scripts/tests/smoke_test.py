@@ -2002,6 +2002,95 @@ def test_a_wrong_table_entry_no_longer_pre_empts_the_generic_scorer(page) -> Non
     ok("an adjudication id distinguishes every conflict it should, and ignores what moves between loads")
 
 
+def test_veto_control_reads_aria_label_against_real_dom(page) -> None:
+    """Issue #25a: `veto_control` used to read only `control["text"]`.
+
+    `_element_text`'s ladder tries innerText first and only falls through to
+    `aria-label` when innerText is empty, so a button with real visible copy
+    never reaches its aria-label there. A denial candidate whose innerText
+    says nothing recognisable but whose aria-label plainly states "Accept"
+    used to clear the veto for `reject` and, named by the CMP table, would
+    have been clicked as the denial.
+
+    Asserted against a real page rather than a synthetic dict, so this also
+    proves `_control_metadata` (unchanged by this ticket - it already
+    captured `ariaLabel`) actually hands the field to `collect_visible_controls`,
+    not just that `veto_control` would use it if it were there.
+    """
+    with _serve_cmp_fixture(page, """
+        <!doctype html><html><body>
+        <div id="cookie-consent" role="dialog"
+             style="position:fixed;bottom:0;left:0;right:0;padding:24px;background:#fff">
+          <p>We use cookies for analytics and advertising.</p>
+          <button aria-label="Accept all cookies">Continue</button>
+        </div></body></html>
+    """):
+        controls = collect_visible_controls(page)
+        assert len(controls) == 1, controls
+        control = controls[0]
+        assert control["text"] == "Continue", (
+            f"the innerText ladder must still win over aria-label for `text`: {control}"
+        )
+        assert control["ariaLabel"] == "Accept all cookies", control
+
+        # `text` alone states no kind at all - this is the failure mode
+        # itself, not yet the fix.
+        assert checks.label_kinds(control["text"]) == frozenset(), control
+
+        veto = checks.veto_control("reject", control)
+        assert veto and veto["reason"] == checks.VETO_OPPOSITE_ACTION, veto
+        assert veto["conflicting_kind"] == "accept", veto
+        assert veto["observed_label"] == "Accept all cookies", (
+            f"the veto must be explained by the string that actually contradicted: {veto}"
+        )
+        ok("veto_control reads aria-label even when innerText states no kind, against a real DOM control")
+
+
+def test_save_and_reject_label_resolves_as_save_without_losing_reject(page) -> None:
+    """Issue #25c: "Save and Reject" is deliberately recognised as `reject`
+    (`CONTROL_PATTERNS["reject"]` - someone saw a CMP ship it as a standalone
+    denial button), but the now-complete `INCOMPATIBLE_KINDS` (#24) then
+    vetoes that identical label whenever it is resolved as `save` - so a CMP
+    that uses this exact text for its confirm/apply control could never have
+    that control operated at all. See the comment on
+    `checks._SAVE_REJECT_COMPOUND_LABEL` for why this is fixed by carving the
+    label out of the save/reject pair rather than narrowing the reject
+    pattern.
+
+    Goes through `find_control(page, ...)`, not `veto_control` directly, per
+    the acceptance criteria - this proves the whole resolution path, table
+    lookup and veto together, actually lands on a clickable control.
+    """
+    with _serve_cmp_fixture(page, """
+        <!doctype html><html><body>
+        <div id="cookie-consent" role="dialog"
+             style="position:fixed;bottom:0;left:0;right:0;padding:24px;background:#fff">
+          <p>We use cookies for analytics and advertising.</p>
+          <button id="prefs-save">Save and Reject</button>
+        </div></body></html>
+    """):
+        # The fix: a CMP table naming this label under `save` must resolve it,
+        # not vetoed as though "Save and Reject" were the opposite of "save".
+        entry = {"id": "fixturecmp", "accept": [], "reject": [], "settings": [],
+                 "save": ["#prefs-save"], "consent_storage": ["fixture_"]}
+        control, _, resolution = find_control(page, "save", entry, label="save")
+        assert control is not None, resolution
+        assert resolution["decision"] == "table_only", resolution
+        assert resolution["clickable"] is True, resolution
+        assert resolution["veto"] is None, resolution
+        ok("a 'Save and Reject' save control named by the CMP table resolves and is clickable")
+
+        # The direction this ticket must not regress: the same literal label,
+        # resolved as `reject` with no table involved at all, still works via
+        # the plain text scorer - it was never vetoed there, and the (c) fix
+        # must not have touched that path.
+        reject_control, _, reject_resolution = find_control(page, "reject", None, label="reject")
+        assert reject_control is not None, reject_resolution
+        assert reject_resolution["decision"] == "scorer_only", reject_resolution
+        assert reject_resolution["clickable"] is True, reject_resolution
+        ok("the same 'Save and Reject' label still resolves as reject via the text scorer, unaffected")
+
+
 def test_a_verdict_is_a_proposal_and_is_re_checked_before_it_is_obeyed(page) -> None:
     """An operator's verdict can unstick a refused control - and cannot authorise a bad one.
 
@@ -4936,6 +5025,30 @@ def test_veto_control_refuses_the_opposite_action() -> None:
         assert found and found["reason"] == checks.VETO_OPPOSITE_ACTION, (kind, text, found)
     ok("veto_control disqualifies a candidate whose own label states an incompatible action")
 
+    # Issue #25a's other direction, and the one the first pass at the fix
+    # missed entirely (review finding on this ticket): aria-label must be
+    # consulted when the visible text is silent, but must NOT be unioned in
+    # unconditionally once the text already states something. Unlike every
+    # other kind, `CONTROL_PATTERNS["settings"]` matches an unanchored
+    # substring, so a verbose, ambient aria-label that merely *mentions*
+    # "cookie preferences" or "cookie settings" - real CMPs write labels like
+    # this - must not veto a control whose own decisive text says otherwise.
+    # That is (c)'s exact failure mode, reopened through aria-label instead
+    # of text.
+    for text, aria in (
+        ("Save", "Save: Save your cookie preferences and close"),
+        ("Save Preferences", "Manage your cookie settings"),
+        ("Confirm", "Confirm and save your privacy choices"),
+    ):
+        found = checks.veto_control("save", control(text, ariaLabel=aria))
+        assert found is None, (text, aria, found)
+    # The direction this must not lose: aria-label is still the *only*
+    # evidence available when the visible text states no kind at all.
+    found = checks.veto_control("reject", control("Continue", ariaLabel="Accept all cookies"))
+    assert found and found["reason"] == checks.VETO_OPPOSITE_ACTION, found
+    assert found["conflicting_kind"] == "accept", found
+    ok("veto_control's aria-label fallback does not over-veto a control whose own text is already decisive")
+
     # Issue #24: INCOMPATIBLE_KINDS["reject"] excluded only "accept", so a
     # `reject` selector that drifted onto a save or settings control passed
     # the veto with no corroboration at all and, on a panel with no English
@@ -4963,13 +5076,68 @@ def test_veto_control_refuses_the_opposite_action() -> None:
             )
     ok("veto_control refuses a reject candidate whose own label reads as save or settings")
 
+    # Issue #25c's carve-out (see `checks._SAVE_REJECT_COMPOUND_LABEL`) must
+    # only forgive "reject" when the field that actually stated it is itself
+    # the compound label - not whenever the compound phrase appears anywhere
+    # on the control (review finding on this ticket). A first pass checked
+    # `text` or `aria_label` regardless of which one produced the
+    # contradiction, so a companion field stating a plain, unambiguous
+    # "reject" got silently excused just because the *other* field happened
+    # to read "Save and Reject" - reopening (a)'s hole through the carve-out
+    # meant to fix (c).
+    #
+    # Decisive, non-compound text must stay vetoed even when the aria-label
+    # is the compound phrase: the text alone already puts "reject" in
+    # `contradictions`, and "Reject All" is not the compound label.
+    found = checks.veto_control("save", control("Reject All", ariaLabel="Save and Reject"))
+    assert found and found["reason"] == checks.VETO_OPPOSITE_ACTION, found
+    assert found["conflicting_kind"] == "reject", found
+    # The carve-out must still work when the compound label is genuinely the
+    # only source of the contradiction - text stating nothing, aria-label
+    # stating the compound phrase.
+    assert checks.veto_control("save", control("Weiter", ariaLabel="Save and Reject")) is None, (
+        "the aria-only compound label must still be carved out when it is the sole source"
+    )
+    ok("veto_control's save/reject carve-out only forgives the field that is actually the compound label")
+
     # A sale/share opt-out is a separate statutory mechanism, not a denial.
-    for text in ("Do Not Sell My Personal Information", "Do not sell or share", "Opt out"):
+    for text in ("Do Not Sell My Personal Information", "Do not sell or share"):
         found = checks.veto_control("reject", control(text))
         assert found and found["reason"] == checks.VETO_SALE_SHARE_OPTOUT, (text, found)
     # ...and only for `reject`. It is a legitimate rights link elsewhere.
     assert checks.veto_control("settings", control("Do Not Sell My Personal Information")) is None
     ok("veto_control refuses a sale/share opt-out as a cookie denial, and only for reject")
+
+    # Issue #25b: "opt out" alone used to be an unanchored substring, so it
+    # over-refused ordinary cookie-denial buttons that happen to phrase
+    # themselves as "opting out" rather than "rejecting" - these must resolve
+    # as reject candidates like any other denial copy, not be swept into the
+    # sale/share rule above just because they share a word with it.
+    for text in ("Opt out of all cookies", "Opt out of tracking", "Opt out"):
+        found = checks.veto_control("reject", control(text))
+        assert found is None, (text, found)
+    # The anchor still has to catch statutory phrasing that uses "opt out"
+    # rather than "do not sell" to name the same right.
+    found = checks.veto_control("reject", control("Opt out of the sale of my personal information"))
+    assert found and found["reason"] == checks.VETO_SALE_SHARE_OPTOUT, found
+    ok("veto_control's sale/share rule is anchored on the statutory subject, not a bare 'opt out' substring")
+
+    # A first pass at that anchor used `\bsale\b|\bsell(?:ing)?\b|\bshar(?:e|
+    # ing)\b`, which does not match the plain plural/inflected forms "sales",
+    # "sells", "shares" or "shared" - so "Opt out of data sales" and "Opt out
+    # of data shares", which the old unanchored substring check correctly
+    # vetoed, slipped through unvetoed (review finding on this ticket). That
+    # direction matters more than the false-positive direction above: letting
+    # a sale/share link through as a cookie denial is the "wrong control
+    # operated" failure mode the veto exists to stop, not merely an
+    # over-refusal.
+    for text in (
+        "Opt out of data sales", "Opt out of the sales of personal data",
+        "Opt out of ad sales", "Opt out of data shares",
+    ):
+        found = checks.veto_control("reject", control(text))
+        assert found and found["reason"] == checks.VETO_SALE_SHARE_OPTOUT, (text, found)
+    ok("veto_control's sale/share subject pattern catches plural and inflected forms, not just the bare word")
 
     # Cookiebot shipped a role=switch category toggle in its `settings` list.
     # collect_visible_controls cannot even produce one, so this rule exists
@@ -7681,6 +7849,8 @@ def main() -> int:
             test_a_denial_labelled_toggle_is_not_resolved_as_a_denial_control(page)
             test_same_control_distinguishes_nesting_from_disagreement(page)
             test_control_ref_is_re_resolvable_and_bounds_page_text(page)
+            test_veto_control_reads_aria_label_against_real_dom(page)
+            test_save_and_reject_label_resolves_as_save_without_losing_reject(page)
             test_denial_flow_and_verification(page)
             test_accept_flow_completes_verifies_and_gates_the_scenario(page)
             test_symmetry_findings_are_emitted_and_gated()

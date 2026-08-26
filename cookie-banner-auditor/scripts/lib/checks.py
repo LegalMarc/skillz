@@ -719,10 +719,72 @@ assert all(
     for kind, excluded in INCOMPATIBLE_KINDS.items()
     for other in excluded
 ), "INCOMPATIBLE_KINDS must be symmetric: if A excludes B, B must exclude A"
+#: One label is a deliberate, narrow exception to this otherwise-complete
+#: relation - see `_SAVE_REJECT_COMPOUND_LABEL` and the comment on it below.
+#: The exception lives in `veto_control`, not here: carving a hole in this
+#: dict directly would resurrect the hand-maintained, silently-asymmetric
+#: mess #24 replaced it to fix.
 
 #: ARIA roles and input types whose click semantics are "flip my own state".
 _TOGGLE_ROLES = frozenset({"switch", "checkbox", "radio", "menuitemcheckbox", "menuitemradio"})
 _TOGGLE_INPUT_TYPES = frozenset({"checkbox", "radio"})
+
+#: A sale/share opt-out is a *statutory* mechanism (CCPA/CPRA "Do Not Sell or
+#: Share My Personal Information" and equivalents) - it names what is being
+#: denied, not merely that something is being denied. "Opt out" alone is also
+#: how plenty of ordinary cookie banners phrase a plain denial ("Opt out of
+#: all cookies", "Opt out of tracking"), so a bare substring match on "opt
+#: out" over-refused every one of those as though they were sale/share links
+#: (issue #25b). Anchored instead on the statutory subject - sale/sell/share,
+#: including its plain plural and inflected forms ("sales", "sells",
+#: "shares", "shared") - co-occurring with a denial phrase, so "Do Not Sell
+#: My Personal Information", "Do not sell or share", "Opt out of data sales"
+#: and "Opt out of data shares" still match, while a cookie-scoped "opt out"
+#: does not. Text only, deliberately: this rule is unchanged by #25a, which
+#: is scoped to the opposite-action check below - see the note there.
+_SALE_SHARE_DENIAL_PHRASE = re.compile(r"\bdo\s+not\b|\bopt[-\s]?out\b", re.I)
+_SALE_SHARE_SUBJECT = re.compile(r"\bsales?\b|\bsell(?:s|ing)?\b|\bshar(?:e|es|ed|ing)\b", re.I)
+
+
+def _is_sale_share_optout(lower_text: str) -> bool:
+    return bool(_SALE_SHARE_DENIAL_PHRASE.search(lower_text) and _SALE_SHARE_SUBJECT.search(lower_text))
+
+
+#: The one label both directions of this ticket collide on. `CONTROL_PATTERNS
+#: ["reject"]` deliberately recognises "Save and Reject" (someone saw it ship
+#: as a standalone denial button), which under the now-complete
+#: `INCOMPATIBLE_KINDS` (#24) means the identical text also, unconditionally,
+#: disqualifies that element from ever resolving as `save` - so a CMP that
+#: uses this exact label for its confirm/apply control can never have that
+#: control operated; `find_control(page, "save", …)` always vetoes it and the
+#: run reports `denial-autosave-unconfirmed` on a site that works fine
+#: (issue #25c).
+#:
+#: Both readings are genuine, not a bug in either pattern: a compound label
+#: naming two actions in one *does* perform whichever one it is asked to
+#: resolve as. The ambiguity is real, so the choice made here is recorded
+#: rather than left implicit:
+#:
+#:   Chosen: carve this one label out of the save/reject entries of
+#:   `INCOMPATIBLE_KINDS`, applied narrowly inside `veto_control` so the
+#:   general relation stays the complete, hand-verified one #24 established
+#:   (see the note beside `INCOMPATIBLE_KINDS` above) - this is a fact about
+#:   one specific string, not a second exception-prone pairwise table.
+#:
+#:   Rejected: narrow `CONTROL_PATTERNS["reject"]`'s `^save and reject$`
+#:   pattern so the label no longer reads as `reject` at all. That would
+#:   "fix" (c) by silently reintroducing (a)'s failure mode in reverse - the
+#:   CMP that pattern was added for (a real denial button using this exact
+#:   text) would stop being recognised as `reject`, trading a permanently
+#:   unusable `save` control for a permanently unresolvable `reject` one
+#:   instead of fixing both. The ticket is explicit that these two defects
+#:   pull in opposite directions and neither may be sacrificed for the other.
+#:
+#: Scoped to the `save` side of the pair only: resolving this label as
+#: `reject` was never vetoed in the first place (it does not match any
+#: `save` pattern, so `label_kinds` never contradicts `reject`), so there is
+#: nothing to carve out there.
+_SAVE_REJECT_COMPOUND_LABEL = re.compile(r"^\s*save\s+and\s+reject\s*$", re.I)
 
 
 def veto_control(kind: str, control: dict[str, Any]) -> dict[str, Any] | None:
@@ -738,27 +800,83 @@ def veto_control(kind: str, control: dict[str, Any]) -> dict[str, Any] | None:
     the text scorer produced. That symmetry is the whole point: a selector
     match is evidence about *where an element is*, never about *what it does*,
     and the table has shipped selectors that resolved to the opposite control.
+
+    Reads the element's own text (`_element_text`'s ladder - innerText, then
+    aria-label, then value/title, first non-empty wins) for the opposite-
+    action check below, and - only when that text states no kind at all -
+    falls back to the raw `aria-label` attribute captured separately by
+    `_control_metadata`. The ladder means a control with visible innerText
+    never falls through to its aria-label there, so `<button aria-label=
+    "Accept all cookies">Continue</button>` read as `text` alone reads as no
+    kind and would clear this veto for `reject` (issue #25a).
+
+    Aria-label is consulted *only* as a fallback for silent text, not unioned
+    in unconditionally: `CONTROL_PATTERNS["settings"]` is the only kind whose
+    patterns are unanchored substrings rather than `^...$`, so unconditionally
+    scanning a verbose, ambient aria-label (real CMPs write things like
+    `aria-label="Save: Save your cookie preferences and close"`) would veto a
+    control whose own decisive text says something else entirely, merely
+    because the aria-label happens to *mention* "cookie preferences"
+    somewhere in its prose - reopening (c)'s failure mode through aria-label
+    instead of text. Deferring to aria-label only when text is silent still
+    satisfies "refused even when its innerText does not [state it]" exactly,
+    and is what a real `_control_metadata` capture from a browser now proves
+    in the test suite, in both directions (catches when text is silent, does
+    not over-veto when text is decisive).
+
+    The sale/share rule below is unaffected by any of this and reads `text`
+    only - see the note on `_SALE_SHARE_DENIAL_PHRASE` above.
     """
     text = str(control.get("text") or "")
+    aria_label = str(control.get("ariaLabel") or "")
     lower = text.lower()
 
     # A sale/share opt-out is a separate statutory mechanism with its own
     # scope and its own remedies, not a general cookie denial. Substituting
-    # one for the other would report a denial this run never performed.
-    if kind == "reject" and ("do not sell" in lower or "opt out" in lower):
+    # one for the other would report a denial this run never performed. See
+    # `_is_sale_share_optout` for why this is anchored on the statutory
+    # subject rather than a bare "opt out" substring.
+    if kind == "reject" and _is_sale_share_optout(lower):
         return {"reason": VETO_SALE_SHARE_OPTOUT, "conflicting_kind": None, "observed_label": text[:120]}
 
-    # A control whose own label states a different, incompatible action. This
-    # is the OneTrust case: a positional `reject` selector that resolved to a
+    # A control whose own label states a different, incompatible action -
+    # falling back to aria-label only when the label states none at all (see
+    # the docstring above for why this is a fallback, not a union). This is
+    # the OneTrust case: a positional `reject` selector that resolved to a
     # button reading "Allow All". It is caught by what the element says it
     # does, not by what the table claimed it was, so it survives the table
     # being wrong in ways nobody anticipated.
-    contradictions = label_kinds(text) & INCOMPATIBLE_KINDS.get(kind, frozenset())
+    text_kinds = label_kinds(text)
+    aria_kinds = label_kinds(aria_label) if not text_kinds else frozenset()
+    excluded = INCOMPATIBLE_KINDS.get(kind, frozenset())
+    contradictions = (text_kinds | aria_kinds) & excluded
+
+    # See `_SAVE_REJECT_COMPOUND_LABEL` above for why this one label is
+    # carved out of the save/reject pair rather than fixed by editing
+    # `INCOMPATIBLE_KINDS` itself. Only strip "reject" when every field that
+    # actually put it in `contradictions` is itself the compound label -
+    # checking the *other* field's raw text regardless of whether it
+    # contributed would let a decisive, non-compound "reject" reading in one
+    # field get silently excused by the other field's unrelated compound
+    # phrasing, which is exactly the kind of hole (a) was filed to close.
+    if kind == "save" and "reject" in contradictions:
+        reject_sources = []
+        if "reject" in text_kinds:
+            reject_sources.append(text)
+        if "reject" in aria_kinds:
+            reject_sources.append(aria_label)
+        if reject_sources and all(_SAVE_REJECT_COMPOUND_LABEL.search(source) for source in reject_sources):
+            contradictions = contradictions - {"reject"}
+
     if contradictions:
+        # Prefer the text that actually contradicts, so a label that only
+        # contradicts through its aria-label is reported with the string that
+        # triggered the veto rather than the (uncontradictory) innerText.
+        observed = text if (text_kinds & excluded) else (aria_label or text)
         return {
             "reason": VETO_OPPOSITE_ACTION,
             "conflicting_kind": sorted(contradictions)[0],
-            "observed_label": text[:120],
+            "observed_label": observed[:120],
         }
 
     # A state toggle is not a control that performs an action; clicking one
