@@ -10,7 +10,12 @@ from typing import Any
 from urllib.parse import urlsplit
 
 from . import checks
-from .capture import COMPLETED_DENIAL_STATUSES, _untrusted_text, effective_decision
+from .capture import (
+    COMPLETED_DENIAL_STATUSES,
+    _identity_basis_is_undetermined,
+    _untrusted_text,
+    effective_decision,
+)
 from .util import (
     escape_markdown_cell,
     markdown_to_html,
@@ -643,15 +648,33 @@ def generate_findings(results: dict[str, Any], cookie_rows: list[dict[str, Any]]
             conflict = control_resolution.get("conflict") or {}
             veto = control_resolution.get("veto") or {}
             if decision == "conflict":
-                detail = (
-                    "The vendor selector table and the generic text scorer each resolved a "
-                    f"control for `{label}`, and they resolved different elements "
-                    f"({conflict.get('table_candidate', {}).get('text')!r} from the table, "
-                    f"{conflict.get('scorer_candidate', {}).get('text')!r} from scoring). "
-                    if conflict.get("identity_basis") != "detached" else
-                    f"Two candidate controls for `{label}` could not be compared, because one "
-                    "stopped being present on the page while they were being checked. "
-                )
+                # `identity_basis` is a three-state signal, and only one of
+                # its states supports the strong claim below: "I could not
+                # tell" and "these are two controls" are different sentences
+                # in a compliance report, so every basis meaning the former
+                # (see `_identity_basis_is_undetermined`) gets wording that
+                # says so, not the disagreement text keyed to a single named
+                # basis ("detached") that happened to be the first one found.
+                identity_basis = conflict.get("identity_basis")
+                if not _identity_basis_is_undetermined(identity_basis):
+                    detail = (
+                        "The vendor selector table and the generic text scorer each resolved a "
+                        f"control for `{label}`, and they resolved different elements "
+                        f"({conflict.get('table_candidate', {}).get('text')!r} from the table, "
+                        f"{conflict.get('scorer_candidate', {}).get('text')!r} from scoring). "
+                    )
+                elif identity_basis == "detached":
+                    detail = (
+                        f"Two candidate controls for `{label}` could not be compared, because one "
+                        "stopped being present on the page while they were being checked. "
+                    )
+                else:
+                    detail = (
+                        f"Two candidate controls were resolved for `{label}`, but whether they are "
+                        f"the same control could not be established (reason: "
+                        f"`{_untrusted_text(identity_basis, 120)}`). This is not evidence that the "
+                        "two resolvers disagree - only that the comparison could not be completed. "
+                    )
             elif decision == "vetoed":
                 detail = (
                     f"The vendor selector table's candidate for `{label}` was disqualified: "

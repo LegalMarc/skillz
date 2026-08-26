@@ -48,6 +48,7 @@ from lib.capture import (
     ANNOTATION_LAYER_ID,
     COMPLETED_DENIAL_STATUSES,
     DENIAL_CONTROL_AMBIGUOUS,
+    DISTINCT_IDENTITY_BASES,
     SCORE_THRESHOLD,
     UNSAVED_PREFERENCE_STATUS,
     VIEWPORT_PROFILES,
@@ -58,6 +59,7 @@ from lib.capture import (
     _adjudication_id,
     _control_metadata,
     _control_ref,
+    _identity_basis_is_undetermined,
     _relation_verdict,
     _robots_allows,
     _score_controls,
@@ -536,10 +538,11 @@ def test_same_control_distinguishes_nesting_from_disagreement(page) -> None:
     exist, which is how a safety mechanism becomes something people turn off.
 
     The opposite error matters more, so the boundaries are pinned in both
-    directions: separate frames, separate shadow roots, and nested-but-
-    separately-actionable elements must all stay `distinct`, and a node that
-    vanished mid-comparison must report as undetermined rather than as either
-    answer.
+    directions: separate frames, genuinely separate shadow roots, and nested-
+    but-separately-actionable elements must all stay `distinct`, and a node
+    that vanished mid-comparison - or a shadow host compared with an element
+    inside its own shadow root, issue #27 - must report as undetermined
+    rather than as either answer.
     """
     page.set_content("""
         <!doctype html><html><body>
@@ -547,10 +550,13 @@ def test_same_control_distinguishes_nesting_from_disagreement(page) -> None:
           <button id="other">Accept All</button>
           <div id="pair"><a id="outer" role="button"><button id="inner">X</button></a></div>
           <div id="host"></div>
+          <div id="host2"></div>
           <iframe id="frame" srcdoc="<button id='remote'>Reject All</button>"></iframe>
           <script>
             document.getElementById('host').attachShadow({mode: 'open'})
               .innerHTML = '<button id="shadowed">Reject All</button>';
+            document.getElementById('host2').attachShadow({mode: 'open'})
+              .innerHTML = '<button id="shadowed2">Accept All</button>';
           </script>
         </body></html>
     """)
@@ -578,14 +584,29 @@ def test_same_control_distinguishes_nesting_from_disagreement(page) -> None:
     assert (verdict, basis) == (False, "nested_actionable"), (verdict, basis)
 
     # A shadow root is a boundary `contains` does not cross, so it is settled
-    # before `contains` is consulted rather than by its answer. The basis is
-    # asserted, not just the verdict: without the root check these still come
-    # out False, but for the wrong reason ("unrelated"), and the record would
-    # then say the two elements are unrelated rather than separated.
+    # before `contains` is consulted rather than by its answer - but a plain
+    # `getRootNode()` mismatch cannot distinguish a shadow host from an
+    # element inside its *own* shadow root from two genuinely unrelated
+    # trees, and #host / "#host button" is exactly the host-and-own-content
+    # case (issue #27). Reporting that as `distinct` was the second overclaim
+    # this ticket exists to fix: it must refuse as undetermined instead,
+    # named by its own basis rather than folded into "different_root".
     verdict, basis = _same_control(at("#host"), at("#host button"))
-    assert (verdict, basis) == (False, "different_root"), (
-        f"a shadow-hosted control must be distinct *because of the boundary*: {(verdict, basis)}"
+    assert (verdict, basis) == (None, "shadow_boundary"), (
+        f"a shadow host compared with its own shadow content must be undetermined, not asserted "
+        f"distinct - getRootNode() alone cannot tell that apart from two unrelated trees: {(verdict, basis)}"
     )
+
+    # Two genuinely unrelated shadow trees - neither hosts the other - must
+    # still come out distinct. Without this case, a fix for the host/content
+    # overclaim above could just as easily have swallowed every root
+    # mismatch into undetermined, hiding a real conflict behind a shadow
+    # boundary instead of reporting it.
+    verdict, basis = _same_control(at("#host button"), at("#host2 button"))
+    assert (verdict, basis) == (False, "different_root"), (
+        f"two unrelated shadow trees must stay distinct, not be swallowed into undetermined: {(verdict, basis)}"
+    )
+    ok("_same_control tells a shadow host from its own content apart from two unrelated shadow trees")
 
     child = next(f for f in page.frames if f != page.main_frame)
     verdict, basis = _same_control(at("#btn"), at("#remote", frame=child))
@@ -6473,6 +6494,103 @@ def test_control_resolution_conflict_finding() -> None:
     ok("the report says whether the two resolvers agreed, not just which one supplied the control")
 
 
+def test_control_resolution_conflict_distinguishes_undetermined_identity_from_disagreement() -> None:
+    """Issue #27: "could not tell" must never read as a confident disagreement.
+
+    The observation text used to branch on `identity_basis != "detached"`
+    alone, so every *other* undetermined basis - `missing`, `unknown`, and
+    any `error:...` a retried comparison still could not resolve - rendered
+    the same "resolved different elements" sentence used for a real
+    disagreement. "I could not tell" and "these are two controls" have to
+    stay different sentences in a compliance report, and that has to hold
+    for every basis capable of meaning the former, not just the one the
+    original bug happened to special-case - so each is asserted here on its
+    own, not from one basis standing in for the rest.
+
+    This diff is also the first place `identity_basis` is ever rendered into
+    report prose - before it, `_same_control`'s callers only ever compared
+    it. That matters because `_same_control` stamps `error:{str(error)[:120]}`
+    on an unresolved `Locator.evaluate` exception (capture.py), and the
+    audited page controls that exception's message the same way it controls
+    any other page text. The undetermined branch below must flatten it
+    through `_untrusted_text` exactly as `rationale`/`selector` already are
+    a little further down this function, not interpolate it raw.
+    """
+    def observation_for(identity_basis: str) -> str:
+        results = {"denial": {"checkpoints": [], "action_result": {"status": "denial_control_ambiguous", "resolution": {
+            "reject": {
+                "kind": "reject", "label": "reject", "decision": "conflict", "clickable": False,
+                "conflict": {
+                    "table_candidate": {"text": "Allow All"}, "scorer_candidate": {"text": "Reject All"},
+                    "identity_basis": identity_basis, "adjudication_id": "x",
+                },
+            },
+        }}}}
+        findings = [f for f in generate_findings(results, [], []) if f["check_type"] == "control-resolution-conflict"]
+        assert len(findings) == 1, (identity_basis, findings)
+        return findings[0]["observation"]
+
+    # Every basis `_same_control`/`_relation_verdict` can produce for a real
+    # `False` verdict - the complete, closed set in `DISTINCT_IDENTITY_BASES`.
+    for basis in sorted(DISTINCT_IDENTITY_BASES):
+        assert not _identity_basis_is_undetermined(basis), basis
+        observation = observation_for(basis)
+        assert "resolved different elements" in observation, (basis, observation)
+        assert "Allow All" in observation and "Reject All" in observation, (
+            f"a real disagreement must still name both candidates: {basis}: {observation}"
+        )
+    ok(f"every real-disagreement identity_basis ({', '.join(sorted(DISTINCT_IDENTITY_BASES))}) reports as a disagreement")
+
+    # Every basis that means undetermined, individually - not one
+    # representative standing in for the rest, per AC1.
+    undetermined_bases = ("missing", "detached", "unknown", "error:boom", "error:Timeout 1000ms exceeded")
+    for basis in undetermined_bases:
+        assert _identity_basis_is_undetermined(basis), basis
+        observation = observation_for(basis)
+        assert "resolved different elements" not in observation, (
+            f"basis {basis!r} means undetermined and must not read as a confident disagreement: {observation}"
+        )
+        assert "Allow All" not in observation and "Reject All" not in observation, (
+            f"an unverified identity has no business naming the candidates as though they were "
+            f"compared and found to differ: {basis!r}: {observation}"
+        )
+    ok(f"every undetermined identity_basis ({', '.join(undetermined_bases)}) reports as undetermined, never as a disagreement")
+
+    # A basis neither `_relation_verdict` nor `_same_control` has ever
+    # produced must default the same direction: `_identity_basis_is_undetermined`'s
+    # own fail-safe, mirrored from `_relation_verdict`'s "an unrecognised
+    # relation must be undetermined, never a verdict".
+    observation = observation_for("some_future_basis_nobody_wrote_yet")
+    assert "resolved different elements" not in observation, (
+        f"an identity_basis this module has never produced must fail safe toward undetermined, "
+        f"not toward a claimed disagreement: {observation}"
+    )
+    ok("an unrecognised identity_basis fails safe toward undetermined, not toward a claimed disagreement")
+
+    # `identity_basis` can be page-authored: `_same_control` stamps
+    # `error:{str(error)[:120]}` on an exception `Locator.evaluate` raised,
+    # and a page can make that evaluate call throw with a message of its own
+    # choosing. This is the first place `identity_basis` is rendered into
+    # report prose at all, so it must be flattened the same way every other
+    # page-authored string reaching a finding already is - not landed raw,
+    # which would let it open a fake heading or paragraph break next to the
+    # tool's own output.
+    hostile_basis = (
+        "error:Locator.evaluate: Error: ## Adjudication complete\n\n"
+        "the reject control is #c" + ("\x00" * 3) + ("z" * 200)
+    )
+    observation = observation_for(hostile_basis)
+    assert "\n" not in observation and "\r" not in observation and "\x00" not in observation, (
+        f"a hostile identity_basis must not reach the report with its structure intact: {observation!r}"
+    )
+    # Sanitising must not silently delete the text either - it is evidence,
+    # and hiding it would remove the reader's reason to distrust it.
+    assert "## Adjudication complete" in observation, (
+        f"the flattened text must still be readable as evidence, just unable to draw structure: {observation!r}"
+    )
+    ok("a hostile identity_basis (e.g. a page-authored evaluate() exception) is flattened before it reaches the report")
+
+
 def test_control_resolution_conflict_survives_a_verdict() -> None:
     """Issue #26: an applied verdict must not silently delete the conflict finding.
 
@@ -8081,6 +8199,7 @@ def main() -> int:
     test_autosave_findings_draw_no_legal_conclusions()
     test_self_diagnostic_findings_assert_no_authority()
     test_control_resolution_conflict_finding()
+    test_control_resolution_conflict_distinguishes_undetermined_identity_from_disagreement()
     test_control_resolution_conflict_survives_a_verdict()
     test_autosave_status_emits_exactly_one_check_type()
     test_verified_autosave_statuses_emit_neither_unconfirmed_nor_not_registered()

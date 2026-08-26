@@ -548,9 +548,22 @@ _CSS_PATH_JS = r"""
 # "I could not tell" and "they are different" must stay different answers,
 # because only one of them says something about the page.
 #
-# `getRootNode()` separates shadow roots and frame documents before `contains`
-# is consulted, since `contains` does not cross either boundary and would
-# answer `false` for reasons that have nothing to do with the two elements.
+# `getRootNode()` catches most shadow-root separations before `contains` is
+# consulted, since `contains` does not cross a shadow boundary and would
+# answer `false` for reasons that have nothing to do with the two elements
+# (frame documents are already ruled out in Python, by `_same_control`'s own
+# `frame` check, before either candidate reaches this script).
+#
+# A root mismatch is not by itself proof of two different elements, though: a
+# shadow host and an element inside its own shadow root fail the same check,
+# and that is the textbook one-control-reached-two-ways case, not two. Adding
+# `{composed: true}` cannot tell the two apart either - composed climbing
+# reaches the same top-level document for a host's own content and for a
+# wholly unrelated shadow tree elsewhere on the page - so it is settled by
+# asking directly whether one side's root is the other side's own shadow
+# root, and reported `unknown` there rather than asserted `distinct`. Two
+# shadow trees that do not host one another this way stay `distinct`; nothing
+# here relates them.
 #
 # The blocker walk is what makes containment mean "a click on either lands on
 # the same handler": if anything actionable sits between the inner and outer
@@ -560,7 +573,14 @@ _SAME_CONTROL_JS = r"""
   if (!el || !other) return {rel: 'unknown', why: 'missing'};
   if (!el.isConnected || !other.isConnected) return {rel: 'unknown', why: 'detached'};
   if (el === other) return {rel: 'same'};
-  if (el.getRootNode() !== other.getRootNode()) return {rel: 'distinct', why: 'different_root'};
+  if (el.getRootNode() !== other.getRootNode()) {
+    const shadowHostOf = (root) => (typeof ShadowRoot !== 'undefined' && root instanceof ShadowRoot) ? root.host : null;
+    const otherHost = shadowHostOf(other.getRootNode());
+    const elHost = shadowHostOf(el.getRootNode());
+    if (otherHost && (otherHost === el || el.contains(otherHost))) return {rel: 'unknown', why: 'shadow_boundary'};
+    if (elHost && (elHost === other || other.contains(elHost))) return {rel: 'unknown', why: 'shadow_boundary'};
+    return {rel: 'distinct', why: 'different_root'};
+  }
   const inner = el.contains(other) ? other : (other.contains(el) ? el : null);
   if (!inner) return {rel: 'distinct', why: 'unrelated'};
   const outer = inner === el ? other : el;
@@ -644,6 +664,33 @@ def _relation_verdict(result: dict[str, Any]) -> tuple[bool | None, str]:
     if relation == "distinct":
         return False, why or "distinct"
     return None, why or "unknown"
+
+
+#: `identity_basis` strings that mean the two candidates really are
+#: different elements - the complete, closed set `_relation_verdict` and
+#: `_same_control` can produce for a `False` verdict.
+#:
+#: Kept explicit, rather than inferred from what an undetermined basis looks
+#: like, because `_relation_verdict`'s own documented contract is that
+#: anything it does not recognise "fails safe" toward undetermined, not
+#: toward a verdict (see its docstring). A basis string this set has never
+#: seen - a future JS relation, a typo, a caller that made one up - has to
+#: default the same direction here: toward "could not tell", never toward
+#: asserting a disagreement a report would then overclaim.
+DISTINCT_IDENTITY_BASES = {"different_frame", "different_root", "unrelated", "nested_actionable", "distinct"}
+
+
+def _identity_basis_is_undetermined(basis: str | None) -> bool:
+    """Does `basis` mean "could not tell", as opposed to a real disagreement?
+
+    Everything outside `DISTINCT_IDENTITY_BASES` counts as undetermined:
+    `"missing"`, `"detached"`, `"unknown"`, every `"error:..."` `_same_control`
+    stamps on an exception it could not resolve after a retry, and any basis
+    neither of them has produced yet. A caller with only the persisted basis
+    string - a report, a saved bundle, a test fixture - must never render an
+    unrecognised one as a confident claim of difference.
+    """
+    return (basis or "") not in DISTINCT_IDENTITY_BASES
 
 
 def _same_control(a: dict[str, Any] | None, b: dict[str, Any] | None) -> tuple[bool | None, str]:
