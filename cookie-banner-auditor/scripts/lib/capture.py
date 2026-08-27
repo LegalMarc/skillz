@@ -11,7 +11,7 @@ from urllib.parse import urljoin, urlsplit
 from urllib.request import urlopen
 from urllib.robotparser import RobotFileParser
 
-from playwright.sync_api import Browser, BrowserContext, Frame, Locator, Page
+from playwright.sync_api import Browser, BrowserContext, ElementHandle, Frame, Locator, Page
 
 from . import checks
 from .util import (
@@ -259,7 +259,216 @@ def _element_text(locator: Locator) -> str:
     return ""
 
 
-def _control_metadata(locator: Locator, frame: Frame, index: int) -> dict[str, Any] | None:
+def _element_text_from_handle(handle: ElementHandle) -> str:
+    """Same ladder as `_element_text` (innerText, then aria-label, value,
+    title - first non-empty wins), read through an already-pinned handle
+    instead of a `Locator`. `ElementHandle`'s reads take no `timeout` - the
+    handle is already resolved, so there is nothing left to wait for; a
+    detached-mid-read node still falls through to the next rung via the same
+    `except Exception: pass` `_element_text` uses, it just cannot time out on
+    the way there.
+    """
+    for getter in (
+        lambda: handle.inner_text(),
+        lambda: handle.get_attribute("aria-label"),
+        lambda: handle.get_attribute("value"),
+        lambda: handle.get_attribute("title"),
+    ):
+        try:
+            value = getter()
+            if value and str(value).strip():
+                return re.sub(r"\s+", " ", str(value)).strip()
+        except Exception:
+            pass
+    return ""
+
+
+#: The expensive per-control extraction `_control_metadata` runs through
+#: whichever of `locator`/`handle` it is reading from - hoisted to a module
+#: constant so both read paths call the identical script rather than two
+#: copies of it drifting apart.
+_CONTROL_METADATA_JS = r"""
+(el) => {
+  const cs = getComputedStyle(el);
+  const clean = value => String(value || '').replace(/\s+/g, ' ').trim();
+  const ownText = clean(el.innerText).slice(0, 300);
+
+  // Walk ABOVE the control. Starting at the element itself and
+  // keeping the first non-empty innerText would freeze this at the
+  // button's own label, which is never the surrounding banner copy.
+  // `ancestorText` and `hasFixedAncestor` are both deliberately
+  // capped at 6 hops: they feed `_banner_context_score` (every
+  // kind's +35/+20 bonus) and `_banner_associated` (the -80
+  // penalty's exemption guard for every `BARE_LABELS` member -
+  // reject/decline/deny/refuse/accept/allow/agree/save/confirm/
+  // ok), and a bound keeps that "nearby, structurally close",
+  // not "anywhere on the page". Uncapping `hasFixedAncestor`
+  // itself here once (issue #31 review finding 1, closing a
+  // depth gap in the "submit" gate) silently re-scored the other
+  // three kinds too - a fixed ToS/age-gate modal's bare "Decline"
+  // or "Agree", nested past 6 levels with no consent wording
+  // anywhere, went from correctly refused to a live `scorer_only`
+  // candidate purely because the shared signal widened (review
+  // finding, round 2) - exactly the pattern this ticket's own
+  // Background section warns about, just for a kind #31 was
+  // never about. `hasFixedAncestorAnyDepth` is a second, separate
+  // field for that one purpose instead: walked to the document
+  // root, read by nothing except the "submit" gate in
+  // `_score_controls`, so widening it changes no other kind's
+  // scoring at all.
+  let ancestorText = '';
+  let node = el.parentElement;
+  for (let i = 0; node && i < 6; i++, node = node.parentElement) {
+    const text = clean(node.innerText);
+    if (text.length > ancestorText.length) ancestorText = text.slice(0, 1000);
+  }
+  let hasFixedAncestor = cs.position === 'fixed' || cs.position === 'sticky';
+  let hasFixedAncestorAnyDepth = hasFixedAncestor;
+  for (let fixedNode = el.parentElement, fi = 0; fixedNode && !hasFixedAncestorAnyDepth;
+       fixedNode = fixedNode.parentElement, fi++) {
+    const style = getComputedStyle(fixedNode);
+    if (style.position === 'fixed' || style.position === 'sticky') {
+      hasFixedAncestorAnyDepth = true;
+      if (fi < 6) hasFixedAncestor = true;
+    }
+  }
+
+  const tabIndexAttr = el.getAttribute('tabindex');
+  const focusableTag = ['button', 'a', 'input', 'select', 'textarea'].includes(el.tagName.toLowerCase());
+  const keyboardFocusable = !el.disabled
+    && cs.visibility !== 'hidden'
+    && cs.display !== 'none'
+    && (focusableTag || (tabIndexAttr !== null && Number(tabIndexAttr) > -1));
+
+  return {
+    tag: el.tagName.toLowerCase(),
+    id: el.id || '',
+    className: typeof el.className === 'string' ? el.className.slice(0, 400) : '',
+    role: el.getAttribute('role') || '',
+    ariaLabel: el.getAttribute('aria-label') || '',
+    // `type` and `ariaChecked` exist for the category-toggle veto.
+    // A control that flips its own state is not one that performs
+    // an action, and clicking it grants or withdraws a consent
+    // category. `ariaChecked` is deliberately null (not '') when
+    // absent, so "has a checked state" stays distinguishable from
+    // "is checked, currently false".
+    type: el.getAttribute('type') || '',
+    ariaChecked: el.getAttribute('aria-checked'),
+    ownText,
+    ancestorText,
+    hasFixedAncestor,
+    hasFixedAncestorAnyDepth,
+    tabIndex: el.tabIndex,
+    tabIndexAttribute: tabIndexAttr,
+    keyboardFocusable,
+    disabled: !!el.disabled,
+    style: {
+      fontSize: cs.fontSize,
+      fontWeight: cs.fontWeight,
+      color: cs.color,
+      backgroundColor: cs.backgroundColor,
+      borderColor: cs.borderColor,
+      opacity: cs.opacity,
+      display: cs.display,
+      visibility: cs.visibility
+    },
+    html: el.outerHTML.slice(0, 1200)
+  };
+}
+"""
+
+
+def _dispose_quietly(handle: ElementHandle) -> None:
+    try:
+        handle.dispose()
+    except Exception:
+        pass
+
+
+def _control_metadata(
+    locator: Locator, frame: Frame, index: int, *, for_click: bool = True
+) -> dict[str, Any] | None:
+    """Read one control's fields, and (for `for_click=True`, the default)
+    pin a handle to the exact node they describe.
+
+    Issue #29, review finding 1: the first version of this fix pinned the
+    handle *last*, after `is_visible`, `_element_text`, `bounding_box` and
+    the `evaluate` below had already each independently re-run `locator` -
+    `frame.locator(CONTROL_SELECTOR).nth(index)`, which Playwright re-
+    resolves, selector plus position, on every use. That left every
+    judgment `veto_control`/`label_score` make, and every field recorded as
+    evidence, built from up to four separate re-resolutions, with only the
+    *handle itself* - not the fields describing it - guaranteed to name the
+    node the caller goes on to click. A reviewer reproduced the exact
+    substitution the issue describes against that version: insert a decoy
+    ahead of the real control between the text/box/evaluate reads and the
+    `element_handle()` call, and the recorded evidence (`id`, `text`) still
+    read the real control while the pinned handle - and therefore the
+    eventual click - pointed at the decoy. Measured cause: `element_handle()`
+    alone costs 7.8-35.5ms, comfortably wider than one animation frame, so
+    "the reads happen close together" was never a guarantee.
+
+    So for `for_click=True`, the handle is taken FIRST, before anything else
+    is read, and every field below is read *through that one handle* -
+    `is_visible` (`wait_for_element_state("visible", ...)`, the handle
+    equivalent of `Locator.is_visible`'s implicit wait - a one-shot
+    `is_visible()` immediately after pinning would silently drop a control
+    that is attached but still animating in, since `element_handle()` itself
+    only waits for *attachment*, not visibility, measured directly), label
+    text, bounding box, and the JS extraction - never through `locator`
+    again. That makes the identity guarantee structural: one physical node,
+    every read, not "usually the same node, if nothing moves between two of
+    five queries." A handle that cannot be pinned, or that fails its
+    visibility wait, is treated exactly like the old "not visible" case -
+    this candidate does not exist - rather than being returned as a
+    partial, handle-less dict for a caller to degrade against; see
+    `click_control`, which now refuses to click without a pinned handle at
+    all rather than falling back to a fresh `locator` query.
+
+    `for_click=False` is for `collect_visible_controls`'s scan (feeding
+    `inspect_banner`'s informational report, via `_public_control`, which
+    strips both `locator` and `handle` before anything leaves this module -
+    nothing downstream of that scan ever clicks what it found). Pinning a
+    handle for every one of up to 220 controls a frame there, and never
+    disposing it, measured a ~44% slowdown on that scan for no benefit: a
+    pinned identity protects a click that will never happen. `for_click=
+    False` reads the plain way instead - the pre-#29 shape, one query per
+    field - paying no `element_handle()` round trip and holding no live
+    handle for the run's remainder.
+    """
+    if for_click:
+        try:
+            handle = locator.element_handle(timeout=500)
+        except Exception:
+            return None
+        try:
+            handle.wait_for_element_state("visible", timeout=500)
+        except Exception:
+            _dispose_quietly(handle)
+            return None
+        text = _element_text_from_handle(handle)
+        if not text:
+            _dispose_quietly(handle)
+            return None
+        try:
+            box = handle.bounding_box()
+        except Exception:
+            box = None
+        try:
+            extra = handle.evaluate(_CONTROL_METADATA_JS)
+        except Exception:
+            extra = {}
+        return {
+            "locator": locator,
+            "handle": handle,
+            "frame": frame,
+            "frame_url": frame.url,
+            "index": index,
+            "text": text[:300],
+            "box": box,
+            **(extra or {}),
+        }
+
     try:
         if not locator.is_visible(timeout=500):
             return None
@@ -273,101 +482,12 @@ def _control_metadata(locator: Locator, frame: Frame, index: int) -> dict[str, A
     except Exception:
         box = None
     try:
-        extra = locator.evaluate(
-            r"""
-            (el) => {
-              const cs = getComputedStyle(el);
-              const clean = value => String(value || '').replace(/\s+/g, ' ').trim();
-              const ownText = clean(el.innerText).slice(0, 300);
-
-              // Walk ABOVE the control. Starting at the element itself and
-              // keeping the first non-empty innerText would freeze this at the
-              // button's own label, which is never the surrounding banner copy.
-              // `ancestorText` and `hasFixedAncestor` are both deliberately
-              // capped at 6 hops: they feed `_banner_context_score` (every
-              // kind's +35/+20 bonus) and `_banner_associated` (the -80
-              // penalty's exemption guard for every `BARE_LABELS` member -
-              // reject/decline/deny/refuse/accept/allow/agree/save/confirm/
-              // ok), and a bound keeps that "nearby, structurally close",
-              // not "anywhere on the page". Uncapping `hasFixedAncestor`
-              // itself here once (issue #31 review finding 1, closing a
-              // depth gap in the "submit" gate) silently re-scored the other
-              // three kinds too - a fixed ToS/age-gate modal's bare "Decline"
-              // or "Agree", nested past 6 levels with no consent wording
-              // anywhere, went from correctly refused to a live `scorer_only`
-              // candidate purely because the shared signal widened (review
-              // finding, round 2) - exactly the pattern this ticket's own
-              // Background section warns about, just for a kind #31 was
-              // never about. `hasFixedAncestorAnyDepth` is a second, separate
-              // field for that one purpose instead: walked to the document
-              // root, read by nothing except the "submit" gate in
-              // `_score_controls`, so widening it changes no other kind's
-              // scoring at all.
-              let ancestorText = '';
-              let node = el.parentElement;
-              for (let i = 0; node && i < 6; i++, node = node.parentElement) {
-                const text = clean(node.innerText);
-                if (text.length > ancestorText.length) ancestorText = text.slice(0, 1000);
-              }
-              let hasFixedAncestor = cs.position === 'fixed' || cs.position === 'sticky';
-              let hasFixedAncestorAnyDepth = hasFixedAncestor;
-              for (let fixedNode = el.parentElement, fi = 0; fixedNode && !hasFixedAncestorAnyDepth;
-                   fixedNode = fixedNode.parentElement, fi++) {
-                const style = getComputedStyle(fixedNode);
-                if (style.position === 'fixed' || style.position === 'sticky') {
-                  hasFixedAncestorAnyDepth = true;
-                  if (fi < 6) hasFixedAncestor = true;
-                }
-              }
-
-              const tabIndexAttr = el.getAttribute('tabindex');
-              const focusableTag = ['button', 'a', 'input', 'select', 'textarea'].includes(el.tagName.toLowerCase());
-              const keyboardFocusable = !el.disabled
-                && cs.visibility !== 'hidden'
-                && cs.display !== 'none'
-                && (focusableTag || (tabIndexAttr !== null && Number(tabIndexAttr) > -1));
-
-              return {
-                tag: el.tagName.toLowerCase(),
-                id: el.id || '',
-                className: typeof el.className === 'string' ? el.className.slice(0, 400) : '',
-                role: el.getAttribute('role') || '',
-                ariaLabel: el.getAttribute('aria-label') || '',
-                // `type` and `ariaChecked` exist for the category-toggle veto.
-                // A control that flips its own state is not one that performs
-                // an action, and clicking it grants or withdraws a consent
-                // category. `ariaChecked` is deliberately null (not '') when
-                // absent, so "has a checked state" stays distinguishable from
-                // "is checked, currently false".
-                type: el.getAttribute('type') || '',
-                ariaChecked: el.getAttribute('aria-checked'),
-                ownText,
-                ancestorText,
-                hasFixedAncestor,
-                hasFixedAncestorAnyDepth,
-                tabIndex: el.tabIndex,
-                tabIndexAttribute: tabIndexAttr,
-                keyboardFocusable,
-                disabled: !!el.disabled,
-                style: {
-                  fontSize: cs.fontSize,
-                  fontWeight: cs.fontWeight,
-                  color: cs.color,
-                  backgroundColor: cs.backgroundColor,
-                  borderColor: cs.borderColor,
-                  opacity: cs.opacity,
-                  display: cs.display,
-                  visibility: cs.visibility
-                },
-                html: el.outerHTML.slice(0, 1200)
-              };
-            }
-            """
-        )
+        extra = locator.evaluate(_CONTROL_METADATA_JS)
     except Exception:
         extra = {}
     return {
         "locator": locator,
+        "handle": None,
         "frame": frame,
         "frame_url": frame.url,
         "index": index,
@@ -502,6 +622,15 @@ def collect_visible_controls(page: Page, max_per_frame: int = 220) -> list[dict[
     explicit traversal here; iterating `page.frames` covers iframe-based CMPs
     such as Sourcepoint and TrustArc. Closed shadow roots remain unreachable by
     any automation and are reported as a detection limitation.
+
+    `for_click=False`: this feeds `inspect_banner`'s informational report
+    only (through `_public_control`, which strips `handle` before anything
+    leaves this module) and every caller in this suite - nothing built from
+    this list is ever clicked. Pinning a resolution-time handle for every
+    one of up to `max_per_frame` controls, per frame, to protect a click
+    that never happens, measured a ~44% slowdown here for no benefit
+    (issue #29 review finding 3); the plain `locator`-per-field read is
+    correct for a report that nothing acts on.
     """
     controls: list[dict[str, Any]] = []
     for frame in page.frames:
@@ -511,7 +640,7 @@ def collect_visible_controls(page: Page, max_per_frame: int = 220) -> list[dict[
         except Exception:
             continue
         for index in range(count):
-            metadata = _control_metadata(locator.nth(index), frame, index)
+            metadata = _control_metadata(locator.nth(index), frame, index, for_click=False)
             if metadata:
                 controls.append(metadata)
     return controls
@@ -557,7 +686,13 @@ _PUBLIC_CONTROL_TEXT_LIMITS = {"text": 300, "ancestorText": 1000, "html": 1200, 
 
 
 def _public_control(control: dict[str, Any]) -> dict[str, Any]:
-    """The candidate-list form of one control: everything but the live handle.
+    """The candidate-list form of one control: everything but the live locator/handle.
+
+    `locator` and `handle` (issue #29) are both live references into the
+    running browser, not evidence - dropped here for the same reason
+    `_control_ref` never carries either: this dict is what reaches
+    `audit-data.json`, and a page that has since navigated away makes them
+    meaningless at best and unserialisable at worst.
 
     Unlike `_control_ref` (below), this keeps every field `_control_metadata`
     captured - it is the larger of the two channels a candidate reaches the
@@ -572,7 +707,7 @@ def _public_control(control: dict[str, Any]) -> dict[str, Any]:
     other field (geometry, style, booleans) is not text a page can use to
     draw a fake heading, so it is left exactly as captured.
     """
-    public = {k: v for k, v in control.items() if k not in {"locator", "frame"}}
+    public = {k: v for k, v in control.items() if k not in {"locator", "frame", "handle"}}
     for key, limit in _PUBLIC_CONTROL_TEXT_LIMITS.items():
         if key in public:
             public[key] = _untrusted_text(public[key], limit)
@@ -1553,24 +1688,60 @@ def find_control(
 
 
 def click_control(control: dict[str, Any], action_log: list[dict[str, Any]], kind: str) -> bool:
-    locator: Locator = control["locator"]
+    # Issue #29: click ONLY through the handle `_control_metadata` pinned at
+    # resolution time - never through `control["locator"]`, which is
+    # `frame.locator(CONTROL_SELECTOR).nth(index)` and re-runs that query,
+    # selector plus position, on every use. A DOM mutation between
+    # resolution (when `record["control"]` below was captured) and this call
+    # could shift which element is now *n*-th and put the click on a
+    # different one than the evidence describes; the handle is a reference
+    # to the concrete node itself, not to a position, so it keeps naming
+    # that same node regardless of what else moves - and if that exact node
+    # was itself detached or replaced, clicking it raises instead of
+    # silently landing on its replacement, surfacing below as a failed click
+    # rather than a wrong one.
+    #
+    # Review finding 2: an earlier version of this fix fell back to
+    # `locator` whenever `handle` was absent, on the reasoning that a few
+    # tests build a control dict by hand without one - checked, and no such
+    # caller of *this function* exists; every control reaching `click_
+    # control`, in this suite and in production, comes from `_control_
+    # metadata` (directly or via `find_control`/`apply_control_verdict`),
+    # which - since the reordering above - returns `None` rather than a
+    # handle-less dict whenever a handle cannot be pinned. So the fallback's
+    # only reachable trigger was never "a legitimate handle-less caller"; it
+    # was "something about pinning the handle went wrong", and silently
+    # clicking by position in that case is exactly the substitution this
+    # ticket exists to close, just reached from a different direction, with
+    # nothing recorded about the degradation. Refusing to click and
+    # recording why is the "abort" branch the issue's own acceptance
+    # criteria treats as equally acceptable to landing on the right element
+    # - never a silent fall-through to the bug.
+    handle: ElementHandle | None = control.get("handle")
     record = {
         "time": utc_now(),
         "action": f"click_{kind}",
         "control": _public_control(control),
         "success": False,
     }
+    if handle is None:
+        record["first_error"] = (
+            "no pinned element handle for this control; refusing to click by "
+            "position alone rather than risk clicking a substituted element"
+        )
+        action_log.append(record)
+        return False
     try:
-        locator.scroll_into_view_if_needed(timeout=2500)
+        handle.scroll_into_view_if_needed(timeout=2500)
     except Exception:
         pass
     try:
-        locator.click(timeout=7000)
+        handle.click(timeout=7000)
         record["success"] = True
     except Exception as first_error:
         record["first_error"] = str(first_error)[:800]
         try:
-            locator.click(timeout=4000, force=True)
+            handle.click(timeout=4000, force=True)
             record["success"] = True
             record["forced"] = True
         except Exception as second_error:

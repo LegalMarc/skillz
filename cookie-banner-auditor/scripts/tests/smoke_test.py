@@ -74,6 +74,7 @@ from lib.capture import (
     banner_visible,
     build_context_options,
     capture_checkpoint,
+    click_control,
     collect_visible_controls,
     consent_snapshot,
     dwell_and_nudge,
@@ -192,6 +193,47 @@ def serve_fixture(page, holder: dict, url: str = "https://fixture.test/") -> dic
 
     page.route("**/*", handler)
     return holder
+
+
+@contextmanager
+def _mutate_dom_on_next_interaction(page, mutation_js: str):
+    """Run `mutation_js` synchronously the first time `click_control` is about
+    to interact with whatever it resolved - the deterministic stand-in issue
+    #29's reproduction needs for "a DOM mutation landed between resolution
+    and click". A wall-clock gap is not something a test can reliably hit
+    (see `test_no_wall_clock_ordering_assertions`); this instead patches
+    `scroll_into_view_if_needed` - the first thing `click_control` calls on
+    whatever it is about to click - on *both* `Locator` and `ElementHandle`,
+    since which one `click_control` actually drives depends on whether a
+    resolution-time handle is available, and the reproduction has to hold
+    regardless of which. `page.evaluate` runs synchronously in the sync API,
+    so the mutation is guaranteed complete before the patched call returns
+    control to `click_control`, and `state["done"]` fires it exactly once no
+    matter which class's method is exercised.
+    """
+    from playwright.sync_api import ElementHandle, Locator
+
+    originals = {
+        Locator: Locator.scroll_into_view_if_needed,
+        ElementHandle: ElementHandle.scroll_into_view_if_needed,
+    }
+    state = {"done": False}
+
+    def make_patch(original):
+        def patched(self, *args, **kwargs):
+            if not state["done"]:
+                state["done"] = True
+                page.evaluate(mutation_js)
+            return original(self, *args, **kwargs)
+        return patched
+
+    Locator.scroll_into_view_if_needed = make_patch(originals[Locator])
+    ElementHandle.scroll_into_view_if_needed = make_patch(originals[ElementHandle])
+    try:
+        yield state
+    finally:
+        Locator.scroll_into_view_if_needed = originals[Locator]
+        ElementHandle.scroll_into_view_if_needed = originals[ElementHandle]
 
 
 def test_serve_fixture_seam(page) -> None:
@@ -770,6 +812,321 @@ def test_the_prescreen_sees_the_same_controls_as_the_full_collector(page) -> Non
     ok(f"a page of {total} controls costs one round trip and one metadata build, not {total}")
 
 
+def test_click_control_resolves_the_scored_element_through_an_index_shifting_mutation(page) -> None:
+    """Issue #29: reproduces the substitution, then proves the fix closes it.
+
+    `control["locator"]` is `frame.locator(CONTROL_SELECTOR).nth(index)`.
+    Playwright re-runs that query - selector plus position - on every use,
+    so nothing before this fix stopped a DOM mutation between the moment
+    `_score_controls` decides what to click and the moment `click_control`
+    actually clicks it from shifting which element is *n*-th under the
+    selector. A CMP finishing its entrance animation, or a preference panel
+    lazily appending a button ahead of the one already resolved, are exactly
+    this: real causes, not a contrived one.
+
+    Reproduced deterministically, not by timing - see
+    `_mutate_dom_on_next_interaction` above for the mechanism and why a
+    wall-clock gap cannot be used here (`test_no_wall_clock_ordering_
+    assertions`).
+
+    Run against the code as it stood before this ticket - `click_control`
+    clicking through `control["locator"]` alone - this test fails exactly
+    as intended: the click lands on the newly-inserted decoy button, because
+    `nth(0)` now names it instead of `#reject-btn`, while the evidence
+    `click_control` records still describes `#reject-btn` (the control
+    `_score_controls` actually scored and vetoed, before the mutation). That
+    is the substitution the issue describes, reproduced with a real
+    Playwright page and a real, controlled DOM mutation - not asserted from
+    a diagram. `_control_metadata` pinning an `element_handle` at resolution
+    time (see its docstring) is what makes the assertions below hold instead.
+    """
+    page.set_content("""
+        <!doctype html><html><body>
+          <button id="reject-btn" onclick="window.__cbaClicked='reject-btn'">Reject All</button>
+          <button id="accept-btn" onclick="window.__cbaClicked='accept-btn'">Accept All</button>
+        </body></html>
+    """)
+    # `set_content` replaces the document but not the `window` object, so a
+    # global set by an earlier test sharing this same `page` would otherwise
+    # survive into this one and make a false pass or a false failure look
+    # like a real result. Reset explicitly rather than trusting a fresh load
+    # to clear it.
+    page.evaluate("() => { window.__cbaClicked = null; }")
+
+    scored = _score_controls(page, "reject")
+    assert scored, "the fixture's Reject All button must score as a reject control"
+    score, control = scored[0]
+    assert score >= SCORE_THRESHOLD, (score, control)
+    assert control["id"] == "reject-btn", (
+        f"_score_controls must resolve #reject-btn before any mutation happens: {control}"
+    )
+
+    insert_decoy_js = """
+        () => {
+          const decoy = document.createElement('button');
+          decoy.id = 'decoy-btn';
+          decoy.textContent = 'Decoy, inserted between resolution and click';
+          decoy.onclick = () => { window.__cbaClicked = 'decoy-btn'; };
+          document.body.insertBefore(decoy, document.body.firstChild);
+        }
+    """
+    with _mutate_dom_on_next_interaction(page, insert_decoy_js) as state:
+        action_log: list[dict] = []
+        success = click_control(control, action_log, "reject")
+    assert state["done"], "the mutation never fired - this run proves nothing about the race"
+
+    assert success, action_log
+    clicked = page.evaluate("() => window.__cbaClicked")
+    recorded = action_log[0]["control"]
+
+    # The reproduction, and the fix, in one assertion: the element that was
+    # actually clicked must be the element `_score_controls` resolved and
+    # scored above - never whatever the mutation put at its old index.
+    assert clicked == "reject-btn", (
+        f"the click landed on {clicked!r}, not the resolved #reject-btn - the DOM mutation "
+        "substituted a different element between resolution and click"
+    )
+
+    # Acceptance criterion: the evidence `click_control` records must
+    # describe the element that was actually clicked, not a stale
+    # pre-mutation snapshot of a different one.
+    assert recorded.get("id") == clicked, (
+        f"recorded evidence names {recorded.get('id')!r} but {clicked!r} was actually clicked - "
+        "the report would be asserting the wrong thing was clicked"
+    )
+    ok("click_control clicks the element _score_controls actually resolved, surviving a DOM "
+       "mutation that shifts which element is n-th under CONTROL_SELECTOR between resolution and click")
+
+
+def test_click_control_aborts_rather_than_click_a_substitute_when_the_resolved_element_is_removed(page) -> None:
+    """Issue #29's other acceptable outcome: abort and record, never substitute.
+
+    The previous test covers a mutation that *shifts* the index - the
+    resolved element survives, just no longer at its old position. This one
+    covers the harsher case: the resolved element itself is removed from the
+    DOM between resolution and click. A position-based re-query would still
+    silently resolve `nth(index)` to whatever now occupies that slot and
+    click it; a pinned `element_handle` cannot substitute anything, because
+    it names a specific node rather than a position, so it fails loudly
+    instead. Both `test_..._index_shifting_mutation` above and this test
+    exercise the same fix from the two directions the issue's acceptance
+    criteria treats as equally acceptable: land on the real element, or
+    abort - never click whatever is there now.
+    """
+    page.set_content("""
+        <!doctype html><html><body>
+          <button id="reject-btn" onclick="window.__cbaClicked='reject-btn'">Reject All</button>
+          <button id="accept-btn" onclick="window.__cbaClicked='accept-btn'">Accept All</button>
+        </body></html>
+    """)
+    # See the identical reset in the previous test: `set_content` does not
+    # clear `window`, so a stale value from an earlier test sharing this
+    # `page` would otherwise be mistaken for this test's own result.
+    page.evaluate("() => { window.__cbaClicked = null; }")
+
+    scored = _score_controls(page, "reject")
+    control = scored[0][1]
+    assert control["id"] == "reject-btn", control
+
+    remove_reject_js = "() => document.getElementById('reject-btn').remove()"
+    with _mutate_dom_on_next_interaction(page, remove_reject_js) as state:
+        action_log: list[dict] = []
+        success = click_control(control, action_log, "reject")
+    assert state["done"], "the mutation never fired - this run proves nothing about the race"
+
+    clicked = page.evaluate("() => window.__cbaClicked")
+    assert clicked is None, (
+        f"the resolved control was removed outright - nothing should have been clicked in its "
+        f"place, but {clicked!r} was"
+    )
+    assert success is False, (
+        "clicking a removed control must be recorded as a failure, not silently reported as a "
+        f"successful click: {action_log}"
+    )
+    assert "first_error" in action_log[0], (
+        "a failed click must record why, so the run's evidence shows the control moved rather "
+        "than staying silent about it"
+    )
+    ok("click_control aborts and records a failure rather than clicking a substitute when the "
+       "resolved element is removed before the click")
+
+
+def test_control_metadata_reads_every_field_through_the_same_pinned_node(page) -> None:
+    """Issue #29, review finding 1: closes the substitution inside `_control_metadata` itself.
+
+    The first version of this fix pinned `element_handle()` LAST, after
+    `is_visible`, `_element_text`, `bounding_box` and the JS `evaluate` had
+    each already independently re-run `locator` - `frame.locator(
+    CONTROL_SELECTOR).nth(index)`, which Playwright re-resolves, selector
+    plus position, on every use. A reviewer reproduced a substitution
+    against exactly that version: a decoy inserted between those reads and
+    the `element_handle()` call left the recorded metadata (`id`, `text`)
+    describing the real control while the *handle* - and therefore the
+    eventual click - named the decoy instead. `_control_metadata` now pins
+    the handle FIRST and reads every field through that one handle
+    afterwards, so there is no longer a "reads, then a separate resolve"
+    sequence for a mutation to land inside.
+
+    Proven here from the other side of that same seam: `ElementHandle.
+    wait_for_element_state` is the first call `_control_metadata` makes ON
+    the handle, immediately after pinning it. Mutating the DOM inside a
+    patch on that call - deterministic, not timing-based, same technique as
+    `_mutate_dom_on_next_interaction` above - lands the decoy exactly where
+    the reviewer's reproduction landed it, just one call later in the new
+    sequence. Because every read after the pin goes through the handle
+    (which names a node, not a position), the decoy cannot reach any of
+    them: the metadata must still describe the real control, and the click
+    that follows must still land on it.
+    """
+    page.set_content("""
+        <!doctype html><html><body>
+          <button id="reject-btn" onclick="window.__cbaClicked='reject-btn'">Reject All</button>
+          <button id="accept-btn" onclick="window.__cbaClicked='accept-btn'">Accept All</button>
+        </body></html>
+    """)
+    page.evaluate("() => { window.__cbaClicked = null; }")
+
+    from playwright.sync_api import ElementHandle as _ElementHandle
+    original_wait_for_state = _ElementHandle.wait_for_element_state
+    mutated = {"done": False}
+
+    def mutate_then_wait(self, *args, **kwargs):
+        # Fires the instant `_control_metadata` starts reading the handle it
+        # just pinned - the handle already names `#reject-btn` by this point,
+        # so this decoy can only prove something if the reads that follow
+        # are immune to it.
+        if not mutated["done"]:
+            mutated["done"] = True
+            page.evaluate(
+                """
+                () => {
+                  const decoy = document.createElement('button');
+                  decoy.id = 'decoy-btn';
+                  decoy.textContent = 'Decoy, inserted mid metadata-resolution';
+                  decoy.onclick = () => { window.__cbaClicked = 'decoy-btn'; };
+                  document.body.insertBefore(decoy, document.body.firstChild);
+                }
+                """
+            )
+        return original_wait_for_state(self, *args, **kwargs)
+
+    _ElementHandle.wait_for_element_state = mutate_then_wait
+    try:
+        scored = _score_controls(page, "reject")
+    finally:
+        _ElementHandle.wait_for_element_state = original_wait_for_state
+
+    assert mutated["done"], "the mutation never fired - this run proves nothing about the seam"
+    assert scored, "the fixture's Reject All button must still score as a reject control"
+    score, control = scored[0]
+    assert control["id"] == "reject-btn", (
+        f"metadata resolved while the handle was already pinned to #reject-btn must still describe "
+        f"#reject-btn, not the decoy inserted mid-resolution: {control}"
+    )
+
+    action_log: list[dict] = []
+    success = click_control(control, action_log, "reject")
+    assert success, action_log
+    clicked = page.evaluate("() => window.__cbaClicked")
+    assert clicked == "reject-btn", (
+        f"the click landed on {clicked!r} - the handle backing the recorded metadata must name the "
+        "same node the metadata describes, even when the DOM mutates while that metadata is being read"
+    )
+    assert action_log[0]["control"].get("id") == clicked
+    ok("_control_metadata pins its handle before any field is read, so a mutation landing while "
+       "the remaining fields are being read cannot separate what was scored from what gets clicked")
+
+
+def test_a_mutation_at_the_instant_of_resolution_fails_closed_rather_than_substitutes(page) -> None:
+    """Issue #29, review finding 1 - reproduced with the reviewer's own technique.
+
+    The reviewer's reproduction hooked `Locator.element_handle` - the LAST
+    Playwright call the first version of this fix made inside `_control_
+    metadata` - to insert a decoy immediately before delegating to the real
+    resolution. Against that version, the four reads before it (`is_
+    visible`, `_element_text`, `bounding_box`, `evaluate`) had already
+    captured the real control's data over `locator`, so the late-resolving
+    handle silently named the decoy instead: evidence said one element, the
+    click hit another. (Independently reproduced while building this fix,
+    against a reconstruction of that exact shape, with the identical
+    symptom the reviewer reported: metadata id/text read `reject-btn`/
+    `Reject All`, the handle and the eventual click both landed on
+    `decoy-btn`.)
+
+    `element_handle()` is now the FIRST Playwright call `_control_metadata`
+    makes for a click-eligible control, so the identical hook lands before
+    any read has happened at all, not after four of them. That changes what
+    this exact mutation does, not just when: with nothing resolved yet to
+    disagree with, the control `_score_controls` shortlisted by its cached
+    prescreen text now resolves fresh, post-mutation, straight to the decoy
+    - which reads as "Decoy", not as a `reject` label - so `_score_
+    controls`'s own re-validation of `label_score` against the text `
+    _control_metadata` actually captured (see its docstring) drops it before
+    it ever becomes a candidate. Asserted here directly rather than assumed:
+    whatever candidates DO survive this mutation, none may have evidence
+    that disagrees with what a click on it actually hits - the invariant
+    finding 1 exists to guarantee, checked against the reviewer's own attack
+    rather than only against the two hand-built scenarios above.
+    """
+    page.set_content("""
+        <!doctype html><html><body>
+          <button id="reject-btn" onclick="window.__cbaClicked='reject-btn'">Reject All</button>
+          <button id="accept-btn" onclick="window.__cbaClicked='accept-btn'">Accept All</button>
+        </body></html>
+    """)
+    page.evaluate("() => { window.__cbaClicked = null; }")
+
+    from playwright.sync_api import Locator as _Locator
+    original_element_handle = _Locator.element_handle
+    mutated = {"done": False}
+
+    def mutate_then_resolve(self, *args, **kwargs):
+        if not mutated["done"]:
+            mutated["done"] = True
+            page.evaluate(
+                """
+                () => {
+                  const decoy = document.createElement('button');
+                  decoy.id = 'decoy-btn';
+                  decoy.textContent = 'Decoy';
+                  decoy.onclick = () => { window.__cbaClicked = 'decoy-btn'; };
+                  document.body.insertBefore(decoy, document.body.firstChild);
+                }
+                """
+            )
+        return original_element_handle(self, *args, **kwargs)
+
+    _Locator.element_handle = mutate_then_resolve
+    try:
+        scored = _score_controls(page, "reject")
+    finally:
+        _Locator.element_handle = original_element_handle
+    assert mutated["done"], "the mutation never fired - this run proves nothing about the seam"
+
+    if not scored:
+        ok("a mutation landing at the instant _control_metadata starts to resolve a control "
+           "fails closed - the decoy's own text does not score as reject, so no candidate "
+           "survives for a click to be attempted against, let alone a substituted one")
+        return
+
+    # Defence in depth, in case a future change makes some candidate survive
+    # this mutation after all: whichever it is, its recorded evidence must
+    # still name whatever actually gets clicked - never one thing said,
+    # another thing hit.
+    for _, control in scored:
+        action_log: list[dict] = []
+        click_control(control, action_log, "reject")
+        clicked = page.evaluate("() => window.__cbaClicked")
+        recorded_id = action_log[0]["control"].get("id")
+        assert recorded_id == clicked, (
+            f"substitution reproduced via the reviewer's own technique: evidence named "
+            f"{recorded_id!r} but {clicked!r} was actually clicked"
+        )
+        page.evaluate("() => { window.__cbaClicked = null; }")
+    ok("every candidate that survives a mutation at the instant of resolution has evidence "
+       "that agrees with what actually gets clicked")
+
+
 def test_a_denial_labelled_toggle_is_not_resolved_as_a_denial_control(page) -> None:
     """A `<button role="switch">Reject All</button>` scores perfectly and must still be refused.
 
@@ -1069,7 +1426,7 @@ def test_public_control_flattens_hostile_candidate_text_before_it_reaches_a_find
         + ("\x02" * 3) + ("a" * 2500)
     )
     raw_control = {
-        "locator": None, "frame": None, "frame_url": "https://example.test/",
+        "locator": None, "frame": None, "handle": None, "frame_url": "https://example.test/",
         "index": 0, "tag": "button", "id": "", "className": "a b",
         "role": "", "type": "",
         "text": hostile_label,
@@ -1080,7 +1437,10 @@ def test_public_control_flattens_hostile_candidate_text_before_it_reaches_a_find
     }
 
     public = _public_control(raw_control)
-    assert "locator" not in public and "frame" not in public, public
+    # `handle` (issue #29) is a second live browser reference alongside
+    # `locator` - the whole point of adding it was a live pin, never a
+    # candidate-list field, so it gets the identical treatment.
+    assert "locator" not in public and "frame" not in public and "handle" not in public, public
 
     for field, limit in (("text", 300), ("ancestorText", 1000), ("html", 1200), ("ariaLabel", 120)):
         value = public[field]
@@ -1182,6 +1542,53 @@ def test_public_control_flattens_hostile_candidate_text_before_it_reaches_a_find
         "today's json.dumps-rendered report (already true independently of this ticket's fix - see comment) "
         "and would be caught here if a future renderer interpolated candidate text directly into prose instead"
     )
+
+
+def test_click_control_refuses_to_click_without_a_pinned_handle() -> None:
+    """Issue #29, review finding 2: no silent fallback to position-based clicking.
+
+    Since review finding 1's reordering, `_control_metadata` (`for_click=
+    True`, the default every click-eligible caller uses) never returns a
+    handle-less control dict - a handle that cannot be pinned means the
+    candidate does not exist at all. The only way `click_control` can see
+    `control.get("handle") is None` today is a control dict that bypassed
+    `_control_metadata` entirely, which - checked directly - no caller of
+    this function does, in this suite or in production. An earlier version
+    of this fix fell back to `control["locator"]` in that case anyway, on
+    the mistaken belief such a caller existed; that fallback would have
+    silently restored the exact position-based substitution this ticket
+    exists to close, the moment it was ever actually reached, with nothing
+    recorded about the degradation.
+
+    `locator` is deliberately `None` here, not a real `Locator` - if a
+    fallback to it still existed, calling a method on `None` would raise
+    inside the same `try/except Exception` blocks that already swallow real
+    click failures, and `success` would come out `False` either way. What
+    distinguishes "the fallback is gone" from "the fallback merely happened
+    to fail" is the *specific* message this function now records instead of
+    ever touching `locator` at all.
+    """
+    control = {
+        "locator": None, "handle": None, "frame": None, "frame_url": "https://example.test/",
+        "index": 0, "tag": "button", "id": "reject-btn", "className": "", "role": "", "type": "",
+        "text": "Reject All", "ancestorText": "", "html": "", "ariaLabel": "",
+        "box": {"x": 0, "y": 0, "width": 10, "height": 10},
+    }
+    action_log: list[dict] = []
+    success = click_control(control, action_log, "reject")
+    assert success is False, action_log
+    assert len(action_log) == 1, action_log
+    record = action_log[0]
+    assert "handle" not in record["control"] and "locator" not in record["control"], record
+    assert record.get("first_error", "").startswith("no pinned element handle"), (
+        f"expected the no-handle refusal, not a fallback attempt that merely failed for its own "
+        f"reasons: {record}"
+    )
+    assert "second_error" not in record and "forced" not in record, (
+        f"a refusal must not look like a click that was attempted and failed twice: {record}"
+    )
+    ok('click_control refuses to click a control with no pinned handle, records why, and never '
+       'falls back to control["locator"]')
 
 
 def test_accept_flow_completes_verifies_and_gates_the_scenario(page) -> None:
@@ -8918,6 +9325,7 @@ def main() -> int:
     test_denial_autosave_unconfirmed_finding()
     test_denial_control_unresolved_excludes_autosave_status()
     test_public_control_flattens_hostile_candidate_text_before_it_reaches_a_finding()
+    test_click_control_refuses_to_click_without_a_pinned_handle()
     test_autosave_no_controls_examined_does_not_claim_a_mutation()
     test_autosave_reload_reverted_reports_a_confirmed_discard()
     test_autosave_findings_draw_no_legal_conclusions()
@@ -8961,6 +9369,10 @@ def main() -> int:
             test_bare_submit_is_a_save_control_only_inside_a_consent_banner(page)
             test_uncapped_depth_walk_stays_scoped_to_the_submit_gate(page)
             test_the_prescreen_sees_the_same_controls_as_the_full_collector(page)
+            test_click_control_resolves_the_scored_element_through_an_index_shifting_mutation(page)
+            test_click_control_aborts_rather_than_click_a_substitute_when_the_resolved_element_is_removed(page)
+            test_control_metadata_reads_every_field_through_the_same_pinned_node(page)
+            test_a_mutation_at_the_instant_of_resolution_fails_closed_rather_than_substitutes(page)
             test_a_denial_labelled_toggle_is_not_resolved_as_a_denial_control(page)
             test_same_control_distinguishes_nesting_from_disagreement(page)
             test_control_ref_is_re_resolvable_and_bounds_page_text(page)
