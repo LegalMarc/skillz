@@ -264,6 +264,137 @@ SHADOW_BANNER = """
 </script></body></html>
 """
 
+# Issue #31: OneTrust's own site had a page form whose plain "Submit" button
+# was resolving as the CMP's `save` control in `--detect-only` - the same
+# incident class as UNRELATED_ACCEPT above, reached through the "save" ladder's
+# weakest rung instead of "accept"'s. The GDPR disclaimer text is not
+# decoration - it is the actual failure mode: OneTrust's real markup reads
+# "...reviewing our Privacy Notice. Submit", and BANNER_KEYWORDS matches
+# "personal information"/"privacy" in that sentence exactly as readily as it
+# matches genuine banner copy. A fixture with no privacy-flavoured text nearby
+# would not have caught the first, insufficient version of this fix (bare
+# "submit" added to BARE_LABELS, nothing else): that keyword match is what
+# `_banner_associated` also reads as "banner-associated", so the -80 penalty's
+# own guard (`not _banner_associated(control)`) is False and the penalty never
+# runs at all - not "150 - 80 = 70, right at the threshold" as an earlier
+# version of this comment claimed, but no penalty applied whatsoever, base
+# 110 plus the unpenalised +40 ancestor/box bonus, landing at 150.
+UNRELATED_SUBMIT = """
+<!doctype html><html><body><h1>Contact us</h1>
+<form>
+  <label>Business email</label><input type="email">
+  <p>By selecting this option, your data can be stored for future forms. You can
+     learn more about how we handle your personal information and your rights by
+     reviewing our Privacy Notice.</p>
+  <button id="go">Submit</button>
+</form></body></html>
+"""
+
+IN_BANNER_SUBMIT = """
+<!doctype html><html><body><div style="height:1500px">content</div>
+<div id="consent-banner" style="position:fixed;bottom:0;left:0;width:900px;background:#fff;padding:20px">
+  <p>We use cookies for analytics and to personalize content. Manage your choices below.</p>
+  <button id="prefs-save" style="width:120px;height:40px">Submit</button>
+</div></body></html>
+"""
+
+# Issue #31 review (finding 1): the first version of the "submit" gate tested
+# `hasFixedAncestor` as computed by a same-document walk capped at 6 hops -
+# a signal about the control's OWN document, not "is this inside a consent
+# banner". Two real gaps the reviewer built counterexamples for:
+#
+# 1. A preference centre nested past that cap. Save is legitimately resolved
+#    *after* the settings click, deep inside whatever markup the CMP renders
+#    for its full panel - being depth-sensitive there is backwards from where
+#    the real controls live.
+DEEP_NESTED_IN_BANNER_SUBMIT = """
+<!doctype html><html><body><div style="height:1500px">content</div>
+<div id="consent-banner" style="position:fixed;bottom:0;left:0;width:900px;background:#fff;padding:20px">
+  <p>We use cookies for analytics and to personalize content. Manage your choices below.</p>
+  <div><div><div><div><div><div><div><div><div>
+    <button id="prefs-save" style="width:120px;height:40px">Submit</button>
+  </div></div></div></div></div></div></div></div></div>
+</div></body></html>
+"""
+
+# 2. An iframe-hosted preference centre where the fixed positioning is on the
+# <iframe> tag itself, in the PARENT document - this repo's own Sourcepoint
+# fixture (`test_sourcepoint_shape_resolves_inside_an_iframe`, above) does
+# exactly this, and it is how TrustArc and Quantcast - both iframe-hosted,
+# both shipping no `save` selector in the CMP table, so text scoring is their
+# only route to `save` at all - are commonly embedded. A same-document walk
+# inside the iframe's own srcdoc never sees a style set one document up.
+_FIXED_IFRAME_SAVE_INNER = """
+<!doctype html><html><body style='margin:0'><div style='padding:20px'>
+  <button id="prefs-save">Submit</button>
+</div></body></html>
+"""
+IFRAME_FIXED_SUBMIT = f"""
+<!doctype html><html><body>
+<iframe id="cmp-iframe" srcdoc="{_FIXED_IFRAME_SAVE_INNER.replace('"', "&quot;")}"
+        style="position:fixed;bottom:0;width:500px;height:220px;border:0"></iframe>
+</body></html>
+"""
+
+# The other direction, which is what makes (2) safe to fix this way rather
+# than by treating "inside any iframe" as evidence on its own: a page's own
+# ordinary third-party iframe (a payment widget, an embedded form) is not
+# positioned fixed either on its own tag or inside its own document, and its
+# bare "Submit" must be refused exactly like UNRELATED_SUBMIT's is - being an
+# iframe is not the signal, having fixed/sticky CSS somewhere in the chain up
+# to the top-level page is.
+_UNRELATED_IFRAME_SUBMIT_INNER = """
+<!doctype html><html><body><button id="pay-submit">Submit</button></body></html>
+"""
+IFRAME_UNRELATED_SUBMIT = f"""
+<!doctype html><html><body><div style="height:1500px">content</div>
+<iframe id="payment-widget" srcdoc="{_UNRELATED_IFRAME_SUBMIT_INNER.replace('"', "&quot;")}"
+        style="width:400px;height:300px;border:0"></iframe>
+</body></html>
+"""
+
+# Issue #31 review, round 2: the depth fix above (`hasFixedAncestorAnyDepth`)
+# started life as a change to the shared `hasFixedAncestor` field itself,
+# which also feeds `_banner_associated` and `_banner_context_score` for
+# EVERY kind, not just "submit". That silently widened reject/accept/settings
+# scoring too - a fixed ToS or age-gate modal's bare "Decline"/"Agree", nested
+# past the old 6-hop cap with no consent wording anywhere, went from
+# correctly refused to a live `scorer_only` candidate purely because the
+# shared signal changed underneath it, not because anything about the page
+# did. `reject` is the kind the denial flow actually clicks, so this was a
+# live hazard, not a theoretical one - exactly the "unpinned broad selector"
+# route to a wrong click this ticket's own Background section names, for a
+# different kind than #31 was ever about. These fixtures pin the fix: same
+# shape as DEEP_NESTED_IN_BANNER_SUBMIT above, but for reject/accept-reading
+# labels, and deliberately carrying no cookie/consent/privacy wording at all,
+# so nothing here has any legitimate route to resolving.
+_TOS_MODAL_DEEP_TEMPLATE = """
+<!doctype html><html><body><div style="height:1500px">content</div>
+<div id="tos-modal" style="position:{position};bottom:0;left:0;width:900px;background:#fff;padding:20px">
+  <p>By continuing to use this site, you agree to our Terms of Service and age requirements.</p>
+  <div><div><div><div><div><div><div><div><div>
+    <button id="tos-button" style="width:120px;height:40px">{label}</button>
+  </div></div></div></div></div></div></div></div></div>
+</div></body></html>
+"""
+TOS_MODAL_DEEP_DECLINE_FIXED = _TOS_MODAL_DEEP_TEMPLATE.format(position="fixed", label="Decline")
+TOS_MODAL_DEEP_DECLINE_STICKY = _TOS_MODAL_DEEP_TEMPLATE.format(position="sticky", label="Decline")
+TOS_MODAL_DEEP_AGREE_FIXED = _TOS_MODAL_DEEP_TEMPLATE.format(position="fixed", label="Agree")
+
+# Control case: the identical shape, only shallow (3 levels, inside both the
+# old and new cap) - HEAD and this fix must agree here too, which is what
+# isolates the deep cases above to the cap specifically rather than to some
+# other difference between the fixtures.
+TOS_MODAL_SHALLOW_DECLINE_FIXED = """
+<!doctype html><html><body><div style="height:1500px">content</div>
+<div id="tos-modal" style="position:fixed;bottom:0;left:0;width:900px;background:#fff;padding:20px">
+  <p>By continuing to use this site, you agree to our Terms of Service and age requirements.</p>
+  <div><div><div>
+    <button id="tos-button" style="width:120px;height:40px">Decline</button>
+  </div></div></div>
+</div></body></html>
+"""
+
 
 def test_control_detection(page) -> None:
     table = load_cmp_table()
@@ -317,6 +448,189 @@ def test_control_detection(page) -> None:
     control, _, resolution = find_control(page, "reject", None)
     assert control is not None, f"shadow-DOM control should be reachable: {resolution}"
     ok("controls inside an open shadow root are reachable")
+
+
+def test_bare_submit_is_a_save_control_only_inside_a_consent_banner(page) -> None:
+    """Issue #31: `--detect-only` resolved `save` to a page form's plain
+    'Submit' button on OneTrust's own live site.
+
+    `CONTROL_PATTERNS["save"]` includes a bare `^\\s*submit\\s*$` (score 110,
+    its weakest rung) - several CMPs genuinely ship "Submit" as the save/apply
+    control, so the pattern itself is not wrong. The first fix attempted here
+    routed "submit" through the same guard every other weak rung already has -
+    added it to `BARE_LABELS`, nothing else - and it did not help at all:
+    OneTrust's own homepage has an unrelated marketing form whose GDPR
+    disclaimer reads "...reviewing our Privacy Notice. Submit", and
+    `_banner_associated` (`bool(BANNER_KEYWORDS.search(ancestorText)) or
+    hasFixedAncestor`) is exactly the check that guards the -80 penalty *and*
+    grants `_banner_context_score`'s +35 ancestor bonus - the same "privacy"
+    match does both, so the penalty's `not _banner_associated(control)` guard
+    is False and the penalty line never executes at all. Measured directly:
+    110 base + 35 ancestor + 5 box = 150, no -80 applied anywhere - not "150 -
+    80 = 70, right at threshold" as an earlier version of both this docstring
+    and the capture.py comment claimed. That arithmetic was backwards: the
+    conclusion (insufficient) held, but for a different reason, and stating
+    it wrong would have misled anyone who later tried to fix this by tuning
+    the penalty's magnitude - the penalty is structurally unreachable here,
+    not merely too small.
+
+    "submit" is uniquely exposed to this because it is the single most common
+    word on the web for an ordinary HTML form's own submit button, so ambient
+    privacy-flavoured copy near it is not evidence of a consent banner the way
+    it is for "Accept"/"Decline". The actual fix (`_score_controls` in
+    capture.py) gates "submit" on a purely structural signal instead - fixed
+    or sticky CSS positioning somewhere between the control and the top-level
+    page, which a consent banner needs to stay visible over page content and
+    an ordinary in-flow form does not - with none of `_banner_context_score`'s
+    bonus or the keyword-based penalty involved.
+
+    A first version of that structural gate (`hasFixedAncestor` alone, a
+    same-document walk capped at 6 hops) was itself too narrow - review
+    finding 1 on this ticket. `hasFixedAncestor` answers "is there a fixed
+    ancestor in THIS control's own document", which is not the same question
+    as "is this control inside the consent banner": a preference centre can
+    nest a save button past 6 hops from an otherwise-correctly-fixed wrapper
+    (DEEP_NESTED_IN_BANNER_SUBMIT), and a CMP can render its whole widget into
+    an iframe and fix the `<iframe>` tag itself, one document up, from where a
+    same-document walk inside the iframe can never see it - this repo's own
+    Sourcepoint fixture above does exactly that, and it is how TrustArc and
+    Quantcast, both iframe-hosted and both without a `save` table entry (so
+    text scoring is their only route to `save` at all), are commonly embedded
+    (IFRAME_FIXED_SUBMIT). The gate now also walks `hasFixedAncestor` to the
+    document root instead of stopping at 6 hops, and separately checks the
+    frame's own embedding chain for fixed/sticky positioning via
+    `_frame_chain_has_fixed_ancestor` when the same-document answer is No.
+    Both are the same structural question, asked from two documents.
+
+    The reason this is not "any iframe counts", which would trade one false
+    positive for a worse one - a page's own unrelated payment or embed iframe
+    could carry a bare "Submit" too, and crediting it just for being an iframe
+    would risk exactly this issue's failure mode against something with real
+    money behind it - is IFRAME_UNRELATED_SUBMIT: an iframe with no fixed/
+    sticky CSS anywhere in its chain must still be refused, same as the plain
+    UNRELATED_SUBMIT case.
+
+    This was not a regression - the real denial flow resolves `save` only
+    after the settings click, where the genuine control exists and outranks
+    this - but it made the pre-flight, the documented first step an operator
+    reads to decide whether an audit will mean anything, actively misleading.
+
+    Every direction the acceptance criteria and the review require, proven
+    through the real resolver rather than the scoring helpers directly,
+    exactly as UNRELATED_ACCEPT above proves the analogous accept-side guard.
+    """
+    page.set_content(UNRELATED_SUBMIT)
+    control, _, resolution = find_control(page, "save", None)
+    assert control is None, f"an unrelated 'Submit' button must not resolve as a save control: {resolution}"
+    assert (resolution.get("best_score") or 0) < SCORE_THRESHOLD, resolution
+    ok(f"unrelated 'Submit' button correctly refused at score {resolution.get('best_score')}")
+
+    page.set_content(IN_BANNER_SUBMIT)
+    control, _, resolution = find_control(page, "save", None)
+    assert control is not None, f"a genuine in-banner 'Submit' save control must still resolve: {resolution}"
+    assert resolution["decision"] == "scorer_only", resolution
+    assert resolution["clickable"] is True, resolution
+    ok(f"in-banner 'Submit' save control still resolves at score {resolution['score']}")
+
+    # Review finding 1, direction 1: a preference centre nested past the old
+    # 6-hop same-document cap must still resolve - `save` is legitimately
+    # resolved deep inside whatever markup the CMP renders for its full panel.
+    page.set_content(DEEP_NESTED_IN_BANNER_SUBMIT)
+    control, _, resolution = find_control(page, "save", None)
+    assert control is not None, f"a 'Submit' save control nested 9 levels deep must still resolve: {resolution}"
+    assert resolution["clickable"] is True, resolution
+    ok(f"a 'Submit' save control nested past the old 6-hop cap still resolves at score {resolution['score']}")
+
+    # Review finding 1, direction 2: an iframe-hosted preference centre whose
+    # fixed positioning lives on the <iframe> tag itself, one document up from
+    # the control - TrustArc's and Quantcast's real shape, per the review.
+    page.set_content(IFRAME_FIXED_SUBMIT)
+    control, _, resolution = find_control(page, "save", None)
+    assert control is not None, f"an iframe-hosted 'Submit' fixed one document up must still resolve: {resolution}"
+    assert resolution["clickable"] is True, resolution
+    ok(f"an iframe-hosted 'Submit' save control, fixed on the <iframe> tag itself, still resolves "
+       f"at score {resolution['score']}")
+
+    # The safety property that makes the fix above defensible rather than
+    # reckless: being inside *some* iframe is not itself evidence of a
+    # consent banner. Without any fixed/sticky CSS in the chain, an
+    # unrelated iframe's bare "Submit" must be refused exactly like the
+    # plain UNRELATED_SUBMIT case is.
+    page.set_content(IFRAME_UNRELATED_SUBMIT)
+    control, _, resolution = find_control(page, "save", None)
+    assert control is None, (
+        f"an unrelated iframe's 'Submit' button (no fixed/sticky CSS anywhere in its chain) "
+        f"must not resolve as a save control merely for being inside an iframe: {resolution}"
+    )
+    assert (resolution.get("best_score") or 0) < SCORE_THRESHOLD, resolution
+    ok(f"an unrelated iframe's 'Submit' button is still refused - being an iframe is not the "
+       f"signal, at score {resolution.get('best_score')}")
+
+
+def test_uncapped_depth_walk_stays_scoped_to_the_submit_gate(page) -> None:
+    """Issue #31 review, round 2: the "submit" gate's depth fix must not leak
+    into reject/accept/settings scoring.
+
+    The first version of the depth fix uncapped `hasFixedAncestor` itself in
+    `_control_metadata` - the same field `_banner_associated` (the -80
+    `BARE_LABELS` penalty's exemption guard) and `_banner_context_score`
+    (every kind's +20 bonus) already read. That silently re-scored all four
+    kinds, not just "submit": a fixed ToS or age-gate modal's bare "Decline",
+    carrying no cookie/consent/privacy wording anywhere, went from correctly
+    refused (score 40, measured) to a live `scorer_only` candidate (score
+    140, measured) purely because it was nested past the old 6-hop cap -
+    nothing about the page changed, only how far the shared signal could see.
+    `reject` is the kind the denial flow actually clicks, so an unrelated
+    modal's "Decline" resolving as though it denied consent is exactly the
+    "unpinned broad selector" hazard this ticket's own Background section
+    names, just for a different kind than #31 was ever about - and it is
+    explicitly out of scope here ("Rebalancing the other three pattern
+    lists" is fenced off in the issue; the *pattern lists* were never
+    touched, but the banner-context *signal* they combine with had been,
+    for all four kinds at once).
+
+    The fix: `hasFixedAncestorAnyDepth` is a second, separate field, read
+    only by the "submit" branch of `_score_controls`. `hasFixedAncestor`
+    itself reverts to exactly its pre-#31 6-hop cap, so reject/accept/
+    settings score identically to `HEAD` regardless of how deep a control is
+    nested - proven here by asserting REFUSED at depth 9, not merely
+    "unchanged from some other run": the deep and shallow fixtures share
+    every detail except nesting depth, so a resolved deep case would isolate
+    to exactly the cap, the same way the review's own measurement did.
+    """
+    for label, fixture in (
+        ("Decline", TOS_MODAL_DEEP_DECLINE_FIXED),
+        ("Decline", TOS_MODAL_DEEP_DECLINE_STICKY),
+        ("Agree", TOS_MODAL_DEEP_AGREE_FIXED),
+    ):
+        kind = "reject" if label == "Decline" else "accept"
+        page.set_content(fixture)
+        control, _, resolution = find_control(page, kind, None)
+        assert control is None, (
+            f"an unrelated fixed/sticky ToS modal's bare {label!r}, nested past the 6-hop cap "
+            f"and carrying no consent wording, must still be refused as {kind}: {resolution}"
+        )
+        assert (resolution.get("best_score") or 0) < SCORE_THRESHOLD, resolution
+        ok(f"a deeply-nested, unrelated ToS modal's bare {label!r} is still refused as {kind} "
+           f"at score {resolution.get('best_score')} - the uncapped depth walk did not leak in")
+
+    # Control case: identical shape, shallow (3 levels - inside both the old
+    # and new cap), so it must behave the same as it always has: a fixed
+    # ancestor within the cap has, since before #31, unconditionally exempted
+    # a bare label from the -80 penalty and granted the +20 bonus regardless
+    # of nearby wording. That is a pre-existing property of
+    # `_banner_associated`/`_banner_context_score` this ticket did not
+    # introduce and is not the thing being fixed here; asserting it merely
+    # confirms the depth cap, not some other difference between the
+    # fixtures, is what the deep cases above isolate.
+    page.set_content(TOS_MODAL_SHALLOW_DECLINE_FIXED)
+    control, _, resolution = find_control(page, "reject", None)
+    assert control is not None, (
+        f"the shallow control case must resolve exactly as it did before this ticket - "
+        f"a fixed ancestor within the cap is unaffected by the depth fix either way: {resolution}"
+    )
+    ok(f"the shallow (3-hop) control case resolves identically regardless of the depth fix, "
+       f"at score {resolution['score']} - isolating the deep cases above to the cap alone")
 
 
 def test_the_prescreen_sees_the_same_controls_as_the_full_collector(page) -> None:
@@ -8477,6 +8791,8 @@ def main() -> int:
             page = context.new_page()
             test_serve_fixture_seam(page)
             test_control_detection(page)
+            test_bare_submit_is_a_save_control_only_inside_a_consent_banner(page)
+            test_uncapped_depth_walk_stays_scoped_to_the_submit_gate(page)
             test_the_prescreen_sees_the_same_controls_as_the_full_collector(page)
             test_a_denial_labelled_toggle_is_not_resolved_as_a_denial_control(page)
             test_same_control_distinguishes_nesting_from_disagreement(page)

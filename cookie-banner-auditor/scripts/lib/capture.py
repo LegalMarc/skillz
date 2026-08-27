@@ -283,14 +283,41 @@ def _control_metadata(locator: Locator, frame: Frame, index: int) -> dict[str, A
               // Walk ABOVE the control. Starting at the element itself and
               // keeping the first non-empty innerText would freeze this at the
               // button's own label, which is never the surrounding banner copy.
+              // `ancestorText` and `hasFixedAncestor` are both deliberately
+              // capped at 6 hops: they feed `_banner_context_score` (every
+              // kind's +35/+20 bonus) and `_banner_associated` (the -80
+              // penalty's exemption guard for every `BARE_LABELS` member -
+              // reject/decline/deny/refuse/accept/allow/agree/save/confirm/
+              // ok), and a bound keeps that "nearby, structurally close",
+              // not "anywhere on the page". Uncapping `hasFixedAncestor`
+              // itself here once (issue #31 review finding 1, closing a
+              // depth gap in the "submit" gate) silently re-scored the other
+              // three kinds too - a fixed ToS/age-gate modal's bare "Decline"
+              // or "Agree", nested past 6 levels with no consent wording
+              // anywhere, went from correctly refused to a live `scorer_only`
+              // candidate purely because the shared signal widened (review
+              // finding, round 2) - exactly the pattern this ticket's own
+              // Background section warns about, just for a kind #31 was
+              // never about. `hasFixedAncestorAnyDepth` is a second, separate
+              // field for that one purpose instead: walked to the document
+              // root, read by nothing except the "submit" gate in
+              // `_score_controls`, so widening it changes no other kind's
+              // scoring at all.
               let ancestorText = '';
-              let hasFixedAncestor = cs.position === 'fixed' || cs.position === 'sticky';
               let node = el.parentElement;
               for (let i = 0; node && i < 6; i++, node = node.parentElement) {
-                const style = getComputedStyle(node);
-                if (style.position === 'fixed' || style.position === 'sticky') hasFixedAncestor = true;
                 const text = clean(node.innerText);
                 if (text.length > ancestorText.length) ancestorText = text.slice(0, 1000);
+              }
+              let hasFixedAncestor = cs.position === 'fixed' || cs.position === 'sticky';
+              let hasFixedAncestorAnyDepth = hasFixedAncestor;
+              for (let fixedNode = el.parentElement, fi = 0; fixedNode && !hasFixedAncestorAnyDepth;
+                   fixedNode = fixedNode.parentElement, fi++) {
+                const style = getComputedStyle(fixedNode);
+                if (style.position === 'fixed' || style.position === 'sticky') {
+                  hasFixedAncestorAnyDepth = true;
+                  if (fi < 6) hasFixedAncestor = true;
+                }
               }
 
               const tabIndexAttr = el.getAttribute('tabindex');
@@ -317,6 +344,7 @@ def _control_metadata(locator: Locator, frame: Frame, index: int) -> dict[str, A
                 ownText,
                 ancestorText,
                 hasFixedAncestor,
+                hasFixedAncestorAnyDepth,
                 tabIndex: el.tabIndex,
                 tabIndexAttribute: tabIndexAttr,
                 keyboardFocusable,
@@ -768,6 +796,73 @@ def _banner_context_score(control: dict[str, Any]) -> int:
     return score
 
 
+def _frame_chain_has_fixed_ancestor(frame: Frame) -> bool:
+    """Does `frame` sit inside fixed/sticky CSS positioning applied *outside*
+    its own document - on the `<iframe>` tag that embeds it, or on one of
+    that tag's own ancestors, checked in the parent frame, recursively out
+    to the top-level page?
+
+    `_control_metadata`'s `hasFixedAncestorAnyDepth` answers this same
+    question but only within one frame's own document; it cannot see a
+    style applied to the iframe element itself, one document up. Real CMPs
+    commonly render their whole widget into an iframe and fix *that tag*, not anything
+    inside it - this repo's own Sourcepoint fixture does exactly that
+    (`smoke_test.py`, `test_sourcepoint_shape_resolves_inside_an_iframe`:
+    `position:fixed` on the `<iframe>`, nothing fixed inside the srcdoc), and
+    the #31 review named TrustArc and Quantcast - both iframe-hosted, both
+    shipping no `save` selector in the CMP table - as real vendors this
+    blind spot would misjudge as "not really banner chrome" if a genuine
+    save control there ever read bare "submit".
+
+    `Frame.frame_element()` is a Playwright/CDP operation, not page script -
+    unlike `window.frameElement`, it resolves for a cross-origin iframe too,
+    which is exactly how these vendors are typically embedded. Used only from
+    the one call site that needs it (a "submit" candidate whose own document
+    has no fixed ancestor), not folded into `_control_metadata` itself: every
+    other caller of that function pays for it on every control of every kind,
+    and this is a Playwright round trip per frame of nesting, not a free
+    property read.
+
+    Fails closed - any error (a detached frame, a frame with no owner
+    element) reads as no fixed ancestor found, the same as the honest
+    "checked and it wasn't there" answer, because the caller's use of this
+    result is a permissive gate, not a refusal: getting it wrong here costs
+    a safe `unresolved`, never a wrong click.
+    """
+    current = frame
+    while True:
+        try:
+            # `parent_frame` is a *property* on Playwright's sync `Frame`,
+            # not a method - calling it (`.parent_frame()`) raises
+            # `TypeError`, which this function's own fail-closed handling
+            # would otherwise swallow silently on every single call.
+            parent = current.parent_frame
+        except Exception:
+            return False
+        if parent is None:
+            return False
+        try:
+            handle = current.frame_element()
+        except Exception:
+            return False
+        try:
+            fixed = bool(handle.evaluate(
+                "el => { for (let n = el; n; n = n.parentElement) { "
+                "const p = getComputedStyle(n).position; "
+                "if (p === 'fixed' || p === 'sticky') return true; } return false; }"
+            ))
+        except Exception:
+            fixed = False
+        finally:
+            try:
+                handle.dispose()
+            except Exception:
+                pass
+        if fixed:
+            return True
+        current = parent
+
+
 def fingerprint_cmp(page: Page, cmp_table: list[dict[str, Any]] | None = None) -> dict[str, Any] | None:
     """Identify the consent platform from DOM markers and loaded script hosts.
 
@@ -928,13 +1023,74 @@ def _score_controls(page: Page, kind: str, max_per_frame: int = 220) -> list[tup
             base = checks.label_score(text, kind)
             if not base:
                 continue
-            score = base + _banner_context_score(control)
-            # Penalise a bare label only when nothing ties it to a consent
-            # banner. Applying it whenever the label itself lacks consent
-            # wording would reject the plain "Accept"/"Decline" buttons most
-            # CMPs actually ship.
-            if text.lower() in BARE_LABELS and not _banner_associated(control):
-                score -= 80
+            lowered = text.lower()
+            if lowered == "submit":
+                # Issue #31: bare "submit" (`CONTROL_PATTERNS["save"]`'s
+                # weakest rung) is the single most common word on the web for
+                # an HTML form's own submit button, unrelated to any cookie
+                # banner - so, unlike the labels in BARE_LABELS below, nearby
+                # privacy-flavoured copy must not be treated as evidence it is
+                # one. The first fix attempted here routed "submit" through
+                # that exact keyword-gated mechanism (added it to BARE_LABELS,
+                # nothing else) and it did not help at all: OneTrust's own
+                # homepage has an unrelated marketing form whose GDPR
+                # disclaimer reads "...reviewing our Privacy Notice. Submit",
+                # and `_banner_associated` (the penalty's *guard*) is `bool(
+                # BANNER_KEYWORDS.search(ancestorText)) or hasFixedAncestor` -
+                # the identical "privacy" match that earns `_banner_context_
+                # score`'s +35 ancestor bonus *also* satisfies that guard, so
+                # `not _banner_associated(control)` is False and the penalty
+                # line never runs at all. Measured directly against that page:
+                # 110 base + 35 ancestor + 5 box = 150, no -80 applied, no
+                # arithmetic that lands near `SCORE_THRESHOLD` by coincidence -
+                # just the unpenalised base-plus-bonus every non-bare label
+                # gets. "submit" cannot share that mechanism; it needs its own.
+                #
+                # What it is gated on instead is real, not textual: a consent
+                # banner has to stay visible over page content to do its job,
+                # so it is built with fixed/sticky CSS positioning somewhere
+                # in its markup. `hasFixedAncestorAnyDepth` (same-document,
+                # walked to the document root - see `_control_metadata`)
+                # catches that for an ordinary banner. It is a SEPARATE field
+                # from the plain `hasFixedAncestor` every other kind reads
+                # below (still capped at 6 hops, unchanged from before #31):
+                # uncapping `hasFixedAncestor` itself, round 1 of this fix,
+                # silently widened `_banner_associated`/`_banner_context_
+                # score` for reject/accept/settings too - an unrelated fixed
+                # ToS or age-gate modal's bare "Decline", nested past 6
+                # levels with no consent wording anywhere, went from
+                # correctly refused to a live `scorer_only` candidate purely
+                # from the shared signal changing (review finding, round 2).
+                # This dedicated field means widening the "submit" gate's
+                # reach changes no other kind's scoring at all.
+                #
+                # Neither field, by construction, catches positioning applied
+                # one document *up* - on the `<iframe>` tag itself, in the
+                # parent page - which is exactly how some real CMPs embed
+                # their widget (this repo's own Sourcepoint fixture pins
+                # `position:fixed` on the iframe tag and nothing inside it;
+                # the #31 review named TrustArc and Quantcast, both iframe-
+                # hosted and both without a `save` table entry, as real
+                # vendors this blind spot would misjudge). Checked second,
+                # lazily, only when the same-document answer is No -
+                # `_frame_chain_has_fixed_ancestor` walks the frame's own
+                # embedding chain via Playwright's `frame_element()`, which
+                # (unlike page script's `window.frameElement`) resolves across
+                # a cross-origin boundary too. All of this asks the identical
+                # structural question - is there fixed/sticky CSS somewhere
+                # between this control and the top-level page - just from
+                # different documents and different depths; none of it grants
+                # any credit for text.
+                score = base if (control.get("hasFixedAncestorAnyDepth")
+                                  or _frame_chain_has_fixed_ancestor(frame)) else 0
+            else:
+                score = base + _banner_context_score(control)
+                # Penalise a bare label only when nothing ties it to a
+                # consent banner. Applying it whenever the label itself
+                # lacks consent wording would reject the plain
+                # "Accept"/"Decline" buttons most CMPs actually ship.
+                if lowered in BARE_LABELS and not _banner_associated(control):
+                    score -= 80
             scored.append((score, control))
     scored.sort(key=lambda item: item[0], reverse=True)
     return scored
