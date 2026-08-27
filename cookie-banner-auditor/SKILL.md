@@ -121,11 +121,15 @@ To resolve one, work out which element is genuinely correct — from its role, i
 {"format": "cookie-banner-auditor/control-verdicts", "version": 1,
  "target_host": "example.com",
  "verdicts": [{"adjudication_id": "<from the conflicts file>",
-               "kind": "reject", "decision": "use_selector",
+               "kind": "reject", "label": "reject", "decision": "use_selector",
                "selector": "#the-real-reject-control",
                "expected_accessible_name": "Reject All",
                "rationale": "why you concluded this"}]}
 ```
+
+`kind`, `label`, and `cmp` all come straight off the conflicts-file entry the verdict is answering — copy them across alongside `adjudication_id` rather than sending the id alone. `kind` and `label` are **always required**, whether or not `adjudication_id` is present — `label` names the call site (`accept`, `reject`, `second_layer_reject`, `settings`, `save`, or `settings_reopen_probe` — `find_control` runs `reject` at three of those in one denial). Two reasons, not one: a verdict naming only a `kind` used to be authorised at every call site of that kind, re-resolved fresh against whatever the page looked like at each one, which is not what a decision about one control is supposed to mean; and even a verdict that also carries `adjudication_id` needs `kind` and `label` anyway, because `adjudication_id` is only checked on the `conflict` path. Detection is not perfectly stable across a reload — if a later run instead reports the same control as `vetoed` or `unresolved`, there is no conflict id on that run for `adjudication_id` to be checked against at all, and `(kind, label, cmp)` is the *only* way your verdict can still apply rather than silently matching nothing. Leaving either out is refused when the file is loaded, before any browser launches, rather than failing quietly on whichever future rerun needed the field that was missing.
+
+`expected_accessible_name` is compared against the control's actual accessible name — `aria-label` when the element has one, its rendered text otherwise — not against whichever of the two happens to be visible in markup. State what a screen reader would announce, not necessarily what is printed on the button.
 
 Re-run with `--control-verdicts <file>`. Use `"decision": "refuse"` to record that no such control exists — a different statement from the tool being unable to tell, and a different sentence in the report.
 

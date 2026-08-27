@@ -642,6 +642,44 @@ def parse_control_verdicts(data: Any, target_host: str) -> dict[str, Any]:
     click on one site; carrying it to another would apply a human's judgement
     about one page to a page they never saw.
 
+    Issue #28, defects (a) and (b) - and a review finding against the first
+    version of this fix that is worth keeping in view, because the mistake is
+    an easy one to make again. `find_control` runs for `reject` at at least
+    three distinct call sites per denial (`reject`, `second_layer_reject`,
+    the autosave probe's `settings_reopen_probe`). A verdict is matched at
+    runtime either by an exact `adjudication_id` (checked directly against
+    `resolution["conflict"]`), or by falling back to `(kind, label, cmp)` -
+    see `capture._matching_verdict`, which matches `kind` and `label`
+    *exactly*, with no wildcard for either. That fallback is not merely an
+    alternative route to a match: it is the *only* route whenever
+    `resolution["conflict"]` is `None`, which is exactly the `vetoed` and
+    `unresolved` cases defect (b) exists to unstick - there is no conflict id
+    on those paths for even an `adjudication_id`-bearing verdict to be
+    checked against.
+
+    The first version of this fix required `kind` and `label` only when
+    `adjudication_id` was absent, reasoning that an id-bearing verdict
+    "already names one conflict, [so it] needs no further scoping." That
+    reasoning holds on the `conflict` path, where the id is in fact checked -
+    but not on `vetoed` or `unresolved`, where the id cannot be checked at
+    all and this verdict's only remaining route to matching is the identical
+    `(kind, label, cmp)` fallback a label-less, kind-only verdict was
+    rejected here for depending on. A verdict shaped exactly like the
+    original SKILL.md example - `adjudication_id` and `kind`, no `label` -
+    therefore loaded cleanly and then matched nothing on a rerun that
+    reported `vetoed` instead of `conflict`: defect (b)'s exact failure mode,
+    reopened for the one verdict shape most likely to already exist in an
+    operator's file. `kind` and `label` are now required unconditionally,
+    whether or not `adjudication_id` is present, so a verdict that can never
+    match anything is a loud, load-time configuration error instead of a
+    silent runtime no-op with nothing recorded anywhere to explain it.
+
+    This is a structural gate, checked here before any browser launches;
+    `capture._matching_verdict`'s exact-match comparisons enforce the
+    identical requirement again at match time, so the guarantee does not
+    depend on every caller validating through this function first (the test
+    suite, for one, builds verdict lists directly).
+
     Returns `{"verdicts", "rejected", "error"}`. Malformed entries are
     rejected individually and recorded, rather than failing the whole file:
     one bad entry should not discard the operator's other decisions, and
@@ -682,8 +720,19 @@ def parse_control_verdicts(data: Any, target_host: str) -> dict[str, Any]:
         if kind is not None and kind not in CONTROL_PATTERNS:
             reject(f"unknown control kind {kind!r}")
             continue
-        if not entry.get("adjudication_id") and not kind:
-            reject("needs either an adjudication_id or a kind to match against")
+        if not kind:
+            # See the docstring above (issue #28, defects a and b, and the
+            # review finding against the first version of this check):
+            # required even alongside an adjudication_id, because the
+            # (kind, label, cmp) fallback - which needs an exact kind, no
+            # wildcard - is the only way this verdict can ever match on a
+            # rerun with no conflict id to check the id against.
+            reject("needs a kind to match against, even alongside an adjudication_id")
+            continue
+        if not entry.get("label"):
+            # Same reasoning as kind, immediately above: required even
+            # alongside an adjudication_id, for the identical reason.
+            reject("needs a label to match against, even alongside an adjudication_id")
             continue
         if decision == "use_selector":
             selector = entry.get("selector")

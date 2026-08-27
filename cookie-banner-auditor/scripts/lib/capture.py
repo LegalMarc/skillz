@@ -948,22 +948,107 @@ def _matching_verdict(resolution: dict[str, Any], verdicts: list[dict[str, Any]]
     produce a differently-hashed conflict - a vendor changed the competing
     label, say - and an operator who has already decided should not have to
     decide again because a string moved.
+
+    Two things the fallback must never do, both from issue #28:
+
+    (a) TOO LOOSE. A verdict's `kind` and `label` are matched *exactly*
+        below (lines checking `verdict.get("kind") != resolution.get("kind")`
+        and `verdict.get("label") != resolution.get("label")`) - neither is
+        ever treated as a wildcard when absent. `find_control` runs for
+        `reject` at at least three distinct call sites per denial (`reject`,
+        `second_layer_reject`, the autosave probe's
+        `settings_reopen_probe`) - a label-less entry would otherwise
+        authorise its selector, re-resolved fresh against whatever the page
+        looks like at that moment, at every one of them, not just the one
+        call site an operator looked at and decided about.
+        `parse_control_verdicts` requires both fields unconditionally before
+        a verdict is even loaded from a file (not only when
+        `adjudication_id` is absent - see that function's docstring for why
+        an earlier version of this fix got that wrong, and why the two
+        layers now agree exactly); this function's exact-match comparisons
+        hold the identical line independently of that caller, since a
+        verdicts list can be built directly (as the test suite does) without
+        ever passing through `parse_control_verdicts`. A verdict with a
+        `None` `label` can only ever match a resolution whose own `label` is
+        also `None`, which `find_control` never produces (it always sets
+        `label` to the call-site label, defaulting to `kind`) - which is why
+        no *separate* `if not verdict.get("label")` short-circuit is needed
+        here for correctness; an earlier draft that had one was dead code
+        for every input the running system can actually produce (issue #28
+        review finding 1), caught because reverting it in isolation left the
+        exact-match line below still catching everything it purported to
+        guard, and it was removed rather than kept for its own sake.
+
+    (b) TOO TIGHT. `resolution["conflict"]` is `None` on the `vetoed` and
+        `unresolved` paths - there is no conflict id there for an
+        `adjudication_id`-bearing verdict to be compared against. Skipping
+        every such verdict in the fallback (as this used to) meant a verdict
+        written from a conflicts file could never unstick a run that had
+        since started refusing the control outright (`vetoed`) or finding
+        nothing at all (`unresolved`) instead of reporting the same
+        conflict - and it failed with no record anywhere. An
+        `adjudication_id`-bearing verdict is now allowed into the fallback
+        specifically when `conflict` is `None`: there is no *other* conflict
+        identity it could be confused with in that state, which is exactly
+        what keeps this safe. When `conflict` is not `None` (a real, different
+        conflict is active) an id-bearing verdict is still skipped here - only
+        an exact id match may resolve that case, so a verdict for one
+        conflict can never silently satisfy a different one of the same kind
+        (14f11f8: "never across any of them").
     """
-    conflict_id = (resolution.get("conflict") or {}).get("adjudication_id")
+    conflict = resolution.get("conflict")
+    conflict_id = (conflict or {}).get("adjudication_id")
     for verdict in verdicts:
         if conflict_id and verdict.get("adjudication_id") == conflict_id:
             return verdict
     for verdict in verdicts:
-        if verdict.get("adjudication_id"):
+        if verdict.get("adjudication_id") and conflict is not None:
             continue
         if verdict.get("kind") != resolution.get("kind"):
             continue
-        if verdict.get("label") not in (None, resolution.get("label")):
+        if verdict.get("label") != resolution.get("label"):
             continue
         if verdict.get("cmp") not in (None, resolution.get("cmp")):
             continue
         return verdict
     return None
+
+
+def _accessible_name(control: dict[str, Any]) -> str:
+    """The best cheap approximation of `control`'s accessible name.
+
+    Issue #28's defect (c): `control["text"]` (built by `_element_text`) is
+    innerText-first, falling back to `aria-label` only when innerText is
+    empty. That ladder is deliberately tuned for `label_score` and
+    `veto_control` - "how does this control read to the generic scorer" -
+    and it is the opposite precedence from the accessible-name computation an
+    assistive technology performs, where an explicit `aria-label` overrides
+    visible content whenever one is present. The two can disagree in either
+    direction: a button with `aria-label="Reject all cookies"` and innerText
+    "Reject" fails a correctly-written verdict naming the real accessible
+    name (`text` says just "Reject"); a button with innerText "Reject" and
+    `aria-label="Accept all cookies"` gets a verdict that only checked
+    innerText waved through, even though a screen reader announces "Accept
+    all cookies" for it - the false positive is the one worth losing sleep
+    over, since it is exactly the kind of mismatch a hostile page would want
+    a check like this to miss.
+
+    Judgement call, recorded here rather than picked silently: fix the
+    comparison (this function) rather than rename `expected_accessible_name`
+    to something honestly-innerText-shaped. `_control_metadata` already
+    fetches the raw `aria-label` attribute as `ariaLabel` for every control
+    resolved via `_locate_by_selectors`, so getting this right costs no extra
+    page round trip - it is strictly better to make the field mean what its
+    name says than to document that it does not. This is kept local to the
+    verdict path rather than changed in `_element_text` itself: that ladder
+    feeds `label_score` and `veto_control` for every control on the page, and
+    reordering it there would change scoring and veto behaviour everywhere -
+    including against the 13 CMP fixtures that are the regression net for
+    this tool - which is a far larger and unrelated blast radius than one
+    field in one verdict-matching function deserves.
+    """
+    aria_label = re.sub(r"\s+", " ", str(control.get("ariaLabel") or "")).strip()
+    return aria_label or str(control.get("text") or "")
 
 
 def apply_control_verdict(
@@ -983,7 +1068,10 @@ def apply_control_verdict(
          verdict naming the accept button cannot get it clicked as a denial,
          whatever the file says and whoever wrote it.
       3. If the verdict states an expected accessible name, the element has to
-         still have it. Cheap check that the page did not change underneath.
+         still have it - compared via `_accessible_name`, not the plain `text`
+         field; see that function's docstring for why the two are not
+         interchangeable here. Cheap check that the page did not change
+         underneath.
 
     That ordering is deliberate and is the whole security argument. The text
     an operator or agent read to make this decision came from the audited
@@ -1067,11 +1155,16 @@ def apply_control_verdict(
 
     expected = verdict.get("expected_accessible_name")
     if expected:
-        seen = _untrusted_text(control.get("text"), 300).casefold()
-        if _untrusted_text(expected, 300).casefold() != seen:
+        # Compared against `_accessible_name`, which prefers `aria-label`
+        # over innerText - the opposite of `control["text"]`'s ladder. See
+        # `_accessible_name`'s docstring: using `text` here (issue #28,
+        # defect c) let a mismatched aria-label/innerText pair slip an
+        # accessible-name check that had checked the wrong string.
+        observed = _untrusted_text(_accessible_name(control), 300)
+        if _untrusted_text(expected, 300).casefold() != observed.casefold():
             record["rejected_reason"] = "accessible_name_mismatch"
             record["rejected_detail"] = {"expected": _untrusted_text(expected, 120),
-                                         "observed": _untrusted_text(control.get("text"), 120)}
+                                         "observed": _untrusted_text(observed, 120)}
             return None
 
     # There is deliberately no fourth check that this element is not what the
