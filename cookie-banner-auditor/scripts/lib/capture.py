@@ -517,10 +517,6 @@ def collect_visible_controls(page: Page, max_per_frame: int = 220) -> list[dict[
     return controls
 
 
-def _public_control(control: dict[str, Any]) -> dict[str, Any]:
-    return {k: v for k, v in control.items() if k not in {"locator", "frame"}}
-
-
 _CONTROL_CHARS = re.compile(r"[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]")
 
 
@@ -541,6 +537,46 @@ def _untrusted_text(value: Any, limit: int) -> str:
     """
     text = _CONTROL_CHARS.sub("", str(value if value is not None else ""))
     return re.sub(r"\s+", " ", text).strip()[:limit]
+
+
+#: `_control_metadata`'s own capture bounds for `text` (300), `ancestorText`
+#: (1000) and `html` (1200) - see the JS in that function. Sanitising here
+#: must not tighten those further than capture already did; the point is to
+#: flatten what is already bounded, not to shrink it again.
+#:
+#: `ariaLabel` is different: `_control_metadata`'s JS reads it as
+#: `el.getAttribute('aria-label') || ''` with no `clean()` call and no
+#: length cap at all - unlike every other page-authored field here, it is
+#: neither whitespace-collapsed in-browser nor bounded before it arrives.
+#: Left out of this dict, it would be the one remaining candidate field
+#: carrying raw newlines and control characters at unbounded length. `120`
+#: is not a capture bound to preserve; it is borrowed from `_control_ref`'s
+#: own `aria_label` field, since a candidate's aria-label deserves the same
+#: bound as the conflict record's.
+_PUBLIC_CONTROL_TEXT_LIMITS = {"text": 300, "ancestorText": 1000, "html": 1200, "ariaLabel": 120}
+
+
+def _public_control(control: dict[str, Any]) -> dict[str, Any]:
+    """The candidate-list form of one control: everything but the live handle.
+
+    Unlike `_control_ref` (below), this keeps every field `_control_metadata`
+    captured - it is the larger of the two channels a candidate reaches the
+    report through, feeding `denial-control-unresolved`, `denial-not-committed`
+    and `asymmetric-choice` evidence directly, plus `audit-data.json`'s own
+    `controls` list. `text`, `ancestorText`, `html` and `ariaLabel` are
+    page-authored the same way everything `_control_ref` sanitises is, so
+    they get the same `_untrusted_text` treatment - flattened to one bounded
+    line rather than passed through with their newlines and control
+    characters intact, which would let a site's own markup imitate the
+    report's structure when this list is printed for a person to read. Every
+    other field (geometry, style, booleans) is not text a page can use to
+    draw a fake heading, so it is left exactly as captured.
+    """
+    public = {k: v for k, v in control.items() if k not in {"locator", "frame"}}
+    for key, limit in _PUBLIC_CONTROL_TEXT_LIMITS.items():
+        if key in public:
+            public[key] = _untrusted_text(public[key], limit)
+    return public
 
 
 _CSS_PATH_JS = r"""
