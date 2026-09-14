@@ -1315,6 +1315,87 @@ def test_same_control_distinguishes_nesting_from_disagreement(page) -> None:
     ok("_same_control reports a vanished or missing candidate as undetermined, never as distinct")
 
 
+def test_same_control_js_shadow_boundary_two_levels_deep(page) -> None:
+    """#27's one-hop shadow check missed a control nested *two* levels deep.
+
+    `_SAME_CONTROL_JS` climbed exactly one shadow host up from each side's
+    root and tested that single host against the other side's raw element.
+    That catches a host compared with its own direct shadow content (#27's
+    fixture, above) but not an outer host whose shadow root contains an
+    *inner* host, whose own shadow root contains the actual control: the
+    one-hop climb lands on the inner host, which is neither the outer host
+    nor something `contains()` can see from it (`contains()` does not cross
+    the outer host's own shadow boundary), so it fell through to
+    `distinct`/`different_root` - a confident, wrong answer (issue #34).
+
+    Fixture mirrors #27's (`test_same_control_distinguishes_nesting_from_
+    disagreement`, issue #27): a `<div>` given an open shadow root via a
+    `<script>` in `page.set_content`, extended one level further so the
+    shadow root's own child is itself a shadow host.
+    """
+    page.set_content("""
+        <!doctype html><html><body>
+          <div id="outerhost"></div>
+          <script>
+            const outer = document.getElementById('outerhost');
+            const outerRoot = outer.attachShadow({mode: 'open'});
+            const inner = document.createElement('div');
+            outerRoot.appendChild(inner);
+            const innerRoot = inner.attachShadow({mode: 'open'});
+            innerRoot.innerHTML = '<button id="nested-btn">Reject All</button>';
+          </script>
+        </body></html>
+    """)
+    btn = page.locator("#outerhost").evaluate_handle(
+        "el => el.shadowRoot.firstElementChild.shadowRoot.firstElementChild"
+    )
+    result = page.locator("#outerhost").evaluate(_SAME_CONTROL_JS, btn)
+    btn.dispose()
+    assert result == {"rel": "unknown", "why": "shadow_boundary"}, (
+        f"a control nested two shadow levels inside the compared element must be undetermined, "
+        f"not asserted distinct: {result}"
+    )
+    ok("_SAME_CONTROL_JS climbs two shadow levels, not just one, before giving up on distinct")
+
+
+def test_same_control_js_unrelated_shadow_trees_stay_distinct_regardless_of_depth(page) -> None:
+    """The general climb must not swallow every root mismatch into `unknown`.
+
+    A fix for the two-level case above could just as easily over-generalize:
+    treat *any* shadow-root difference as `unknown` once the walk is climbing
+    more than one hop, rather than only when the climb actually reaches the
+    other candidate. Two genuinely unrelated shadow trees - neither hosts the
+    other, at any depth - must still report `distinct`/`different_root`. One
+    side is nested two shadow levels deep (mirroring the fixture above) so
+    this cannot pass by accident of both sides being shallow.
+    """
+    page.set_content("""
+        <!doctype html><html><body>
+          <div id="deep-a"></div>
+          <div id="deep-b"></div>
+          <script>
+            const a = document.getElementById('deep-a');
+            const aRoot = a.attachShadow({mode: 'open'});
+            const aMid = document.createElement('div');
+            aRoot.appendChild(aMid);
+            const aMidRoot = aMid.attachShadow({mode: 'open'});
+            aMidRoot.innerHTML = '<button id="deep-a-btn">A</button>';
+
+            document.getElementById('deep-b').attachShadow({mode: 'open'})
+              .innerHTML = '<button id="deep-b-btn">B</button>';
+          </script>
+        </body></html>
+    """)
+    b_btn = page.locator("#deep-b button").element_handle()
+    result = page.locator("#deep-a button").evaluate(_SAME_CONTROL_JS, b_btn)
+    b_btn.dispose()
+    assert result == {"rel": "distinct", "why": "different_root"}, (
+        f"two unrelated shadow trees must stay distinct no matter how deep either is nested, "
+        f"not be swallowed into undetermined just because a climb is involved: {result}"
+    )
+    ok("_SAME_CONTROL_JS keeps two-level-deep but unrelated shadow trees distinct")
+
+
 def test_control_ref_is_re_resolvable_and_bounds_page_text(page) -> None:
     """The written-down form of a candidate: re-resolvable, and bounded.
 
@@ -9492,6 +9573,8 @@ def main() -> int:
             test_a_mutation_at_the_instant_of_resolution_fails_closed_rather_than_substitutes(page)
             test_a_denial_labelled_toggle_is_not_resolved_as_a_denial_control(page)
             test_same_control_distinguishes_nesting_from_disagreement(page)
+            test_same_control_js_shadow_boundary_two_levels_deep(page)
+            test_same_control_js_unrelated_shadow_trees_stay_distinct_regardless_of_depth(page)
             test_control_ref_is_re_resolvable_and_bounds_page_text(page)
             test_veto_control_reads_aria_label_against_real_dom(page)
             test_save_and_reject_label_resolves_as_save_without_losing_reject(page)

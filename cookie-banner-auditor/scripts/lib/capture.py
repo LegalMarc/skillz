@@ -754,15 +754,22 @@ _CSS_PATH_JS = r"""
 # `frame` check, before either candidate reaches this script).
 #
 # A root mismatch is not by itself proof of two different elements, though: a
-# shadow host and an element inside its own shadow root fail the same check,
-# and that is the textbook one-control-reached-two-ways case, not two. Adding
-# `{composed: true}` cannot tell the two apart either - composed climbing
-# reaches the same top-level document for a host's own content and for a
-# wholly unrelated shadow tree elsewhere on the page - so it is settled by
-# asking directly whether one side's root is the other side's own shadow
-# root, and reported `unknown` there rather than asserted `distinct`. Two
-# shadow trees that do not host one another this way stay `distinct`; nothing
-# here relates them.
+# shadow host and an element nested any number of shadow levels inside its
+# own tree fail the same check, and that is the textbook one-control-
+# reached-two-ways case stretched across more than one shadow boundary, not
+# two controls. Adding `{composed: true}` cannot tell the two apart either -
+# composed climbing reaches the same top-level document for a host's own
+# content and for a wholly unrelated shadow tree elsewhere on the page - so
+# it is settled by climbing from one side's root through successive shadow
+# hosts, asking the same question `{composed: true}` cannot answer at each
+# hop - "whose shadow root is this host itself sitting in?" - until either
+# the climb reaches the other candidate (or a point the other candidate
+# contains in the ordinary light-DOM sense), which reports `unknown` rather
+# than asserting `distinct`, or there is no further shadow root to climb out
+# of. The climb runs in both directions, since either side could be the one
+# nested inside the other. Two shadow trees that never host one another this
+# way run out of hosts to climb and stay `distinct`; nothing here relates
+# them, no matter how deep either one is nested on its own.
 #
 # The blocker walk is what makes containment mean "a click on either lands on
 # the same handler": if anything actionable sits between the inner and outer
@@ -774,10 +781,24 @@ _SAME_CONTROL_JS = r"""
   if (el === other) return {rel: 'same'};
   if (el.getRootNode() !== other.getRootNode()) {
     const shadowHostOf = (root) => (typeof ShadowRoot !== 'undefined' && root instanceof ShadowRoot) ? root.host : null;
-    const otherHost = shadowHostOf(other.getRootNode());
-    const elHost = shadowHostOf(el.getRootNode());
-    if (otherHost && (otherHost === el || el.contains(otherHost))) return {rel: 'unknown', why: 'shadow_boundary'};
-    if (elHost && (elHost === other || other.contains(elHost))) return {rel: 'unknown', why: 'shadow_boundary'};
+    // Climbs from `node` through successive shadow-root hosts - however many
+    // levels deep `node` is nested inside `container`'s shadow tree - and
+    // reports whether that climb ever reaches `container` itself, or a point
+    // `container` (via ordinary light-DOM containment) contains. Each hop
+    // asks "whose shadow root is this host itself sitting in?" which is
+    // exactly how #27's original one-hop check worked, just repeated until
+    // there is no further shadow root to climb out of.
+    const shadowNestedInside = (container, node) => {
+      let host = shadowHostOf(node.getRootNode());
+      while (host) {
+        if (host === container || container.contains(host)) return true;
+        host = shadowHostOf(host.getRootNode());
+      }
+      return false;
+    };
+    if (shadowNestedInside(el, other) || shadowNestedInside(other, el)) {
+      return {rel: 'unknown', why: 'shadow_boundary'};
+    }
     return {rel: 'distinct', why: 'different_root'};
   }
   const inner = el.contains(other) ? other : (other.contains(el) ? el : null);
