@@ -5522,6 +5522,225 @@ def test_form_exercise_does_not_submit(page) -> None:
     ok("form fields are filled with synthetic data and NOT submitted by default")
 
 
+def test_exercise_forms_field_type_and_name_ladder(page) -> None:
+    """exercise_forms' field-type/name detection ladder picks a synthetic
+    value via a first-match cascade: `field_type in SYNTHETIC_VALUES` directly,
+    then a chain of name-based regexes, then a text fallback. None of this had
+    ever been exercised - every existing fixture used type="text"/"email"/
+    "tel", and because "text" is itself a SYNTHETIC_VALUES key, a field typed
+    "text" (or with no type attribute at all, which defaults to "text") ALWAYS
+    takes the first branch and never reaches the name-based regexes below it,
+    no matter what its name says. To actually reach those regexes, a field's
+    type attribute has to be something Chromium still renders and fills as a
+    plain text box but that is neither a SYNTHETIC_VALUES key nor an excluded
+    control type - an unrecognised type keyword works (HTML5's invalid-value
+    default for <input type> is the Text state), so the name-ladder fixtures
+    below use type="fld", a deliberately made-up type string."""
+    page.set_content("""
+        <!doctype html><html><body>
+        <form id="ladder-form" action="/exercise-forms-ladder">
+          <input id="f-typed-email" name="employer_org" type="email">
+          <input id="f-named-email" name="user_email" type="fld">
+          <input id="f-named-phone" name="contact_phone" type="fld">
+          <input id="f-named-company" name="business_employer" type="fld">
+          <input id="f-named-generic" name="full_name" type="fld">
+          <input id="f-fallback" name="reference_code" type="fld">
+        </form>
+        </body></html>
+    """)
+    config = ScenarioConfig(url="https://example.test", wait_ms=10)
+    record = exercise_forms(page, config)
+
+    # record["fields_filled"][i]["field"] is "<name> <id> <placeholder>"
+    # joined - it starts with the HTML name attribute, since that's listed
+    # first in exercise_forms' own join, so match on that leading token.
+    filled_field_strings = [f["field"] for f in record["fields_filled"]]
+    for expected_name in (
+        "employer_org", "user_email", "contact_phone",
+        "business_employer", "full_name", "reference_code",
+    ):
+        assert any(s.startswith(expected_name) for s in filled_field_strings), (
+            expected_name, record["fields_filled"]
+        )
+    assert len(record["fields_filled"]) == 6, record["fields_filled"]
+
+    values = page.evaluate("""() => ({
+        typed_email: document.querySelector('[name=employer_org]').value,
+        named_email: document.querySelector('[name=user_email]').value,
+        named_phone: document.querySelector('[name=contact_phone]').value,
+        named_company: document.querySelector('[name=business_employer]').value,
+        named_generic: document.querySelector('[name=full_name]').value,
+        fallback: document.querySelector('[name=reference_code]').value,
+    })""")
+
+    # field_type in SYNTHETIC_VALUES (type="email") must win outright over the
+    # name-based ladder below it. The name here ("employer_org") is
+    # company-shaped, so if the type check were skipped, bypassed, or the
+    # branches reordered, this would read back the COMPANY value instead of
+    # EMAIL - proving the two are genuinely different code paths, not
+    # coincidentally identical results.
+    assert values["typed_email"] == SYNTHETIC_VALUES["email"], values
+    assert values["typed_email"] != SYNTHETIC_VALUES["company"], (
+        f"type=email must take precedence over the name-based company rung: {values}"
+    )
+
+    assert values["named_email"] == SYNTHETIC_VALUES["email"], values
+    assert values["named_phone"] == SYNTHETIC_VALUES["tel"], values
+    assert values["named_company"] == SYNTHETIC_VALUES["company"], values
+    assert values["named_generic"] == SYNTHETIC_VALUES["name"], values
+    assert values["fallback"] == SYNTHETIC_VALUES["text"], values
+    ok("exercise_forms' type/name detection ladder assigns the correct SYNTHETIC_VALUES entry at every rung, with type taking precedence over name")
+
+
+def test_exercise_forms_skips_search_fields(page) -> None:
+    """A type=search input, or one whose name merely mentions "search", is
+    exercise_search's job, not exercise_forms' - the ladder must skip both
+    without filling them, leaving them for the dedicated search flow."""
+    page.set_content("""
+        <!doctype html><html><body>
+        <form id="mixed-form" action="/exercise-forms-search-skip">
+          <input id="f-search-type" name="q" type="search">
+          <input id="f-search-name" name="site_search_box" type="fld">
+          <input id="f-control" name="reference_code" type="fld">
+        </form>
+        </body></html>
+    """)
+    config = ScenarioConfig(url="https://example.test", wait_ms=10)
+    record = exercise_forms(page, config)
+
+    # record["fields_filled"][i]["field"] is "<name> <id> <placeholder>"
+    # joined, so match on the leading HTML name attribute rather than exact
+    # equality - an exact-equality check would silently pass even if a
+    # regression started filling these fields, since the joined string is
+    # never exactly "q" or "site_search_box" either way.
+    filled_field_strings = [f["field"] for f in record["fields_filled"]]
+
+    def was_filled(expected_name: str) -> bool:
+        return any(s.startswith(expected_name) for s in filled_field_strings)
+
+    assert not was_filled("q"), record["fields_filled"]
+    assert not was_filled("site_search_box"), record["fields_filled"]
+    assert was_filled("reference_code"), record["fields_filled"]
+
+    values = page.evaluate(
+        "() => ({q: document.querySelector('[name=q]').value,"
+        " site: document.querySelector('[name=site_search_box]').value})"
+    )
+    assert values["q"] == "", "a type=search field must be left for exercise_search, not filled here"
+    assert values["site"] == "", "a search-named field must be left for exercise_search, not filled here"
+    ok("exercise_forms skips a type=search field and a search-named field, leaving both for exercise_search")
+
+
+def test_exercise_forms_skips_unsafe_form_without_counting_fields(page) -> None:
+    """A form whose id/name/class/action signature matches UNSAFE_FORM must be
+    skipped in its entirety and recorded in skipped_forms - none of its fields
+    may appear in fields_filled. The existing submit-forms safety test already
+    proves the fields themselves stay empty; this isolates the skip-and-record
+    bookkeeping on its own, with no submission involved at all."""
+    page.set_content("""
+        <!doctype html><html><body>
+        <form id="account-settings" action="/profile/update">
+          <input name="full_name" type="fld">
+          <input name="reference_code" type="fld">
+        </form>
+        </body></html>
+    """)
+    config = ScenarioConfig(url="https://example.test", wait_ms=10)
+    record = exercise_forms(page, config)
+
+    assert record["fields_filled"] == [], record["fields_filled"]
+    assert record["forms_examined"] == 1, record
+    assert len(record["skipped_forms"]) == 1, record["skipped_forms"]
+    assert record["skipped_forms"][0]["index"] == 0, record["skipped_forms"]
+    assert "unsafe" in record["skipped_forms"][0]["reason"], record["skipped_forms"][0]
+    ok("exercise_forms skips an entire unsafe-matching form and records it, without counting any of its fields as filled")
+
+
+def test_exercise_forms_skips_disabled_field_without_aborting(page) -> None:
+    """A field disabled by the page itself (a common pattern for fields gated
+    behind a prior step) must be skipped via the field visibility/enabled
+    check without raising, and without derailing the fields around it. This
+    is a real DOM condition, not a mock: the `disabled` attribute makes
+    Playwright's own is_enabled() report False, which is exactly the branch
+    exercise_forms' per-field loop is written to tolerate - nothing had ever
+    made that check return False before."""
+    page.set_content("""
+        <!doctype html><html><body>
+        <form id="gated-form" action="/exercise-forms-gated">
+          <input id="f-before" name="reference_code" type="fld">
+          <input id="f-disabled" name="contact_phone" type="fld" disabled>
+          <input id="f-after" name="full_name" type="fld">
+        </form>
+        </body></html>
+    """)
+    config = ScenarioConfig(url="https://example.test", wait_ms=10)
+    record = exercise_forms(page, config)
+
+    # record["fields_filled"][i]["field"] is "<name> <id> <placeholder>"
+    # joined, so match on the leading HTML name attribute rather than exact
+    # equality (see test_exercise_forms_skips_search_fields for why exact
+    # equality would be a vacuous check here).
+    filled_field_strings = [f["field"] for f in record["fields_filled"]]
+
+    def was_filled(expected_name: str) -> bool:
+        return any(s.startswith(expected_name) for s in filled_field_strings)
+
+    assert not was_filled("contact_phone"), f"a disabled field must never be filled: {record['fields_filled']}"
+    assert page.evaluate("() => document.querySelector('[name=contact_phone]').value") == "", \
+        "a disabled field must be left untouched"
+
+    # The loop must continue past the disabled field rather than aborting -
+    # both its neighbours still get filled, proving `record` stays in a sane,
+    # continuing state instead of the exception/skip propagating upward.
+    assert was_filled("reference_code"), record["fields_filled"]
+    assert was_filled("full_name"), record["fields_filled"]
+    values = page.evaluate(
+        "() => ({before: document.querySelector('[name=reference_code]').value,"
+        " after: document.querySelector('[name=full_name]').value})"
+    )
+    assert values["before"] == SYNTHETIC_VALUES["text"], values
+    assert values["after"] == SYNTHETIC_VALUES["name"], values
+    ok("exercise_forms skips a disabled field via the is_enabled check without aborting the rest of the form")
+
+
+def test_exercise_forms_survives_a_field_that_refuses_to_be_filled(page) -> None:
+    """A `readonly` field passes exercise_forms' own is_visible/is_enabled
+    checks (readonly is not disabled, and Playwright's is_enabled() only
+    looks at the disabled state) but Playwright's fill() itself then refuses
+    it - "element is not editable" - genuinely raising a TimeoutError inside
+    the fill/.blur try block. This is a real DOM condition (the `readonly`
+    attribute), not a mock, and it is the field.fill()/.blur() exception path
+    that nothing had ever triggered before: exercise_forms must swallow it
+    and keep going rather than aborting the whole call."""
+    page.set_content("""
+        <!doctype html><html><body>
+        <form id="readonly-form" action="/exercise-forms-readonly">
+          <input id="f-locked" name="employer_org" type="fld" readonly value="prefilled">
+          <input id="f-open" name="reference_code" type="fld">
+        </form>
+        </body></html>
+    """)
+    config = ScenarioConfig(url="https://example.test", wait_ms=10)
+    record = exercise_forms(page, config)
+
+    filled_field_strings = [f["field"] for f in record["fields_filled"]]
+
+    def was_filled(expected_name: str) -> bool:
+        return any(s.startswith(expected_name) for s in filled_field_strings)
+
+    assert not was_filled("employer_org"), (
+        f"a field whose own fill() genuinely raises must not be reported as filled: {record['fields_filled']}"
+    )
+    assert page.evaluate("() => document.querySelector('[name=employer_org]').value") == "prefilled", \
+        "a readonly field's original value must survive untouched"
+
+    # The exception raised while trying to fill the readonly field must not
+    # propagate out of exercise_forms - the next field in the same form still
+    # gets filled, proving `record` stays in a sane, continuing state.
+    assert was_filled("reference_code"), record["fields_filled"]
+    ok("exercise_forms swallows a genuine field.fill() exception (a readonly field) and keeps processing the rest of the form")
+
+
 def test_capture_checkpoint_writes_state_and_screenshots(page) -> None:
     """capture_checkpoint is the one function that touches disk on every scenario
     step: raw + redacted state JSON, viewport/full screenshots, and - when a
@@ -10177,6 +10396,11 @@ def main() -> int:
             test_mobile_emulation_reaches_the_page(page)
             test_form_exercise_does_not_submit(page)
             test_form_submission_never_touches_an_unsafe_form(page)
+            test_exercise_forms_field_type_and_name_ladder(page)
+            test_exercise_forms_skips_search_fields(page)
+            test_exercise_forms_skips_unsafe_form_without_counting_fields(page)
+            test_exercise_forms_skips_disabled_field_without_aborting(page)
+            test_exercise_forms_survives_a_field_that_refuses_to_be_filled(page)
             test_capture_checkpoint_writes_state_and_screenshots(page)
             test_dwell_and_nudge_scrolls_when_thorough(page)
             test_dwell_and_nudge_skips_scrolling_when_not_thorough(page)
