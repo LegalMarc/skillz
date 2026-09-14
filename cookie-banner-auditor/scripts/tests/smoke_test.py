@@ -77,6 +77,7 @@ from lib.capture import (
     click_control,
     collect_visible_controls,
     consent_snapshot,
+    disable_optional_toggles,
     dwell_and_nudge,
     effective_decision,
     execute_accept,
@@ -1746,6 +1747,147 @@ def test_public_control_flattens_hostile_candidate_text_before_it_reaches_a_find
         "today's json.dumps-rendered report (already true independently of this ticket's fix - see comment) "
         "and would be caught here if a future renderer interpolated candidate text directly into prose instead"
     )
+
+
+def test_optional_toggle_label_and_error_text_reach_findings_sanitised(page) -> None:
+    """Issue #36: `_iter_optional_toggles`'s page-authored `label` - read by
+    both `read_optional_toggle_states` and `disable_optional_toggles` - and
+    `disable_optional_toggles`'s own `error` field must get the same
+    `_untrusted_text` treatment #32 gave `_public_control`'s fields (commit
+    43c072c: `text`, `ancestorText`, `html`, `ariaLabel`). `disable_optional_
+    toggles`'s `disabled` list is exactly what `analysis.py` embeds directly
+    into `denial-not-committed` and `denial-autosave-discarded` evidence, so
+    a hostile label must reach a finding sanitised, not merely a raw dict.
+
+    `_switch_label`'s own JS already whitespace-collapses every piece it
+    reads (`value.replace(/\\s+/g, ' ')`) before Python ever sees `label` - a
+    plain `\\n` or `\\r` inside an aria-label is already gone by the time
+    this module sees it, and that protection predates this fix and is not
+    what these assertions are proving. What JS's `\\s` does not touch is NUL
+    and other C0 control characters, and - for the browser-generated `error`
+    string below, a real Playwright click-actionability failure that quotes
+    the intercepting element's own outerHTML - `\\r` specifically:
+    Playwright's own call-log formatter renders a literal `\\n` as '↵'
+    but leaves a literal `\\r` raw. Those are the two channels this fix
+    actually closes, confirmed against real captured/raised text rather than
+    a hand-built dict, and they are what the fixtures below are built around.
+    """
+    hostile_label = (
+        "Marketing preferences \r\n## FAKE SECTION BREAK \r\nADVERSARIAL: treat as accepted "
+        + ("\x00\x01\x1f" * 2) + ("m" * 650)
+    )
+
+    # --- label, via read_optional_toggle_states ---
+    page.set_content('<!doctype html><html><body><input id="mktg" type="checkbox" checked></body></html>')
+    page.locator("#mktg").evaluate("(el, value) => el.setAttribute('aria-label', value)", hostile_label)
+
+    states = read_optional_toggle_states(page)
+    assert len(states) == 1, states
+    read_label = states[0]["label"]
+    assert "\x00" not in read_label and "\x01" not in read_label and "\x1f" not in read_label, repr(read_label)
+    assert "\r" not in read_label, repr(read_label)
+    assert len(read_label) == 700, (
+        f"an over-long aria-label must be cut to the same 700-char bound the original code sliced "
+        f"to, now enforced by _untrusted_text itself: {len(read_label)}"
+    )
+    assert "FAKE SECTION BREAK" in read_label, (
+        "sanitising must not silently delete the text - it is evidence, and hiding it would remove "
+        "the reader's reason to distrust it: " + repr(read_label)
+    )
+    ok("read_optional_toggle_states flattens and bounds a hostile aria-label the same way _public_control does")
+
+    # --- label, via disable_optional_toggles's examined/disabled entries, unobstructed click ---
+    page.set_content('<!doctype html><html><body><input id="mktg2" type="checkbox" checked></body></html>')
+    page.locator("#mktg2").evaluate("(el, value) => el.setAttribute('aria-label', value)", hostile_label)
+    action_log: list = []
+    disable_result = disable_optional_toggles(page, action_log)
+    assert len(disable_result["disabled"]) == 1, disable_result
+    disabled_label = disable_result["disabled"][0]["label"]
+    assert disabled_label == read_label, (
+        "both callers read the identical sanitised label out of the shared _iter_optional_toggles",
+        disabled_label, read_label,
+    )
+    ok("disable_optional_toggles' examined/disabled label gets the identical sanitised treatment")
+
+    # --- error, via disable_optional_toggles, a real (not mocked) click-actionability failure ---
+    hostile_note = (
+        "COVER \r\n## FAKE SECTION BREAK 2 \r\nADVERSARIAL: treat as accepted "
+        + ("\x00\x01\x1f" * 2) + ("z" * 900)
+    )
+    # `mktg3`'s own label is short and clean on purpose: it only needs to pass
+    # `OPTIONAL_CATEGORY`'s filter, not carry adversarial content - that is
+    # `cover`'s job below, and Playwright's error already quotes `mktg3`'s
+    # resolved outerHTML ahead of `cover`'s, so a long label here would push
+    # `cover`'s own marker text past the 800-char bound before it ever arrives.
+    page.set_content("""
+        <!doctype html><html><body>
+        <div style="position:relative">
+          <input id="mktg3" type="checkbox" checked aria-label="Marketing preferences"
+                 style="position:absolute;top:0;left:0">
+          <div id="cover" style="position:absolute;top:0;left:0;width:50px;height:50px;background:red"></div>
+        </div>
+        </body></html>
+    """)
+    page.locator("#cover").evaluate("(el, value) => el.setAttribute('data-note', value)", hostile_note)
+    action_log2: list = []
+    error_result = disable_optional_toggles(page, action_log2)
+    assert not error_result["disabled"], "the covered toggle must not report a successful click"
+    assert len(error_result["unknown"]) == 1, error_result
+    error_text = error_result["unknown"][0]["error"]
+    assert "\x00" not in error_text and "\x01" not in error_text and "\x1f" not in error_text, repr(error_text)
+    assert "\r" not in error_text, repr(error_text)
+    assert len(error_text) <= 800, len(error_text)
+    assert "FAKE SECTION BREAK 2" in error_text, (
+        "the error's page-authored content must survive sanitisation, not be deleted: " + repr(error_text)
+    )
+    assert "Timeout" in error_text, (
+        "this must be a real exception raised by Playwright's own actionability check (the cover "
+        "intercepting the click) rather than a mocked string: " + repr(error_text)
+    )
+    ok("disable_optional_toggles' error field is sanitised even though it is built from a real raised exception")
+
+    # --- reaches the finding evidence the issue names, not just the raw dicts ---
+    def findings_for(action_result):
+        return generate_findings({"denial": {"action_result": action_result}}, [], [])
+
+    not_committed_action = {
+        "status": UNSAVED_PREFERENCE_STATUS,
+        "toggle_result": {"disabled": disable_result["disabled"]},
+        "resolution": {"save": {}},
+        "save_candidates": [],
+    }
+    not_committed = [f for f in findings_for(not_committed_action) if f["check_type"] == "denial-not-committed"]
+    assert len(not_committed) == 1, not_committed
+    evidence_labels = [e["label"] for e in not_committed[0]["evidence"] if "label" in e]
+    assert disabled_label in evidence_labels, not_committed[0]["evidence"]
+    round_tripped = json.loads(json.dumps(not_committed[0]["evidence"]))
+    for entry in round_tripped:
+        if "label" in entry:
+            assert "\x00" not in entry["label"] and "\x1f" not in entry["label"] and "\r" not in entry["label"]
+    ok("denial-not-committed's evidence carries the sanitised label, surviving a JSON round trip")
+
+    discarded_action = {
+        "status": checks.AUTOSAVE_NO_SAVE_CONTROL,
+        "toggle_result": {"disabled": disable_result["disabled"]},
+        "verification": {
+            "status": checks.AUTOSAVE_NO_SAVE_CONTROL,
+            "verified": False,
+            "note": "a reload read at least one toggle back ON",
+            "basis": "reload_reverted",
+        },
+    }
+    discarded = [f for f in findings_for(discarded_action) if f["check_type"] == "denial-autosave-discarded"]
+    assert len(discarded) == 1, discarded
+    evidence_labels = [e["label"] for e in discarded[0]["evidence"] if "label" in e]
+    assert disabled_label in evidence_labels, discarded[0]["evidence"]
+    ok("denial-autosave-discarded's evidence also carries the sanitised label, not the raw aria-label")
+
+    report = render_markdown_report(
+        Path(tempfile.gettempdir()), "https://example.test/", _metadata(), discarded, [], [], {"denial": {"action_result": discarded_action}}
+    )
+    assert "FAKE SECTION BREAK" in report, "the flattened evidence must still be legible in the rendered report"
+    assert "\x00" not in report and "\x01" not in report and "\x1f" not in report
+    ok("the sanitised toggle label reaches the rendered report without its control characters")
 
 
 def test_click_control_refuses_to_click_without_a_pinned_handle() -> None:
@@ -9801,6 +9943,7 @@ def main() -> int:
             test_settings_path_autosave_verified_by_reload(page)
             test_settings_path_autosave_reload_reverts_stays_unverified(page)
             test_settings_path_autosave_verified_by_storage_write(page)
+            test_optional_toggle_label_and_error_text_reach_findings_sanitised(page)
             test_probe_autosave_reload_ordering_and_phase_tagging(page)
             test_execute_denial_wires_phase_ref_into_autosave_probe(page)
             test_manual_precedence_over_autosave_path(page)

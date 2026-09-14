@@ -2335,7 +2335,21 @@ _TOGGLE_SELECTOR = "input[type='checkbox'], [role='switch'], button[aria-pressed
 
 def _iter_optional_toggles(page: Page):
     """Yield (frame, index, item, label, state) for every visible optional
-    -category toggle across all frames, in a stable order."""
+    -category toggle across all frames, in a stable order.
+
+    `label` is page-authored (`_switch_label`'s aria-label / labelledby /
+    associated-label / sibling-text fallbacks) the same way `_public_control`'s
+    fields are, so both callers below - `read_optional_toggle_states` and
+    `disable_optional_toggles` - would otherwise put it straight into a
+    finding's evidence with only the pre-existing `[:700]` truncation and none
+    of `_untrusted_text`'s control-character stripping (issue #36). Sanitising
+    once here, before the label is handed to either caller, means neither
+    duplicates the call and the 700-char bound stays exactly what it was -
+    `_untrusted_text` enforces it directly instead of the callers slicing
+    afterwards. It is filtered against `OPTIONAL_CATEGORY`/`NECESSARY_CATEGORY`
+    on the raw label first, so sanitising afterwards cannot change which
+    toggles are yielded.
+    """
     for frame in page.frames:
         try:
             locator = frame.locator(_TOGGLE_SELECTOR)
@@ -2353,7 +2367,7 @@ def _iter_optional_toggles(page: Page):
             if not label or not OPTIONAL_CATEGORY.search(label) or NECESSARY_CATEGORY.search(label):
                 continue
             state = _switch_state(item)
-            yield frame, index, item, label, state
+            yield frame, index, item, _untrusted_text(label, 700), state
 
 
 def read_optional_toggle_states(page: Page) -> list[dict[str, Any]]:
@@ -2364,7 +2378,7 @@ def read_optional_toggle_states(page: Page) -> list[dict[str, Any]]:
     read-back can be compared against what was originally switched off.
     """
     return [
-        {"frame_url": frame.url, "index": index, "label": label[:700], "state": state}
+        {"frame_url": frame.url, "index": index, "label": label, "state": state}
         for frame, index, item, label, state in _iter_optional_toggles(page)
     ]
 
@@ -2372,7 +2386,7 @@ def read_optional_toggle_states(page: Page) -> list[dict[str, Any]]:
 def disable_optional_toggles(page: Page, action_log: list[dict[str, Any]]) -> dict[str, Any]:
     result: dict[str, Any] = {"examined": [], "disabled": [], "unknown": []}
     for frame, index, item, label, state in _iter_optional_toggles(page):
-        public = {"frame_url": frame.url, "index": index, "label": label[:700], "state_before": state}
+        public = {"frame_url": frame.url, "index": index, "label": label, "state_before": state}
         result["examined"].append(public)
         if state is True:
             try:
@@ -2383,7 +2397,11 @@ def disable_optional_toggles(page: Page, action_log: list[dict[str, Any]]) -> di
                 result["disabled"].append(public)
                 action_log.append({"time": utc_now(), "action": "disable_optional_toggle", "control": public, "success": after is False or after is None})
             except Exception as error:
-                public["error"] = str(error)[:800]
+                # A click-actionability failure's message can embed page-authored
+                # text (Playwright logs the intercepting/blocking element's own
+                # outerHTML in its error), so this is page-authored the same way
+                # `label` is and gets the same `_untrusted_text` treatment.
+                public["error"] = _untrusted_text(str(error), 800)
                 result["unknown"].append(public)
         elif state is None:
             result["unknown"].append(public)
