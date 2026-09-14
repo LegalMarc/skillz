@@ -5698,6 +5698,202 @@ def test_run_scenario_end_to_end(browser) -> None:
     ok("run_scenario wires checkpoints, exercises, event capture, and validity gating end to end")
 
 
+def test_run_scenario_accept_action_wiring(browser) -> None:
+    """`run_scenario`'s own wiring of the `accept` action (issue #37).
+
+    `execute_accept` itself is already exercised directly
+    (`test_accept_flow_completes_verifies_and_gates_the_scenario`), but nothing
+    drove it through `run_scenario`'s `elif action == "accept":` branch - the
+    checkpoint naming ("02-post-accept", not the deny path's "02-post-denial"),
+    the phase bookkeeping (`accept_interaction` -> `post_accept`), and
+    `action_result` reaching the caller as `run_scenario` shapes it. A fixture
+    whose accept button logs to the console lets the phase assertion be a real
+    behavioural check - it only passes if `phase_ref["name"]` was actually
+    "accept_interaction" at the moment the click fired - rather than one that
+    merely confirms no exception was raised.
+    """
+    import threading
+    from http.server import BaseHTTPRequestHandler, HTTPServer
+
+    accept_banner = """
+        <!doctype html><html><body><div style="height:1500px">content</div>
+        <div id="cookie-consent" role="dialog" style="position:fixed;bottom:0;left:0;right:0;padding:24px;background:white">
+          <p>We use cookies for analytics and advertising.</p>
+          <button id="accept">Accept All</button>
+        </div>
+        <script>
+          document.getElementById('accept').addEventListener('click', () => {
+            console.log('accept-button-clicked');
+            document.cookie = 'consent_state=all; path=/; max-age=31536000';
+            document.getElementById('cookie-consent').remove();
+          });
+        </script></body></html>
+    """
+
+    class _Handler(BaseHTTPRequestHandler):
+        def log_message(self, *args) -> None:
+            pass
+
+        def do_GET(self) -> None:
+            body = accept_banner.encode("utf-8")
+            self.send_response(200)
+            self.send_header("Content-Type", "text/html")
+            self.send_header("Content-Length", str(len(body)))
+            self.end_headers()
+            self.wfile.write(body)
+
+    with HTTPServer(("127.0.0.1", 0), _Handler) as server:
+        port = server.server_port
+        thread = threading.Thread(target=server.serve_forever, daemon=True)
+        thread.start()
+        try:
+            url = f"http://127.0.0.1:{port}/"
+            config = ScenarioConfig(
+                url=url, wait_ms=50, timeout_ms=8000, pages=0,
+                thorough=True, dwell_ms=100, scroll_stages=1,
+            )
+            with tempfile.TemporaryDirectory(prefix="cookie-auditor-scenario-accept-") as temp:
+                temp_path = Path(temp)
+                result = run_scenario(
+                    browser=browser, scenario="accept", config=config,
+                    private_dir=temp_path / "private", share_dir=temp_path / "share",
+                    action="accept", cmp_table=load_cmp_table(),
+                )
+
+                assert result["action"] == "accept", result["action"]
+                # "completed" for execute_accept's own return shape (see
+                # test_accept_flow_completes_verifies_and_gates_the_scenario)
+                # is accept_clicked + a verified verification, not merely
+                # "no exception".
+                action_result = result["action_result"]
+                assert action_result["status"] == "accept_clicked", action_result
+                assert action_result["click_count"] == 1, action_result
+                assert action_result["verification"]["verified"] is True, action_result["verification"]
+
+                checkpoint_names = [c["checkpoint"] for c in result["checkpoints"]]
+                assert "02-post-accept" in checkpoint_names, checkpoint_names
+                assert "02-post-denial" not in checkpoint_names, checkpoint_names
+
+                console_events = result["events"]["console"]
+                accept_click_phases = [e["phase"] for e in console_events if "accept-button-clicked" in e["text"]]
+                assert accept_click_phases == ["accept_interaction"], console_events
+                assert not any(e["phase"] in {"denial_interaction", "post_denial"} for e in console_events), console_events
+
+                assert result["errors"] == [], result["errors"]
+        finally:
+            server.shutdown()
+    ok("run_scenario's accept branch names the post-accept checkpoint, tracks the accept phase (not deny), "
+       "and surfaces execute_accept's completed status")
+
+
+def test_run_scenario_internal_navigation_loop_dwells_and_survives_a_broken_link(browser) -> None:
+    """`run_scenario`'s internal-navigation loop (issue #37).
+
+    Never ran under test: no existing `run_scenario`-level test used
+    `config.pages >= 2` against a fixture with real same-origin links, so the
+    per-page dwell/checkpoint bookkeeping - and the loop's `except Exception`
+    arm - never executed. This fixture's home page links to a real second page
+    (ranked first by `safe_internal_links`'s "about" preference) and to a route
+    that closes the connection with no response (ranked second), so one run
+    exercises both the success path and the failure path, and proves the
+    failure doesn't abort the rest of the scenario.
+    """
+    import threading
+    from http.server import BaseHTTPRequestHandler, HTTPServer
+
+    home_page = HUBSPOT_BANNER.replace(
+        "</body></html>",
+        '<p><a href="/about">About us</a></p><p><a href="/broken">Nowhere</a></p></body></html>',
+    )
+    about_page = "<!doctype html><html><body><h1>About</h1><p>Real second page content.</p></body></html>"
+
+    class _Handler(BaseHTTPRequestHandler):
+        def log_message(self, *args) -> None:
+            pass
+
+        def do_GET(self) -> None:
+            if self.path.startswith("/broken"):
+                # Close with no response at all, so the navigation to this
+                # link fails fast (a real network error) rather than hanging
+                # for the full navigation timeout.
+                self.close_connection = True
+                return
+            if self.path.startswith("/about"):
+                body = about_page.encode("utf-8")
+            else:
+                body = home_page.encode("utf-8")
+            self.send_response(200)
+            self.send_header("Content-Type", "text/html")
+            self.send_header("Content-Length", str(len(body)))
+            self.end_headers()
+            self.wfile.write(body)
+
+    with HTTPServer(("127.0.0.1", 0), _Handler) as server:
+        port = server.server_port
+        thread = threading.Thread(target=server.serve_forever, daemon=True)
+        thread.start()
+        try:
+            url = f"http://127.0.0.1:{port}/"
+            config = ScenarioConfig(
+                url=url, wait_ms=50, timeout_ms=8000, pages=2,
+                thorough=True, dwell_ms=100, scroll_stages=1,
+            )
+            with tempfile.TemporaryDirectory(prefix="cookie-auditor-scenario-internal-nav-") as temp:
+                temp_path = Path(temp)
+                result = run_scenario(
+                    browser=browser, scenario="internal-nav", config=config,
+                    private_dir=temp_path / "private", share_dir=temp_path / "share",
+                    action="deny", cmp_table=load_cmp_table(),
+                )
+
+                assert result["action_result"]["status"] == "direct_reject_clicked", result["action_result"]
+
+                # page_1 (the "about" link, ranked ahead of "broken" by
+                # safe_internal_links' preferred-path scoring) actually ran: a
+                # real dwell result, not an absent key or an empty stub.
+                page_1_dwell = result["exercises"].get("page_1_dwell")
+                assert page_1_dwell is not None, result["exercises"]
+                assert page_1_dwell["scrolled_to"] == [1.0], page_1_dwell
+                assert page_1_dwell["dwell_ms"] > 0, page_1_dwell
+                # page_2 (the "broken" link) failed, so its dwell never ran.
+                assert "page_2_dwell" not in result["exercises"], result["exercises"]
+
+                checkpoint_names = [c["checkpoint"] for c in result["checkpoints"]]
+                assert checkpoint_names == [
+                    "01-pre-interaction", "02-post-denial", "03-after-refresh",
+                    "04-internal-page-1", "09-post-exercise",
+                ], checkpoint_names
+
+                # More checkpoints than the comparable single-page run
+                # (test_run_scenario_end_to_end, pages=0) captures with the
+                # same action: that run's 4 vs. this run's 5.
+                assert len(checkpoint_names) > 4, checkpoint_names
+
+                broken_errors = [e for e in result["errors"] if e.get("stage") == "internal_navigation_2"]
+                assert len(broken_errors) == 1, result["errors"]
+                broken_error = broken_errors[0]
+                assert broken_error["url"] == f"http://127.0.0.1:{port}/broken", broken_error
+                assert broken_error["error"], broken_error
+                # No other stage's error - the scenario error list wasn't
+                # polluted, and nothing else about the run failed.
+                assert result["errors"] == broken_errors, result["errors"]
+
+                # The rest of the scenario still completed rather than
+                # aborting: the top-level "scenario" fatal-error stage never
+                # fired, and normal end-of-run bookkeeping still happened.
+                assert not any(e.get("stage") == "scenario" for e in result["errors"]), result["errors"]
+                assert result["validity"]["valid"] is True, result["validity"]
+
+                private_scenario = temp_path / "private" / "internal-nav"
+                share_scenario = temp_path / "share" / "internal-nav"
+                assert (private_scenario / "internal-nav-result.raw.json").exists()
+                assert (share_scenario / "internal-nav-result.json").exists()
+        finally:
+            server.shutdown()
+    ok("run_scenario's internal-navigation loop dwells on a real second page, captures its checkpoint, "
+       "and records a 404-shaped failure under internal_navigation_2 without aborting the scenario")
+
+
 def test_capture_policy_texts_archives_and_skips_for_real_reasons() -> None:
     """capture_policy_texts (E6) had never actually run in a test - only ever
     stubbed out entirely (see test_time_budget_skips_only_corroborating_work).
@@ -9988,6 +10184,8 @@ def main() -> int:
             test_exercise_search_no_input_present(page)
             test_assert_clean_context_detects_dirty_state(page)
             test_run_scenario_end_to_end(browser)
+            test_run_scenario_accept_action_wiring(browser)
+            test_run_scenario_internal_navigation_loop_dwells_and_survives_a_broken_link(browser)
         finally:
             browser.close()
 
