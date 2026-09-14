@@ -734,6 +734,23 @@ def parse_control_verdicts(data: Any, target_host: str) -> dict[str, Any]:
             # alongside an adjudication_id, for the identical reason.
             reject("needs a label to match against, even alongside an adjudication_id")
             continue
+        if "cmp" not in entry:
+            # Issue #33: `cmp` cannot be required truthy the way `kind` and
+            # `label` are just above - `resolution["cmp"]` is legitimately
+            # `None` on a run that never fingerprints a CMP at all (a
+            # custom/unbranded banner), so an operator adjudicating exactly
+            # that case has to be able to write `"cmp": null` and have it
+            # accepted. What must not be accepted is the entry that simply
+            # never mentions `cmp` - that is not "I checked, there is no
+            # CMP here", it is silence, and `_matching_verdict`'s
+            # `(kind, label, cmp)` fallback used to treat that silence as a
+            # wildcard matching every CMP a rerun might detect. Requiring
+            # the *key*, not a truthy value, closes that hole without
+            # reintroducing the "too tight" failure a truthy requirement
+            # would cause for the legitimate no-CMP case.
+            reject("needs a cmp field (use null if this control has no detected CMP), "
+                   "even alongside an adjudication_id")
+            continue
         if decision == "use_selector":
             selector = entry.get("selector")
             if not isinstance(selector, str) or not selector.strip():

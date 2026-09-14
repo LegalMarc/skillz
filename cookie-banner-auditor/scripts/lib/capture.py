@@ -1322,6 +1322,42 @@ def _matching_verdict(resolution: dict[str, Any], verdicts: list[dict[str, Any]]
         an exact id match may resolve that case, so a verdict for one
         conflict can never silently satisfy a different one of the same kind
         (14f11f8: "never across any of them").
+
+    (c) TOO LOOSE, one field further (issue #33). `cmp` used to be compared
+        with `verdict.get("cmp") not in (None, resolution.get("cmp"))` -
+        deliberately different from the exact `!=` used for `kind` and
+        `label` just above, on the reasoning that a verdict simply omitting
+        `cmp` should not have to guess a CMP id. In practice that made a
+        missing `cmp` a silent wildcard: a verdict written for one vendor's
+        conflict, with `kind` and `label` happening to coincide, could
+        authorise its selector against a *different* CMP entirely, on a
+        different site or after a CMP migration on the same one - the exact
+        shape of defect (a), just for the third field of the triple instead
+        of the first two.
+
+        `cmp` cannot simply join `kind` and `label` under the same
+        `not entry.get(...)` truthiness check `parse_control_verdicts` uses
+        for those two, though, because unlike them it has a legitimate
+        `None`: `resolution["cmp"]` is `None` whenever a run never
+        fingerprints a CMP at all (a custom/unbranded banner - see
+        `find_control` around `cmp_entry`), and a verdict adjudicating
+        exactly that control has nothing truthy to put there. Requiring
+        `cmp` to be truthy would make such a verdict impossible to write at
+        all, which is defect (b)'s failure mode, not a fix for (a).
+
+        The fix is to require the *key*, not a truthy value:
+        `parse_control_verdicts` now rejects any entry that omits `cmp`
+        entirely, the same way it rejects one missing `kind` or `label`,
+        while an entry that explicitly writes `"cmp": null` for the
+        no-CMP case loads cleanly. That lets this function drop the
+        `(None, ...)` special case and compare `cmp` with plain `!=`,
+        exactly like `kind` and `label` immediately above - a verdict with
+        no `cmp` can now only ever match a resolution whose own `cmp` is
+        also `None`, `find_control` never fills in a guessed value for
+        either side, and a verdicts list built directly (as the test suite
+        does, bypassing `parse_control_verdicts`) is the caller's
+        responsibility to get right, exactly as already documented for
+        `label` in part (a).
     """
     conflict = resolution.get("conflict")
     conflict_id = (conflict or {}).get("adjudication_id")
@@ -1335,7 +1371,7 @@ def _matching_verdict(resolution: dict[str, Any], verdicts: list[dict[str, Any]]
             continue
         if verdict.get("label") != resolution.get("label"):
             continue
-        if verdict.get("cmp") not in (None, resolution.get("cmp")):
+        if verdict.get("cmp") != resolution.get("cmp"):
             continue
         return verdict
     return None
