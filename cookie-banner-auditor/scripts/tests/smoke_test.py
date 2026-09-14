@@ -1396,6 +1396,72 @@ def test_same_control_js_unrelated_shadow_trees_stay_distinct_regardless_of_dept
     ok("_SAME_CONTROL_JS keeps two-level-deep but unrelated shadow trees distinct")
 
 
+def test_same_control_compares_through_pinned_handles_not_a_shifted_locator(page) -> None:
+    """Issue #35: extends #29's pinned-handle identity guarantee to `_same_control`.
+
+    #29 made `_control_metadata` pin a `handle` to the exact node every other
+    read of a control dict is built from, but `_same_control` still compared
+    through `a["locator"]`/`b["locator"]` instead - fresh, Playwright-re-
+    resolved queries. #28's security argument leans on this comparison being
+    trustworthy: it is what conflict detection uses to decide whether the CMP
+    table and the text scorer reached one control or two, and a page mutation
+    landing between when `a`/`b`'s handles were pinned and this comparison
+    could make that verdict describe different nodes than the ones #29
+    guaranteed everything else operates on.
+
+    Reproduced without any timing dependency: both handles are pinned first,
+    then the page is mutated directly (no need to race a call boundary the
+    way `click_control`'s tests do, since the test drives `_same_control`
+    itself rather than something with an internal, timed sequence) - the
+    reject button's own selector is stolen and handed to the accept button.
+    `b["handle"]` still names the original, now attribute-less, reject
+    button; `b["locator"]` re-resolved after the mutation would instead find
+    the accept button - the very node `a` is pinned to - and a locator-only
+    comparison would wrongly collapse two distinct controls into "identical".
+    """
+    page.set_content("""
+        <!doctype html><html><body>
+          <button id="accept-btn">Accept All</button>
+          <button data-role="reject">Reject All</button>
+        </body></html>
+    """)
+
+    accept_locator = page.locator("#accept-btn")
+    accept_handle = accept_locator.element_handle()
+    reject_locator = page.locator('[data-role="reject"]')
+    reject_handle = reject_locator.element_handle()
+    assert accept_handle is not None and reject_handle is not None
+
+    a = {"locator": accept_locator, "handle": accept_handle, "frame": page.main_frame}
+    b = {"locator": reject_locator, "handle": reject_handle, "frame": page.main_frame}
+
+    # Sanity, before anything mutates: two distinct, unrelated buttons.
+    verdict, basis = _same_control(a, b)
+    assert (verdict, basis) == (False, "unrelated"), (verdict, basis)
+
+    page.evaluate("""
+        () => {
+          document.querySelector('[data-role="reject"]').removeAttribute('data-role');
+          document.getElementById('accept-btn').setAttribute('data-role', 'reject');
+        }
+    """)
+
+    verdict, basis = _same_control(a, b)
+    assert (verdict, basis) == (False, "unrelated"), (
+        f"the pinned handles still name two physically distinct buttons - a mutation that steals "
+        f"the reject selector for the accept button must not make _same_control re-resolve b's "
+        f"locator onto a's own node and report them as identical: {(verdict, basis)}"
+    )
+    ok("_same_control compares a/b through their pinned handles, surviving a mutation that would "
+       "make b's raw locator re-resolve onto a's own node")
+
+    # The hand-built dict pair with no "handle" key at all - the shape the
+    # test suite itself constructs elsewhere - must keep working via the
+    # locator fallback. Already exercised by every `at()`-built pair in
+    # `test_same_control_distinguishes_nesting_from_disagreement` above (its
+    # dicts carry only "locator"/"frame"); nothing further to add here.
+
+
 def test_control_ref_is_re_resolvable_and_bounds_page_text(page) -> None:
     """The written-down form of a candidate: re-resolvable, and bounded.
 
@@ -1455,6 +1521,63 @@ def test_control_ref_is_re_resolvable_and_bounds_page_text(page) -> None:
     )
     assert _untrusted_text(None, 50) == ""
     ok("page-authored text is flattened and bounded, but never silently dropped")
+
+
+def test_control_ref_reads_css_path_through_the_pinned_handle_not_a_shifted_locator(page) -> None:
+    """Issue #35: extends #29's pinned-handle identity guarantee to `_control_ref`.
+
+    Every other field in a `ref` dict - `text`, `aria_label`, `html_excerpt`
+    - comes from already-captured, handle-derived fields on `control`;
+    `css_path` alone used to re-query the live page via `control["locator"]`,
+    which Playwright re-resolves fresh on every use. That can in principle
+    name a different node's path than the rest of the same `ref` describes.
+
+    Mirrors #29's own index-shifting reproduction (see `test_click_control_
+    resolves_the_scored_element_through_an_index_shifting_mutation`): a
+    handle is pinned to the real control first, then a decoy is inserted
+    ahead of it so the corresponding `nth(0)` locator now resolves to the
+    decoy instead. `css_path` must still describe the pinned handle's node.
+    """
+    page.set_content("""
+        <!doctype html><html><body>
+          <div id="banner"><button id="real-reject">Reject All</button></div>
+        </body></html>
+    """)
+    locator = page.locator("#banner button").nth(0)
+    handle = locator.element_handle()
+    assert handle is not None
+
+    page.evaluate("""
+        () => {
+          const decoy = document.createElement('button');
+          decoy.id = 'decoy-btn';
+          decoy.textContent = 'Decoy';
+          const banner = document.getElementById('banner');
+          banner.insertBefore(decoy, banner.firstChild);
+        }
+    """)
+    # `#banner button` now matches [decoy, real-reject] in that order, so a
+    # fresh `nth(0)` re-query - what `locator` alone would give - resolves to
+    # the decoy. The pinned `handle` still names `#real-reject` regardless.
+
+    control = {
+        "locator": locator, "handle": handle, "frame": page.main_frame,
+        "text": "Reject All", "tag": "button", "id": "real-reject", "className": "",
+        "role": "", "ariaLabel": "", "type": "", "html": "<button>x</button>",
+        "box": {"x": 0, "y": 0, "width": 10, "height": 10},
+    }
+    ref = _control_ref(control)
+    assert ref["css_path"] == "#real-reject", (
+        f"css_path must describe the pinned handle's node, not the decoy a re-resolved locator "
+        f"would now find at the same nth(0) position: {ref['css_path']!r}"
+    )
+    ok("_control_ref reads css_path through the pinned handle, surviving a DOM insertion that "
+       "shifts what the corresponding locator would resolve to")
+
+    # A control dict with no "handle" key at all must keep working via the
+    # locator fallback - already covered by `test_control_ref_is_re_
+    # resolvable_and_bounds_page_text` above, whose hand-built `control`
+    # dicts carry no "handle" entry.
 
 
 def test_public_control_flattens_hostile_candidate_text_before_it_reaches_a_finding() -> None:
@@ -2721,6 +2844,96 @@ def test_measure_tab_order_bounded(page) -> None:
     assert result["cap_hit"] is True, result
     assert result["max_presses"] == 1
     ok("measure_tab_order bounds its Tab-press budget and reports the cap being hit")
+
+
+def test_execute_denial_measures_tab_order_and_focus_through_pinned_handles_not_a_shifted_locator(page) -> None:
+    """Issue #35: extends #29's pinned-handle identity guarantee to (b) -
+    `execute_denial`'s tab-order and focus-visibility evidence.
+
+    `find_control` pins each control's handle the moment it resolves (#29),
+    but `execute_denial` used to hand `measure_tab_order`/`measure_focus_
+    visibility` the raw `locator` instead - `frame.locator(CONTROL_SELECTOR)
+    .nth(index)`, re-resolved fresh on every use. A control inserted into the
+    page after both controls resolve shifts every later `nth(index)` re-
+    query by one slot: `accept`'s locator would resolve onto the newly-
+    inserted decoy, and `reject`'s locator would resolve onto the real
+    `accept` button - a substitution reaching this evidence the same way
+    #29 closed it for the click itself.
+
+    Reproduced deterministically, no wall-clock race: `find_control` is
+    patched to insert the decoy the instant it returns for `reject` - after
+    both controls' handles are already pinned, before `execute_denial`'s
+    tab-order/focus block runs at all.
+    """
+    _fresh_content(page, """
+        <!doctype html><html><head><style>
+          #accept:focus { outline: 3px solid blue; }
+          #reject:focus { outline: none; box-shadow: none; }
+        </style></head><body>
+        <div style="position:fixed;bottom:0;padding:20px">
+          <p>We use cookies for analytics and advertising on this site.</p>
+          <button id="accept" tabindex="1">Accept All</button>
+          <button id="reject" tabindex="2">Reject All</button>
+        </div>
+        </body></html>
+    """)
+
+    import lib.capture as _capture_module
+    original_find_control = _capture_module.find_control
+    mutated = {"done": False}
+
+    def patched_find_control(page_arg, kind, *args, **kwargs):
+        resolved = original_find_control(page_arg, kind, *args, **kwargs)
+        if kind == "reject" and not mutated["done"]:
+            mutated["done"] = True
+            # Inserted ahead of both already-resolved controls: every
+            # CONTROL_SELECTOR match from here on shifts one slot, so a
+            # stale nth(index) locator built before this line now names a
+            # different element than the one it was resolved against.
+            page.evaluate("""
+                () => {
+                  const decoy = document.createElement('button');
+                  decoy.id = 'decoy-btn';
+                  decoy.textContent = 'Decoy, inserted after both controls resolved';
+                  document.body.insertBefore(decoy, document.body.firstChild);
+                }
+            """)
+        return resolved
+
+    _capture_module.find_control = patched_find_control
+    try:
+        result = execute_denial(
+            page, page.context, wait_ms=20, manual=False, share_scenario_dir=Path(tempfile.mkdtemp())
+        )
+    finally:
+        _capture_module.find_control = original_find_control
+
+    assert mutated["done"], "the mutation never fired - this run proves nothing about the substitution"
+
+    accept_evidence = result["accept_candidates"][0]
+    reject_evidence = result["reject_candidates"][0]
+
+    assert accept_evidence.get("tab_position") == 1, (
+        f"accept's tab position must still describe the real #accept button (tabindex=1), not "
+        f"whatever a stale, index-shifted locator would now resolve onto: {accept_evidence}"
+    )
+    assert reject_evidence.get("tab_position") == 2, (
+        f"reject's tab position must still describe the real #reject button (tabindex=2), not the "
+        f"real #accept button a stale, index-shifted locator would now resolve to: {reject_evidence}"
+    )
+    assert accept_evidence.get("focus_visible") is True, (
+        f"accept's recorded focus visibility must describe the real #accept button (which has a "
+        f"visible focus ring), not whatever a stale, index-shifted locator would now resolve onto: "
+        f"{accept_evidence}"
+    )
+    assert reject_evidence.get("focus_visible") is False, (
+        f"reject's recorded focus visibility must describe the real #reject button (no focus ring), "
+        f"not the real #accept button's ring, which a stale, index-shifted locator would now "
+        f"resolve to: {reject_evidence}"
+    )
+    ok("execute_denial's tab-order and focus-visibility evidence is read through each control's "
+       "pinned handle, surviving a DOM insertion that shifts what a stale nth(index) locator would "
+       "resolve to after both controls have already been resolved")
 
 
 @contextmanager
@@ -9575,7 +9788,9 @@ def main() -> int:
             test_same_control_distinguishes_nesting_from_disagreement(page)
             test_same_control_js_shadow_boundary_two_levels_deep(page)
             test_same_control_js_unrelated_shadow_trees_stay_distinct_regardless_of_depth(page)
+            test_same_control_compares_through_pinned_handles_not_a_shifted_locator(page)
             test_control_ref_is_re_resolvable_and_bounds_page_text(page)
+            test_control_ref_reads_css_path_through_the_pinned_handle_not_a_shifted_locator(page)
             test_veto_control_reads_aria_label_against_real_dom(page)
             test_save_and_reject_label_resolves_as_save_without_losing_reject(page)
             test_denial_flow_and_verification(page)
@@ -9599,6 +9814,7 @@ def main() -> int:
             test_measure_tab_order_distinguishes_cap_from_unreachable(page)
             test_execute_denial_measures_focus_visibility_per_control(page)
             test_measure_tab_order_bounded(page)
+            test_execute_denial_measures_tab_order_and_focus_through_pinned_handles_not_a_shifted_locator(page)
             test_onetrust_shape_uses_the_second_layer_reject(page)
             test_a_wrong_table_entry_no_longer_pre_empts_the_generic_scorer(page)
             test_a_verdict_is_a_proposal_and_is_re_checked_before_it_is_obeyed(page)

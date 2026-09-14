@@ -385,6 +385,25 @@ def _dispose_quietly(handle: ElementHandle) -> None:
         pass
 
 
+# Issue #35: `control["handle"]` (pinned below, for `for_click=True`) is
+# never explicitly disposed once callers are done with it - `_dispose_
+# quietly` above only covers the two early-return cases where the handle
+# is pinned but the candidate turns out not to exist (not visible, no
+# label text). A candidate that survives those checks has its handle read
+# by `find_control`, `_same_control`, `measure_tab_order`/`measure_focus_
+# visibility` and finally `click_control` - across several function
+# boundaries, with no single one of them positioned to know it is the
+# "last" reader, and a further phase (settings-path denial, autosave
+# probes) can still resolve and click the same control again later in
+# `run_scenario`. Disposing anywhere short of the point where the whole
+# scenario is done with the control would risk disposing a handle a later
+# reader still needs; that point is not local to this function, or to any
+# one function this ticket touches, without restructuring how control
+# dicts are owned across the run - out of scope here (see #35's own
+# acceptance criteria, which allows leaving this with a note rather than
+# widening the ticket to redesign that ownership).
+
+
 def _control_metadata(
     locator: Locator, frame: Frame, index: int, *, for_click: bool = True
 ) -> dict[str, Any] | None:
@@ -831,15 +850,24 @@ def _control_ref(control: dict[str, Any] | None) -> dict[str, Any] | None:
     the DOM between one load and the next. That is exactly why a verdict
     naming a selector is re-resolved and re-vetoed at the point it is used,
     instead of being trusted because it once matched.
+
+    Issue #35: `css_path` is read through `control`'s pinned `handle` when
+    one is present, not only through `locator` - every other field in this
+    same `ref` (`text`, `aria_label`, `html_excerpt`) already comes from
+    already-captured, handle-derived fields on `control`; `css_path` alone
+    used to re-query the live page via `locator`, which can in principle
+    name a different node's path than the rest of this same `ref` describes.
+    `locator` remains the fallback for a control dict with no `"handle"`
+    entry at all.
     """
     if not control:
         return None
     class_tokens = [t for t in str(control.get("className") or "").split() if t][:8]
     css_path = ""
-    locator = control.get("locator")
-    if locator is not None:
+    target = control.get("handle") or control.get("locator")
+    if target is not None:
         try:
-            css_path = str(locator.evaluate(_CSS_PATH_JS) or "")
+            css_path = str(target.evaluate(_CSS_PATH_JS) or "")
         except Exception:
             css_path = ""
     ref = {
@@ -920,6 +948,27 @@ def _same_control(a: dict[str, Any] | None, b: dict[str, Any] | None) -> tuple[b
     either answer: the caller treats it the same way it treats a real
     disagreement (refuse to click) but records that it could not tell, which
     is a different sentence in a report than "these are two controls".
+
+    Issue #35: extends #29's pinned-handle identity guarantee to this
+    comparison. #29 made `_control_metadata` pin a `handle` to the exact
+    node every other read of a control dict is built from; this function
+    still compared through `a["locator"]`/`b["locator"]` instead - fresh,
+    Playwright-re-resolved queries - so a page mutation between the moment
+    `a`/`b`'s handles were pinned and the moment this runs (e.g. during
+    conflict detection, comparing a CMP-table candidate against a scored
+    one) could make the identity verdict describe different nodes than the
+    pinned ones every other read in the same adjudication record uses. Both
+    sides now prefer `handle` when present, so when `a` and `b` both carry
+    one - the normal, non-test-fixture path - this comparison names the
+    exact same physical nodes as the rest of the record, closing that gap.
+    `locator` remains the fallback only for the hand-built dicts the test
+    suite constructs with no `"handle"` entry at all, the same handle-first,
+    locator-fallback-for-hand-built-dicts shape `click_control` has used
+    since #29 - not a different mechanism. (Separately, #34 hardened the JS
+    side of this same comparison - the shadow-boundary climb inside
+    `_SAME_CONTROL_JS` above; that is a DOM-structure question about how two
+    already-supplied nodes relate, distinct from this point, which is about
+    which Python-side object supplies those two nodes in the first place.)
     """
     if not a or not b:
         return None, "missing"
@@ -931,18 +980,28 @@ def _same_control(a: dict[str, Any] | None, b: dict[str, Any] | None) -> tuple[b
     for attempt in range(2):
         result: dict[str, Any] = {}
         handle = None
+        owns_handle = False
         try:
-            handle = b["locator"].element_handle(timeout=1000)
+            handle = b.get("handle")
+            if handle is None:
+                handle = b["locator"].element_handle(timeout=1000)
+                owns_handle = True
             if handle is None:
                 raise RuntimeError("no element handle")
-            result = a["locator"].evaluate(_SAME_CONTROL_JS, handle) or {}
+            a_target = a.get("handle") or a["locator"]
+            result = a_target.evaluate(_SAME_CONTROL_JS, handle) or {}
         except Exception as error:
             if attempt == 0:
                 _sleep_ms(250)
                 continue
             return None, f"error:{str(error)[:120]}"
         finally:
-            if handle is not None:
+            # `owns_handle` is only True when this attempt resolved `b`'s
+            # locator itself into a fresh, temporary handle - a pinned
+            # `control["handle"]` is owned by the control dict and reused
+            # later (by `click_control`, etc.), so disposing it here would
+            # break that later use.
+            if owns_handle and handle is not None:
                 try:
                     handle.dispose()
                 except Exception:
@@ -1872,7 +1931,7 @@ _FOCUS_STYLE_JS = r"""
 
 def measure_tab_order(
     page: Page,
-    labeled_locators: dict[str, Locator],
+    labeled_locators: dict[str, Locator | ElementHandle],
     max_presses: int = MAX_TAB_PRESSES,
 ) -> dict[str, Any]:
     """Walk the page's real keyboard focus order and record the Tab-press
@@ -1883,6 +1942,13 @@ def measure_tab_order(
     than inferring it from DOM order or `tabindex` values. A control that
     appears first in markup can still be reached last, or never, depending on
     tabindex and focusability quirks.
+
+    `labeled_locators`' values accept either a `Locator` or an `ElementHandle`
+    - both support the `.evaluate(...)` calls this function makes on them.
+    Issue #35: a caller that already holds a pinned handle (from #29's
+    `_control_metadata`) should pass it instead of `control["locator"]`, so
+    this evidence describes the same node #29 pinned rather than whatever
+    the locator/selector currently resolves to.
 
     Bounded to `max_presses` so a page with hundreds of focusable elements
     cannot hang the scenario. A missing control is ambiguous on its own: it
@@ -1898,7 +1964,7 @@ def measure_tab_order(
     false "not reachable".
     """
     positions: dict[str, int | None] = {name: None for name in labeled_locators}
-    tagged: list[Locator] = []
+    tagged: list[Locator | ElementHandle] = []
     budget_exhausted = False
     cycle_observed = False
     aborted = False
@@ -1982,13 +2048,24 @@ def measure_tab_order(
     return {"positions": positions, "cap_hit": cap_hit, "max_presses": max_presses}
 
 
-def measure_focus_visibility(locator: Locator) -> dict[str, Any]:
+def measure_focus_visibility(locator: Locator | ElementHandle) -> dict[str, Any]:
     """Focus a control and compare its computed outline/box-shadow/border
     against the unfocused state.
 
     A visible indicator is any measurable change across those properties; a
     control that renders identically focused and unfocused has no focus
     indicator regardless of what its CSS claims to declare.
+
+    Accepts either a `Locator` or an `ElementHandle` - both support the
+    `.evaluate(...)` and `.focus(...)` calls this function makes on `locator`.
+    Issue #35: a caller that already holds a pinned handle (from #29's
+    `_control_metadata`) should pass it instead of `control["locator"]`, so
+    this evidence describes the same node #29 pinned rather than whatever the
+    locator/selector currently resolves to. `ElementHandle.focus()` takes no
+    `timeout` argument (unlike `Locator.focus`, since a handle is already
+    resolved - there is nothing left to wait for), so it is called
+    differently depending on which was passed; every other call this
+    function makes is identical either way.
     """
     try:
         unfocused = locator.evaluate(_FOCUS_STYLE_JS)
@@ -1996,7 +2073,10 @@ def measure_focus_visibility(locator: Locator) -> dict[str, Any]:
         return {"measured": False, "visible": None, "reason": "could not read unfocused style"}
 
     try:
-        locator.focus(timeout=2000)
+        if isinstance(locator, ElementHandle):
+            locator.focus()
+        else:
+            locator.focus(timeout=2000)
     except Exception:
         return {"measured": False, "visible": None, "reason": "control could not be focused"}
 
@@ -2798,11 +2878,20 @@ def execute_denial(
     # (checks.measure_symmetry) alongside the rest of the pure, Playwright-free
     # logic - not here in the browser-driving half of the split.
     if accept_control and reject_control:
+        # Issue #35: prefer each control's pinned handle (see #29's
+        # `_control_metadata`) over its raw `locator`, so this evidence
+        # describes the same node #29 pinned rather than whatever the
+        # locator/selector resolves to at this later moment. `locator`
+        # remains the fallback for a control dict with no `"handle"` entry.
         tab_order = measure_tab_order(
-            page, {"accept": accept_control["locator"], "reject": reject_control["locator"]}
+            page,
+            {
+                "accept": accept_control.get("handle") or accept_control["locator"],
+                "reject": reject_control.get("handle") or reject_control["locator"],
+            },
         )
-        accept_focus = measure_focus_visibility(accept_control["locator"])
-        reject_focus = measure_focus_visibility(reject_control["locator"])
+        accept_focus = measure_focus_visibility(accept_control.get("handle") or accept_control["locator"])
+        reject_focus = measure_focus_visibility(reject_control.get("handle") or reject_control["locator"])
         accept_position = tab_order["positions"].get("accept")
         reject_position = tab_order["positions"].get("reject")
 
