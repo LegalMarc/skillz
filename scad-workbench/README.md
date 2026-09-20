@@ -10,9 +10,12 @@ project in the survey leaves to the reader: a toolchain that actually works on
 a headless machine, and an acceptance test proving the verification can fail.
 
 ```
-./install.sh    # toolchain + libraries + skills, idempotent
+./install.sh    # toolchain + libraries + skills, idempotent; non-zero if it cannot render
 ./verify.sh     # acceptance test: must catch a motion clash, must not invent one
+./render.sh m.scad build/preview   # six views + one contact sheet to read
 ```
+
+Starting a fresh session against this directory: **[HANDOFF.md](HANDOFF.md)**.
 
 ## Why this stack
 
@@ -34,6 +37,15 @@ by search path so no model file carries an absolute include.
 
 **The Python stack installs separately** because it is not needed to *write* or
 *render* a model, only to *check* one. The skill degrades honestly without it.
+
+**Six views on one shared camera, tiled into a single sheet.** The skill's own
+guidance is a lone `--viewall` isometric, which hides a bore through the wrong
+face or a part floating off its mate. `--viewall` also fits *each* view
+independently, rendering the same part at different scales from different
+angles — so `render.sh` measures the bounding box once and holds one camera
+fixed across all six. The contact sheet is one image read per iteration
+instead of six, which is the difference between a loop that can run for twenty
+rounds and one that fills its context in five.
 
 ## The survey
 
