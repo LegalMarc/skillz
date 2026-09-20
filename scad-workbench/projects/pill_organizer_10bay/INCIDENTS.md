@@ -233,3 +233,33 @@ declarations against what they claimed to test and by probing the mesh with
 - **Root cause:** OpenSCAD evaluates a re-assigned top-level variable at its FIRST position with its LAST expression; at that point `SCALE` was undefined, so the default won.
 - **Fix:** the wrapper sets `TEST_SCALE` only, and the include reads it as a fallback.
 - **Already promoted to a rule?** not yet -- same family as the revision 3-5 hoisting entry: never assign the same top-level name in both an includer and its include.
+
+## Revision 7 -- the vault and the edges
+
+### 2026-09-20 -- reaching a snap tab 1mm up into its plate put the tab's outer face on the plate's edge face
+- **Where:** `parts/fill_lid.scad`, the back tab.
+- **Symptom:** fill lid not watertight, 3 edges shared by 4-6 faces, all on the line x 103.9-119.9, y = 103.8 (the plate's back edge), z 0-1.
+- **Root cause:** revision 6 extended each tab 1mm up into the plate for a volumetric weld (the tab had ended exactly on the plate's underside). The tab is flush with the plate's edge, so that 1mm put the tab's outer face ON the plate's back face. The front tab survived only because the pull lip covers it.
+- **Fix:** `fill_tab_inset = 0.2`: each tab's outer face sits 0.2mm inside the plate's edge. The barb still projects `fill_tab_barb` past the edge, so the engagement is unchanged.
+- **Already promoted to a rule?** the coplanar candidate from `scallop_over` again, in its union form: a feature that overlaps its host must not be flush with any face of the host in the overlap.
+
+### 2026-09-20 -- a Minkowski chamfer left zero-area slivers at a concave corner, and the hull that replaced it floated the lip off the bed
+- **Where:** `parts/fill_lid.scad`, `fill_plate()`, the top chamfer (D27).
+- **Symptom:** first, 4 edges shared by 4-6 faces and four zero-volume "bodies", all within 0.1mm of (97.9, 0, 3.0) -- the concave corner where the pull lip meets the plate, on the chamfer's top plane. Then, with the lip built as its own hulled piece 0.1mm inside the plate's faces, the print-orientation scan showed 267 mm^2 of 90 degree overhang: the lip's top face, 0.1mm above the bed.
+- **Root cause:** `minkowski()` of a non-convex outline with a cone sweeps the near-apex ring through the concave corner and emits degenerate faces there; `hull()` cannot take the whole outline because it is not convex. Keeping the lip 0.1 inside the plate on BOTH faces avoided coplanar faces but moved the face that goes on the bed.
+- **Fix:** plate and lip are each a convex rounded rectangle hulled with its own inset. The lip's top is flush with the plate's; its solid ends at `lip_back` = 0.95, inside the plate's 1mm chamfer band, where the plate's top is already below lid_t, so the two top faces lie on one plane without overlapping. Its underside sits 0.1 above the plate's. Its own chamfer runs along its front and sides only.
+- **Already promoted to a rule?** not yet -- candidate: chamfer a non-convex outline as a union of convex pieces hulled separately; and a face that goes on the bed is never the one to offset.
+
+### 2026-09-20 -- the vault roof and a rail root both reached weld_embed into the same 2.8mm side wall
+- **Where:** `parts/body.scad`, `vault_roof()` at bay 1's left edge and bay 5's right edge, `check_subfeature_overlap.py`.
+- **Symptom:** UNINTENDED SUB-FEATURE OVERLAP body__rail_male.stl <-> body__vault_roof.stl, 20.69 mm^3.
+- **Root cause:** the roof halves reached `weld_embed` = 1.5 into whatever wall bounds their bay; the rail roots reach 1.5 into the side walls from outside. 1.5 + 1.5 in a 2.8 wall.
+- **Fix:** `vault_embed` = 1.0 for the roof, with an assert that the two embeds leave 0.2 of wall between them.
+- **Already promoted to a rule?** not yet -- candidate: any two features welding into the same wall from opposite sides need an assert on the sum of their embeds against the wall.
+
+### 2026-09-20 -- rounding a 3mm plate with a 1.5mm opening pass erased the pick lid, but only when the assembly asked for it
+- **Where:** `parts/pick_lid.scad`, `pick_plate()` / `pick_hook()`, first attempt at D27.
+- **Symptom:** the part file rendered, passed its bbox and was watertight. `assembly.scad -D MODE="part" -D PART="pick_lid"` produced "Current top level object is empty" with no warning, `build/positioned/pick_lid.stl` was left over from revision 6, and the collision check passed against that stale file. The six-view renders of the open assembly simply had no pick lid in them, which is how it was noticed.
+- **Root cause:** `offset(r = 1.5) offset(r = -1.5)` on a section whose perpendicular thickness is exactly 3.0 erodes it to a zero-width line. Standalone, floating point left a sliver the dilation grew back; through `use<>` it was exactly empty. The skirt (2.65 wide) was in the same state.
+- **Fix:** `lid_round = 1.0` with an assert against half the plate and skirt thickness.
+- **Already promoted to a rule?** not yet -- two candidates. An opening-pass radius must be asserted under half the thinnest section it runs through. And the positioned render must FAIL the bundle when it is empty, and a stale `build/positioned/*.stl` must never be adopted: this is the 2026-09-20 "render=PASS while a part produced no STL" entry again, one directory over.

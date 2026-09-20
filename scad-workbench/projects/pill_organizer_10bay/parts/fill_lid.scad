@@ -33,14 +33,46 @@ module yz_extrude(x0, x1) {
         linear_extrude(height = x1 - x0) children();
 }
 
-module fill_plate() {
-    cube([fill_lid_x, fill_lid_y, lid_t]);
-    // Pull lip (D23): the plate carried forward, at full thickness, across the
-    // notch cut in the wall in front of the mouth and out over tray B. It
-    // overlaps the plate by 1mm so the union is volumetric, not a shared face.
-    translate([fill_lid_x / 2 - fill_lip_w / 2, -fill_lip_len, 0])
-        cube([fill_lip_w, fill_lip_len + 1.0, lid_t]);
+// The plate and the pull lip (D23) are each a convex outline -- a rounded
+// rectangle -- so each can be chamfered by hull(): the outline lid_t minus
+// lid_chamfer tall, hulled with the outline inset by lid_chamfer at the top.
+// A single non-convex outline cannot be chamfered that way (hull fills the
+// concave corners where the lip meets the plate), and a Minkowski cone left
+// zero-area slivers at exactly those corners (revision 7).
+//
+// Where the lip meets the plate (D27, revision 7): the lip's top is FLUSH with
+// the plate's top, because that face goes on the bed when the lid is printed
+// flipped and a lip 0.1mm above the bed prints in mid-air. So the lip's solid
+// ends at y = lip_back, INSIDE the plate's front chamfer band (0 < lip_back <
+// lid_chamfer), where the plate's top is already below lid_t: the two top
+// faces lie on one plane but never overlap. Its underside sits lip_in above
+// the plate's underside, so the two bottom faces never overlap either. The
+// lip's own chamfer runs along its front and sides only; its back edge is
+// vertical and buried.
+module rounded_rect(w, d) {
+    offset(r = lid_edge_r) offset(r = -lid_edge_r) square([w, d]);
 }
+module fill_plate_slab() {
+    hull() {
+        linear_extrude(height = lid_t - lid_chamfer) rounded_rect(fill_lid_x, fill_lid_y);
+        translate([0, 0, lid_t - 0.01]) linear_extrude(height = 0.01)
+            offset(delta = -lid_chamfer) rounded_rect(fill_lid_x, fill_lid_y);
+    }
+}
+lip_back = lid_chamfer - 0.05;     // where the lip's solid ends, inside the chamfer band
+lip_in   = 0.1;                    // its underside, above the plate's underside
+module fill_lip_slab() {
+    d = fill_lip_len + lip_back;
+    translate([fill_lid_x / 2 - fill_lip_w / 2, -fill_lip_len, 0]) hull() {
+        translate([0, 0, lip_in]) linear_extrude(height = lid_t - lid_chamfer - lip_in)
+            rounded_rect(fill_lip_w, d);
+        translate([lid_chamfer, lid_chamfer, lid_t - 0.01]) linear_extrude(height = 0.01)
+            square([fill_lip_w - 2 * lid_chamfer, d - lid_chamfer]);
+    }
+}
+assert(lip_back > 0 && lip_back < lid_chamfer,
+       "the lip must end inside the plate's chamfer band, or its top face overlaps the plate's");
+module fill_plate() { fill_plate_slab(); fill_lip_slab(); }
 
 // Barb profile in (y, z), local to the tab's outer face at y = 0, pointing -Y.
 // The retaining face slopes DOWN toward the barb's tip at fill_tab_return_deg
@@ -48,9 +80,9 @@ module fill_plate() {
 // pocket; below it a shallow ramp lets the tab cam in as the lid is pressed
 // home.
 BARB = [
-    [0.5,            fill_barb_top_z - fill_seat_z],
+    [fill_tab_inset + 0.3, fill_barb_top_z - fill_seat_z],
     [-fill_tab_barb, fill_barb_top_z - fill_seat_z - fill_tab_barb * tan(fill_tab_return_deg)],
-    [0.5,            fill_barb_bot_z - fill_seat_z]
+    [fill_tab_inset + 0.3, fill_barb_bot_z - fill_seat_z]
 ];
 
 assert(fill_barb_top_z - fill_tab_barb * tan(fill_tab_return_deg) > fill_barb_bot_z + 0.5,
@@ -61,10 +93,10 @@ module fill_tabs() {
     // front
     // Each tab runs 1mm up INTO the plate and each barb 0.5mm into its tab, so
     // every union here overlaps volumetrically instead of sharing a face.
-    translate([x0, 0, -fill_tab_drop]) cube([fill_tab_w, fill_tab_t, fill_tab_drop + 1.0]);
+    translate([x0, fill_tab_inset, -fill_tab_drop]) cube([fill_tab_w, fill_tab_t, fill_tab_drop + 1.0]);
     yz_extrude(x0, x0 + fill_tab_w) polygon(BARB);
     // back, mirrored about the lid's mid-depth
-    translate([x0, fill_lid_y - fill_tab_t, -fill_tab_drop])
+    translate([x0, fill_lid_y - fill_tab_t - fill_tab_inset, -fill_tab_drop])
         cube([fill_tab_w, fill_tab_t, fill_tab_drop + 1.0]);
     translate([0, fill_lid_y, 0]) mirror([0, 1, 0])
         yz_extrude(x0, x0 + fill_tab_w) polygon(BARB);

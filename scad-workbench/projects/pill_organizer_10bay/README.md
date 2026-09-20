@@ -7,8 +7,10 @@ Lift one lid and all ten types are exposed.
 **Two lids total.** Both fill ports at the back under one flat lid, both pick
 rows at the front under one sloped lid.
 
-**Revision 6.** Six revisions, twenty-five recorded decisions — `plan.md` has
-the table. Revision 3 took the envelope from 9.45 L to 5.54 L with a 40-degree
+**Revision 7.** Seven revisions, twenty-seven recorded decisions — `plan.md`
+has the table. Revision 7 vaults the crossing chute's ceiling so the body has
+no overhang past 45 degrees anywhere that matters, and rounds or chamfers every
+edge you can touch. Revision 3 took the envelope from 9.45 L to 5.54 L with a 40-degree
 ramp and a shallow *porch* under tray B; revision 4 fixed reach and pour,
 dropping the front wall to a scalloped 30 mm and leaning the hopper divider to
 even the two fill mouths; revision 5 turned the dead wedge under the chute into
@@ -25,13 +27,13 @@ has each one with the probe that found it.
 |---|---|
 | Overall | 235 x 170.8 x 141 mm (the 235 includes the 5 mm joining rail) |
 | Bays | 10, two rows of 5, 42.96 mm clear each |
-| Capacity | **290.2 mL/bay front row, 182.4 mL/bay back row** — 2.36 L total, geometric maximum |
+| Capacity | **291.1 mL/bay front row, 166.1 mL/bay back row** — 2.29 L total, geometric maximum |
 | Printed parts | **3 designs, 3 pieces**, no hardware |
-| Validation | **13 passed, 0 failed, 4 n/a, 0 inconclusive, 1 advisory** |
+| Validation | **13 passed, 0 failed, 4 n/a, 0 inconclusive, 1 advisory** (the advisory is `check_printability.py`, which fails every real FDM part on overhang area; the face-normal scan below is the real reading) |
 | Confidence | Tier 2 — geometry verified, fit uncalibrated |
 
 A 90-day once-daily size-00 charge is 147.4 mL, so the front row carries 177
-days and the back row 111.
+days and the back row 101.
 
 ## The one thing to understand before printing
 
@@ -90,6 +92,14 @@ the wedge to work.
   springs off the chute ceiling so hopper B's ramp is untouched. Left vertical
   the split was 70 : 32, which is what you get from equalising the two rows'
   volumes rather than the openings you actually pour into.
+- **The vault.** The crossing chute's ceiling on its 40-degree leg is a
+  shallow gable across each bay: 6 mm higher at the centre, 6 mm lower at the
+  dividers. A face sloping two ways at once is steeper on the diagonal, and
+  this one is 44.8 degrees from vertical where the plain ceiling was 50 —
+  inside the 45-degree no-support rule instead of past it. Hopper B's ramp
+  rides one deck above the ridge, so it starts 6 mm above tray B's floor with
+  a rounded riser pills drop off. The chute is 42 mm clear at the ridge and
+  30 at the dividers.
 - **The splitter rib.** Tray B's floor is carried on the bay dividers alone —
   the chute runs underneath, so the tray's own walls never reach it. At 25
   degrees that underside is a shallow ceiling bridging the whole bay, so a
@@ -104,6 +114,10 @@ the wedge to work.
   lid on, nothing below it is open.
 - **Foot pads.** Four 10 mm recesses in the base take stick-on rubber feet, so
   a unit that is bumped while pouring does not skate.
+- **No sharp edges.** The body's vertical corners are rounded at 3 mm and its
+  top edges at 1.5; both lids have rounded corners, the fill lid a chamfered
+  top perimeter and the pick lid chamfered plate edges. Inside, every corner a
+  pill meets has carried a 2 mm fillet since revision 1.
 - **Ganging.** Two dovetail rails on the left face, two grooves on the right.
   Lift the pick lid off the left-hand unit, lower the right-hand unit's rails
   in from above. Revisions 3 to 5 had the front groove capped by the side wall,
@@ -142,9 +156,10 @@ it is laid. Every wall over both trays dies on that plane.
 Print-ready STLs are in `build/print_ready/`, exported by `print_export.scad`,
 already rotated and dropped to z = 0. Each was scanned face by face in that
 orientation: the body's only downward faces past 45 degrees from vertical are
-the chute ceiling (the advisory) and the porch ceiling the rib carries; the
-pick lid has none; the fill lid has the two barbs' 1.1 mm return faces, which
-bridge.
+the porch ceiling the rib carries, the 1 mm lips at the ends of each vault
+ridge, and the seat ledge's underside along the leaning divider; the pick lid
+has a 1 mm strip at the tip of its skirt; the fill lid has the two barbs' 1.1 mm return faces, which bridge,
+and its 1 mm top chamfer, which lies on the bed.
 
 Purchased: four stick-on rubber feet, 10 mm; 1/2 inch TZe label tape.
 
@@ -169,12 +184,11 @@ from it.
 ## Reviewer's attention
 
 - **Nothing in this revision moves**, so there is no motion sweep.
-- The chute ceiling on the 40-degree leg is a **50-degree-from-vertical
-  overhang**, past the conservative 45-degree rule — 30,900 mm² of it, in
-  43 mm bays. It is internal and non-cosmetic, and `chute_clear` carries a sag
-  allowance. It is the one print risk left in the body; the cubby ceiling,
-  which was the same overhang across 224 mm, is at 45 now. If the test print
-  shows droop, the fallback is a gabled ceiling.
+- The chute ceiling on the 40-degree leg **was** a 50-degree-from-vertical
+  overhang through revision 6. It is vaulted now (D26): 44.8 degrees from
+  vertical. What that bought is bounded by two numbers worth checking on a
+  print: 30 mm clear at the dividers under the vault's low side, and a 6 mm
+  riser at hopper B's ramp foot that pills drop off onto tray B.
 - **The porch feeds at the repose angle**, as any pile does; the number that
   matters is the throat over the stagnant wedge, 32.6 mm at the 30-degree
   estimate and 28.9 at 35. Below about 38 degrees of repose it stays over one

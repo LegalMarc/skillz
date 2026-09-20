@@ -3,7 +3,9 @@
 All lengths mm, all angles degrees. `tan(40) = 0.839100`, `tan(25) = 0.466308`,
 `tan(30) = 0.577350`, `tan(35) = 0.700208`.
 
-**Revision 6.** See `plan.md` for the revision table and the full decision log.
+**Revision 7.** See `plan.md` for the revision table and the full decision log.
+Revision 7 vaults the crossing chute's ceiling (D26) and rounds every external
+edge (D27).
 Revision 2 forced the crossing by grouping the lids by function; revision 3
 changed the crossing chute's ramp angle and added the porch under tray B, taking
 the envelope from 9.45 L to 5.54 L; revision 4 fixed the reach into tray A and
@@ -84,7 +86,43 @@ it comes down too. At a fixed 230 x 171 footprint:
 40 degrees keeps 10 degrees of margin over the repose estimate and puts the
 chute ceiling 50 degrees from vertical — past the conservative 45-degree rule,
 on an internal surface nobody sees, with a sag allowance carried in
-`chute_clear`.
+`chute_clear`. Revision 7 removes that overhang without touching the ramp
+angle: see "the vault" below.
+
+## Derived — the vault (D26)
+
+A face that slopes 40 degrees front-to-back and nothing sideways is 50 degrees
+from vertical. Give the same face a sideways slope too — a shallow ridge down
+the centre of each bay — and the diagonal steepens:
+
+`face from vertical = 90 − atan( sqrt( tan(gable)² + tan(40)² ) )`
+
+| Quantity | Formula | Value |
+|---|---|---|
+| Rise, edge to ridge | `vault_up + vault_down` | 12.0 |
+| Gable | `atan(12 / (bay_w / 2))` | 29.2 deg |
+| Face from vertical | formula above | **44.8 deg** (was 50) |
+| Chute clear at the ridge / at the dividers | `chute_clear ± 6` | 42 / **30** — 1.15x pill length, 2.7x diameter |
+| Hopper B ramp foot | `trayB_floor + vault_up` | 62.18 — a 6 mm riser at tray B's back wall |
+| Hopper B outlet top | `rampB_foot + outlet_h`, outlet_h 28 | 90.18 — 4 mm under tray B's rim |
+| Deck at the ridge | `chute_ceil` | 3.0, declared in `attachments.json` as `vault_deck` |
+| Row B capacity | measured | 182.4 → **166.1 mL**, 1.13x the charge, 101 days |
+
+Where the rise goes is the whole decision. All of it up (ridge +12) lifts
+hopper B's floor 12 mm and leaves 0.4 mm of freeboard under the rim; all of it
+down (edges −12) leaves 24 mm clear at the dividers, under one pill length.
+Split, neither limit is approached. The ridge void starts 1 mm inside each end
+of the added roof solid (`vault_roof_y0 < vault_y0`, `vault_y1 < vault_roof_y1`)
+so the two never share a face; the 1 mm lips this leaves at each end of the
+ridge are internal and vertical. The porch under tray B is not vaulted: its
+ceiling is 65 degrees from vertical and the splitter rib carries it.
+
+Face-normal scan of the body, downward faces 50–55 degrees from vertical,
+above the bed: 21,758 mm² before, about 2,200 after — and of that, 59 mm² is
+under hopper B. The rest is the underside of the fill-lid seat ledge where it
+runs along the leaning hopper divider (a 45-degree chamfer tilted a further
+19 degrees), which has been there since revision 4, bridges 1.1 mm, and was
+never the advisory's subject.
 
 ## Derived — the porch (D12, D20)
 
@@ -135,7 +173,7 @@ body, so no other check in the bundle would notice.
 | **Tray B** | 33.2 .. 61.2 | floor 56.18, rim 94.18 |
 | **Chute A porch**, 25 deg | 30.8 .. 61.2 | floor 3.0 .. 17.18, ridge 39.0 .. 53.18 |
 | **Chute A ramp**, 40 deg | 61.2 .. 136.0 | floor 17.18 .. 79.94 |
-| **Hopper B mouth** | 63.6 .. 133.6 | floor 58.19 .. 116.93 |
+| **Hopper B mouth** | 63.6 .. 133.6 | floor 64.19 .. 122.93 (6 mm riser at 61.2, D26) |
 | **Hopper A mouth** | 136.0 .. 168.0 | floor 79.94 .. 106.79 |
 | **Overall** | | **235.0 x 170.8 x 141.0** (235 includes the 5 mm rail) |
 
@@ -209,15 +247,16 @@ inside the FDM band. Hopper B loses about 5 mL/bay and hopper A gains the same.
 
 | Row | Per bay | vs 147.4 mL charge | Days at one/day |
 |---|---|---|---|
-| Row A — front tray, back mouth, crossing chute | **290.2 mL** | 1.97x | 177 |
-| Row B — back tray, front mouth, plain ramp | **182.4 mL** | 1.24x | 111 |
+| Row A — front tray, back mouth, crossing chute | **291.1 mL** | 1.97x | 177 |
+| Row B — back tray, front mouth, plain ramp | **166.1 mL** | 1.13x | 101 |
 
 Measured with the fill line at the underside of the lid (`fill_seat_z`), the
 porch ribs subtracted and the fillets included — not from the idealised section,
 which reads about 8% high on row B because it ignores the seat ledges. Revision
-5 held 293.0 / 191.6; the 25 degree porch (D20) costs 3 and 9 mL.
+5 held 293.0 / 191.6; the 25 degree porch (D20) cost 3 and 9 mL, the vault
+(D26) a further 16 on row B.
 
-Total across ten bays: **2.36 L** in a **5.54 L** envelope. Revision 2 held
+Total across ten bays: **2.29 L** in a **5.54 L** envelope. Revision 2 held
 3.27 L in 9.45 L. This is the geometric maximum with the lid on, not a practical
 fill; a pour stops when the pile reaches the mouth.
 
@@ -282,7 +321,9 @@ them (32 x 9 x 0.6, and the upper cut 1.0 deep). Revision 6 writes them.
 | Ramp angle vs repose | 40 - 30 = 10 margin | OK, reduced from 18 |
 | Porch angle vs repose | 25 - 30 = **-5** | BY DESIGN — the flow over the wedge is at repose; throat 32.6 / 28.9 at 30 / 35 deg repose |
 | Porch lane vs pill diameter | 20.28 / 11.0 = 1.8x | OK for single file |
-| Chute ceiling overhang, 40 deg leg | 50 from vertical, 30,900 mm^2 in 43 mm bays | ADVISORY — past the 45 rule, internal surface |
+| Chute ceiling overhang, 40 deg leg | **44.8 from vertical**, vaulted (D26) | OK — was 50 and ADVISORY through revision 6 |
+| Chute clear under the vault's low side | 30 at the dividers | OK — 1.15x pill length, 2.7x pill diameter |
+| Hopper B outlet vs tray B rim | 4.0 | OK — asserted >= 3 |
 | Chute ceiling overhang, porch leg | 65 from vertical | OK — bridged span cut to 20.28 by the rib |
 | Cubby ceiling overhang | 45 from vertical, 22,100 mm^2 across 224 mm | OK — at the limit, D21 (was 50) |
 | Front joining groove | open from z 10 to 62.9, through the plane at 61.9 | OK — blind in revisions 3-5 |
@@ -306,3 +347,18 @@ needed, as with any gravity dispenser.
 | A5 | Assumption | Ordinary | Tray A's pill surface follows a 30-degree repose slope forward from the chute mouth, which is what the reach table is computed from | Open — resolved by loading the unit |
 | A6 | Assumption | Ordinary | A 35 degree barb return releases a 0.8 mm engagement under a fingertip pull on the lip without exceeding the tab's strain; the calibration coupon's snap fingers are the check | Open — resolved by the coupon print |
 | A7 | Assumption | Ordinary | A 45-degree-from-vertical ceiling 224 mm wide prints clean in PLA with part cooling | Open — resolved by the test print |
+| A8 | Assumption | Ordinary | Pills dropping a 6 mm rounded riser from hopper B's ramp foot onto tray B's floor do not bounce out over the 38 mm tray wall | Open — resolved by loading the unit |
+
+## Derived — external edges (D27)
+
+| Edge | Treatment | Wall behind it |
+|---|---|---|
+| Body vertical corners (4) | round, r 3.0 | 2.8 walls; the inner corner stays sharp, 2.7 mm on the diagonal |
+| Body top edges (front of the pick plane, both edges of the step, back) | round, r 1.5 | 2.4 mm wall tops keep 0.9 mm of flat |
+| Body base edges | left square | first layers |
+| Pick lid plate, front and back edges | chamfer 1.0, in section (under half the 3 mm plate; a 1.5 round collapsed it; a round of any size is a 90-degree overhang where this face meets the bed) | |
+| Pick lid plate, x-end top edges | chamfer 1.0 | |
+| Pick lid skirt bottom edge | chamfer 1.0 | the notches already carry r 4 |
+| Fill lid, plan corners incl. the lip | round, r 2.0 | more clearance at the mouth's sharp corners, not less |
+| Fill lid, top perimeter | chamfer 1.0 | printed face-down: a 1 mm 45-degree first-layer overhang |
+| Scallops, finger notches, riser, every flow corner | already rounded | |

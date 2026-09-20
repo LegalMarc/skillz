@@ -34,7 +34,7 @@
 //   behind tray B and the top-back corner meets the wall after
 //   about 5 degrees. Nothing to unclip.
 //
-// EXPECTED_BBOX: [229.0, 63.85, 73.99]
+// EXPECTED_BBOX: [229.0, 63.85, 73.03]
 // ============================================================
 
 include <../params.scad>
@@ -71,19 +71,42 @@ PLATE = [
 ];
 
 // The skirt hangs down past the module's front face, 0.35mm clear of it. Its
-// top edge runs 1mm ABOVE the plate's underside and well below the plate's top
+// top edge runs 2mm ABOVE the plate's underside and well below the plate's top
 // face, so it lies strictly INSIDE the plate's section: an earlier version
 // traced the plate's own faces exactly and the union came out non-watertight,
-// which stopped every boolean check downstream from running at all.
+// which stopped every boolean check downstream from running at all. 2 rather
+// than 1 so it also covers the plate's rounded bottom-front corner (D27).
 HOOK = [
-    [hook_front, zu(hook_front) + 1.0],
-    [hook_back,  zu(hook_back)  + 1.0],
+    [hook_front, zu(hook_front) + 2.0],
+    [hook_back,  zu(hook_back)  + 2.0],
     [hook_back,  zu(0) - pick_lid_hook_h],
     [hook_front, zu(0) - pick_lid_hook_h]
 ];
 
-module pick_plate() { yz_extrude(0, pick_lid_w) polygon(PLATE); }
-module pick_hook()  { yz_extrude(0, pick_lid_w) polygon(HOOK); }
+// Both sections get their convex corners CHAMFERED at 45 degrees (D27): the
+// plate's front and back edges, and the skirt's bottom edge. Chamfers, not
+// rounds, because the plate's top face goes on the bed when it is printed and
+// a rounded bottom edge is an overhang that steepens to 90 at the tangent; a
+// 45 chamfer is the one profile that prints clean there. The plate's
+// bottom-back corner is chamfered too, which lifts the last 1mm of its
+// underside off the plane -- harmless. lid_round is under half the plate's
+// thickness -- see params.scad for why. The x-end top edges are done in 3D
+// below.
+module pick_plate() { yz_extrude(0, pick_lid_w) offset(delta = lid_round, chamfer = true) offset(delta = -lid_round) polygon(PLATE); }
+module pick_hook()  { yz_extrude(0, pick_lid_w) offset(delta = lid_round, chamfer = true) offset(delta = -lid_round) polygon(HOOK); }
+
+// Chamfer along each x-end top edge of the plate: a square prism rotated 45
+// degrees about the edge's own direction, centred on the edge. The edge runs
+// along (0, cos s, sin s) through (x, 0, zu(0) + pick_lid_tv); rotate([s,0,0])
+// is the ONE rotation that maps +Y onto that direction. It touches nothing
+// but the top corner: the skirt is 3mm and more below the top face.
+module pick_end_chamfers() {
+    a = lid_chamfer * sqrt(2);
+    for (x = [0, pick_lid_w])
+        translate([x, 0, zu(0) + pick_lid_tv])
+            rotate([pick_lid_slope, 0, 0]) rotate([0, 45, 0])
+                cube([a, 400, a], center = true);
+}
 
 // Finger notches (D22): rounded-top slots up into the skirt's bottom edge,
 // cut clear through it in Y, starting below the skirt so no cut face lands on
@@ -110,6 +133,7 @@ module pick_lid_geometry() {
     difference() {
         union() { pick_plate(); pick_hook(); }
         pick_notches();
+        pick_end_chamfers();
     }
 }
 

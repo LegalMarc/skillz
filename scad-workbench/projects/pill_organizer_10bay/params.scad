@@ -85,7 +85,8 @@ assert(bay_w >= pill_len * 1.5,
 // ------------------------------------------------------------
 tray_d      = 28.0;         // pick tray depth in Y, both rows
 trayB_h     = 38.0;         // tray B interior height, floor to rim
-outlet_h    = 30.0;         // gap under tray B's feed wall (row B's outlet)
+outlet_h    = 28.0;         // gap under tray B's feed wall (row B's outlet);
+                            // 30 before the vault (D26) lifted the ramp foot
 ramp_deg    = 40;           // ramp and chute angle from horizontal (D11)
 // The porch was 20 degrees (D12). Pills reach tray A by flowing OVER the
 // stagnant wedge the porch carries, and that wedge's surface is by
@@ -128,15 +129,64 @@ function chuteA_floor(y) = y <= yB_tray1
                          : z_porch + (y - yB_tray1) * ramp_tan;
 // Its ceiling runs parallel, holding a constant section. Following a flat
 // underside instead left 7197 mm^2 of bridged ceiling in revision 2
-// (INCIDENTS.md 2026-09-20).
+// (INCIDENTS.md 2026-09-20). This is the ceiling at the BAY EDGES; on the 40
+// degree leg it is vaulted (D26, below), rising vault_up above this line at
+// the bay centre and dropping vault_down below it at the edges.
 function chuteA_ceil(y) = chuteA_floor(y) + chute_clear;
+
+// ------------------------------------------------------------
+// 4e. The vault (D26). A ceiling sloping only front-to-back at 40 degrees is
+// a 50-degree-from-vertical overhang, the one print risk revisions 3-6 carried
+// as an ADVISORY. Tilting the same face sideways as well -- a shallow ridge
+// down the centre of each bay -- makes the diagonal steeper: with the ridge
+// (vault_up + vault_down) above the edges over a half-bay, the face is
+// 90 - atan(sqrt(tan(gable)^2 + tan(40)^2)) from vertical, 44.8 degrees here.
+// The rise is split: the ridge goes up vault_up into the deck, so hopper B's
+// floor and outlet rise with it; the edges come down vault_down, which the
+// chute can spare (30 clear at the edges, 42 at the ridge). Costs row B about
+// 18 mL per bay. The porch under tray B is not vaulted -- the rib carries it.
+// ------------------------------------------------------------
+vault_up    = 6.0;
+vault_down  = 6.0;
+vault_lead  = 2.0;          // the ridge starts this far behind the porch end
+vault_slope = (vault_up + vault_down) / (bay_w / 2);            // tan of the gable
+vault_deg   = atan(vault_slope);                                //  29.2
+vault_face_from_vertical = 90 - atan(sqrt(pow(vault_slope, 2) + pow(ramp_tan, 2)));  // 44.8
+vault_top_over = 2.0;       // how far the vault's solid reaches up into the deck
+vault_embed = 1.0;          // how far each roof half reaches INTO its divider or
+                            // side wall. Less than weld_embed because the side
+                            // walls also carry the rail roots' weld_embed from
+                            // outside, and 1.5 + 1.5 does not fit in 2.8
+vault_y0    = yB_tray1 + vault_lead;                            //  63.2, ridge starts
+vault_y1    = yB_hop1 - 0.6;                                    // 133.0, ridge ends
+vault_roof_y0 = yB_tray1 + vault_lead / 2;                      //  62.2, the added solid starts
+vault_roof_y1 = yB_hop1;                                        // 133.6, and ends, inside the wall between the hoppers
+function chuteA_ridge(y) = chuteA_ceil(y) + (y > vault_y0 && y < vault_y1 ? vault_up : 0);
+
+assert(vault_face_from_vertical <= 45.0,
+       "the vaulted chute ceiling is still past the 45 degree overhang limit -- raise vault_up + vault_down");
+assert(chute_clear - vault_down > pill_len + 2 && chute_clear - vault_down >= 2 * pill_dia,
+       "the chute at the bay edges, under the vault's low side, is too low for a pill");
+assert(vault_top_over < chute_ceil,
+       "the vault's solid reaches through the deck into hopper B's floor");
+assert(vault_embed + weld_embed < wall_out - 0.2,
+       "the vault roof's embed and the rail root's embed meet inside the side wall");
+assert(vault_roof_y0 > yB_tray1 && vault_roof_y0 < vault_y0 && vault_y1 < vault_roof_y1,
+       "the vault's added solid must start before the ridge void and end after it, each strictly, or their faces coincide");
 
 // Tray B sits one slab above the chute ceiling at the porch's end -- which is
 // the whole point of the porch, because that is where the ceiling is lowest.
-trayB_floor = chuteA_ceil(yB_tray1) + chute_ceil;        //  53.06
-trayB_rim   = trayB_floor + trayB_h;                     //  91.06
-outletB_top = trayB_floor + outlet_h;                    //  83.06
-function rampB(y) = trayB_floor + (y - yB_tray1) * ramp_tan;
+trayB_floor = chuteA_ceil(yB_tray1) + chute_ceil;        //  56.18
+trayB_rim   = trayB_floor + trayB_h;                     //  94.18
+// Hopper B's ramp rides one deck above the vault's RIDGE, so it starts
+// vault_up above tray B's floor: a 6mm riser at the tray's back wall that
+// pills drop off (D26). The outlet top rises with it.
+rampB_foot  = trayB_floor + vault_up;                    //  62.18
+outletB_top = rampB_foot + outlet_h;                     //  90.18
+function rampB(y) = rampB_foot + (y - yB_tray1) * ramp_tan;
+
+assert(trayB_rim - outletB_top >= 3.0,
+       "hopper B's outlet top is within 3mm of tray B's rim -- pills could ride out under the lid");
 
 // Tray A's rim is set INDEPENDENTLY of tray B's floor (D15). It started life
 // level with it, which looked right in section, but pills only pile to the
@@ -204,10 +254,12 @@ assert(mouthA_w > pill_len + 8 && mouthB_w > pill_len + 8,
 
 assert(trayB_floor > chuteA_ceil(yB_tray1),
        "tray B's floor is not above the chute ceiling -- the two feeds intersect");
-assert(rampB(yB_wall1) - chute_ceil > chuteA_ceil(yB_wall1) - 1e-6,
-       "chute A does not clear hopper B's floor at the front of hopper B");
-assert(rampB(yB_hop1) - chute_ceil > chuteA_ceil(yB_hop1) - 1e-6,
-       "chute A does not clear hopper B's floor at the back of hopper B");
+assert(rampB(yB_wall1) - chute_ceil > chuteA_ridge(yB_wall1) - 1e-6,
+       "chute A's vault ridge does not clear hopper B's floor at the front of hopper B");
+assert(rampB(yB_hop1) - chute_ceil > chuteA_ridge(yB_hop1) - 1e-6,
+       "chute A's vault ridge does not clear hopper B's floor at the back of hopper B");
+assert(rampB(vault_y1) - chute_ceil > chuteA_ridge(vault_y1 - 1e-3) - 1e-6,
+       "chute A's vault ridge does not clear hopper B's floor where the ridge ends");
 assert(rampB(yB_hop1) + hopper_free <= hopper_rim,
        "hopper B's ramp leaves less than hopper_free under the rim");
 assert(chuteA_floor(yA_hop1) + hopper_free <= hopper_rim,
@@ -446,6 +498,12 @@ fill_tab_t      = 1.2;
 // pocket now sits a full fill_catch_t below the relief -- see the assert.
 fill_tab_drop   = 12.0;
 fill_tab_barb   = 1.1;
+// Each tab's outer face sits this far INSIDE the plate's edge. The tab reaches
+// 1mm up into the plate for a volumetric weld; flush with the edge, that 1mm
+// put the tab's outer face on the plate's own edge face, and the union came
+// out non-manifold (revision 7). The barb still projects fill_tab_barb past
+// the plate edge, so the engagement is unchanged.
+fill_tab_inset  = 0.2;
 fill_tab_engage = fill_tab_barb - fill_lid_clear;
 fill_tab_ramp   = 3.0;
 // The barb's retaining face is no longer flat (D23). A flat face against a
@@ -589,7 +647,31 @@ assert(rail_sep > 50, "the two rails are too close together to resist yaw");
 // ------------------------------------------------------------
 // Label recesses: section 4c, beside the scalloped front wall they sit under.
 
-fillet_r  = 2.0;
+fillet_r  = 2.0;            // internal: every flow-void corner (opening pass)
+
+// External edges (D27). Nothing a hand or a sleeve meets is left sharp: the
+// four vertical corners of the body, its top edges, both lids' plan corners
+// and the fill lid's top perimeter. Chosen small enough that no wall thins
+// past its own thickness: 1.5 on a 2.4 wall top leaves 0.9 of flat.
+corner_r   = 3.0;           // body's vertical outer corners
+edge_r_top = 1.5;           // body's top edges (OUTER's convex corners)
+lid_edge_r = 2.0;           // lids' plan-view corners
+lid_chamfer = 1.0;          // fill lid top perimeter; pick lid plate x-end edges
+lid_round   = 1.0;          // pick lid plate front/back edges and skirt bottom, in
+                            // section (45 degree chamfers -- the plate's top goes on the bed). MUST be under half the plate's thickness:
+                            // an opening pass erodes by the radius first, and at
+                            // exactly half the section collapses to a line (it
+                            // did, at 1.5 on a 3.0 plate -- standalone it survived
+                            // on floating point, through use<> it vanished and the
+                            // assembly had no pick lid at all; revision 7)
+assert(lid_round < lid_t / 2 - 0.3 && lid_round < (pick_lid_hook_t - pick_lid_clear) / 2 - 0.3,
+       "lid_round erodes the pick lid's plate or skirt to nothing");
+
+assert(edge_r_top < wall_div - 0.5,
+       "the top-edge round is deeper than the thinnest wall it runs along");
+assert(corner_r > wall_out && corner_r < 6,
+       "the corner round should be a little larger than the wall so the inner corner stays sharp, and not so large it eats the rail zone");
+assert(lid_chamfer < lid_t - 1.0, "the lid chamfer leaves under 1mm of plate");
 
 // Recesses in the base for stick-on rubber feet (D24): a bench unit that is
 // slid about on rails and bumped while pouring should not skate. Under the
@@ -629,6 +711,10 @@ echo(str("rail 1 groove: open from z ", rail_z0, " to ", rail1_soc_z1,
          "; fill catch ", fill_catch_t, " mm; porch throat at repose ",
          chute_clear - porch_run * (tan(repose_deg) - porch_tan), " / at 35 deg ",
          chute_clear - porch_run * (tan(35) - porch_tan)));
+echo(str("vault: gable ", vault_deg, " deg, face ", vault_face_from_vertical,
+         " from vertical; chute clear ", chute_clear - vault_down, " at the edges, ",
+         chute_clear + vault_up, " at the ridge; hopper B foot ", rampB_foot,
+         ", outlet top ", outletB_top, ", rim margin ", trayB_rim - outletB_top));
 echo(str("tray A front wall ", trayA_front_h, " over a pill line of ", trayA_pile_front,
          " -> reach over the wall ", trayA_front_h - trayA_pile_front,
          " mm; lid skirt ", pick_lid_hook_h, " mm down to ", pick_lid_skirt_bot));

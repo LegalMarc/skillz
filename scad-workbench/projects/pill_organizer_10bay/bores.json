@@ -85,15 +85,15 @@
     "start": [
       215.72,
       40.0,
-      72.0
+      79.0
     ],
     "end": [
       215.72,
       75.0,
-      72.0
+      79.0
     ],
     "step_mm": 0.5,
-    "_why": "tray B's outlet: from inside the tray, under hopper B's front wall, into hopper B"
+    "_why": "tray B's outlet: from inside the tray, under hopper B's front wall, into hopper B. At z = 79: above hopper B's ramp, which now starts 6mm above tray B's floor (the vault riser, D26) and is at 73.8 by y = 75, and below the outlet top at 90.2. Revision 6 ran this at 72 and the ramp rose through it."
   },
   {
     "name": "rail_groove_front",
