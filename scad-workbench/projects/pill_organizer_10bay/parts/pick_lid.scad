@@ -1,18 +1,21 @@
 // ============================================================
 // pick_lid.scad -- ONE lid over BOTH pick tray rows.
 //
-// Revision 3 brought tray B's floor down onto tray A's rim, but
-// their RIMS are still 38mm apart, so a lid covering both as two
-// flat steps would be a Z in section -- unprintable without
-// support whichever way it is laid, because one arm is always
-// cantilevered. So the body's whole pick surface is a single
-// 38.7 degree plane and this is a flat plate lying on it, with
-// a skirt down its front edge. The skirt is what holds it: PLA
-// on PLA grips to about 17 degrees and this slope is 39, so the
-// plate would otherwise slide straight off. The skirt also
-// closes the scalloped front wall, which is cut 12mm below the
-// plane so the front tray is open to the front once the lid is
-// lifted.
+// Tray B's floor sits just above tray A's rim, but their RIMS
+// are still tray_step (about 51mm) apart, so a lid covering
+// both as two flat steps would be a Z in section -- unprintable
+// without support whichever way it is laid, because one arm is
+// always cantilevered. So the body's whole pick surface is a
+// single plane at pick_lid_slope (about 40 degrees) and this is
+// a flat plate lying on it, with a skirt down its front edge.
+// The skirt is what holds it: PLA on PLA grips to about 17
+// degrees and this slope is twice that, so the plate would
+// otherwise slide straight off. The skirt also closes the
+// scalloped front wall, which is cut 13mm below the plane so
+// the front tray is open to the front once the lid is lifted.
+//
+// Two finger notches in the skirt's bottom edge (D22) are what
+// you lift by: a fingertip hooks under each notch's ceiling.
 //
 // Local origin: the module's front-bottom-left outer corner,
 // offset in X only. This part is modelled IN ASSEMBLED
@@ -22,14 +25,16 @@
 // instead of up the plane.
 //
 // Material: PLA or PETG.
-// Print orientation: rotate -38.7 deg about X so the plate lies
-//   flat on the bed, hook upward. The hook then rises at 51 deg
-//   and self-supports. NOT as modelled.
+// Print orientation: rotate -pick_lid_slope about X so the
+//   plate lies flat on the bed, skirt upward. The skirt then
+//   rises at about 50 degrees and self-supports. NOT as modelled.
 //
-// To remove: lift the front edge until the hook clears the
-//   front face, then slide it forward. Nothing to unclip.
+// To remove: lift STRAIGHT UP by the two notches. Do not tilt
+//   it about its back edge -- that edge is 0.35mm from the wall
+//   behind tray B and the top-back corner meets the wall after
+//   about 5 degrees. Nothing to unclip.
 //
-// EXPECTED_BBOX: [229.0, 63.85, 70.829]
+// EXPECTED_BBOX: [229.0, 63.85, 73.99]
 // ============================================================
 
 include <../params.scad>
@@ -47,6 +52,12 @@ assert(zu(0) - pick_lid_hook_h < trayA_front_h - 3,
 module yz_extrude(x0, x1) {
     rotate([90, 0, 90]) translate([0, 0, x0])
         linear_extrude(height = x1 - x0) children();
+}
+
+// A profile in (x, z), extruded back along Y.
+module xz_extrude(y0, y1) {
+    translate([0, y1, 0]) rotate([90, 0, 0])
+        linear_extrude(height = y1 - y0) children();
 }
 
 hook_front = -pick_lid_hook_t;          // -3.0
@@ -74,7 +85,33 @@ HOOK = [
 module pick_plate() { yz_extrude(0, pick_lid_w) polygon(PLATE); }
 module pick_hook()  { yz_extrude(0, pick_lid_w) polygon(HOOK); }
 
-module pick_lid_geometry() { union() { pick_plate(); pick_hook(); } }
+// Finger notches (D22): rounded-top slots up into the skirt's bottom edge,
+// cut clear through it in Y, starting below the skirt so no cut face lands on
+// the skirt's own bottom face. X positions come from the body's bay centres,
+// less the lid's own X offset in the layout.
+module pick_notches() {
+    r = pick_notch_r;
+    for (cx = pick_notch_x) {
+        x0 = cx - lid_dx_local - pick_notch_w / 2;
+        xz_extrude(hook_front - 1, hook_back + 1)
+            offset(r = r) offset(delta = -r)
+                polygon([[x0,                pick_lid_skirt_bot - 2],
+                         [x0 + pick_notch_w, pick_lid_skirt_bot - 2],
+                         [x0 + pick_notch_w, pick_notch_top],
+                         [x0,                pick_notch_top]]);
+    }
+}
+// layout.scad offsets the lid by lid_dx in X; the notches must stay centred
+// on the BODY's bays, so the same offset is taken off here. Kept in step by the
+// assert in layout.scad.
+lid_dx_local = (module_w - pick_lid_w) / 2;                 // 0.5
+
+module pick_lid_geometry() {
+    difference() {
+        union() { pick_plate(); pick_hook(); }
+        pick_notches();
+    }
+}
 
 // SUBFEATURES: pick_plate, pick_hook
 SUBFEATURE = is_undef(SUBFEATURE) ? "" : SUBFEATURE;

@@ -1,5 +1,5 @@
 // ============================================================
-// body.scad -- the organizer body, revision 5. Two pick trays
+// body.scad -- the organizer body, revision 6. Two pick trays
 // at the FRONT under one lid, two fill mouths at the BACK under
 // one lid.
 //
@@ -10,7 +10,7 @@
 // of it -- a plain ramp. Hopper A is the BACK mouth and feeds
 // the FRONT tray, so its chute ducks under tray B and under
 // hopper B. See params.scad section 4 for why the chute runs at
-// 20 degrees under tray B and 40 degrees everywhere else.
+// porch_deg under tray B and ramp_deg everywhere else.
 //
 // Local origin: front-bottom-left outer corner. +X right,
 // +Y back, +Z up. This is the assembly datum.
@@ -75,8 +75,8 @@ VOID_B = [
     [yB_wall1,                   fill_seat_z - fill_ledge_w],
     [yB_wall1,                   outletB_top],
     [yB_tray1,                   outletB_top + wall_div],
-    [yB_tray1,                   trayB_rim],
-    [yB_tray0,                   pickplane(yB_tray0)]
+    [yB_tray1,                   trayB_rim + void_top_over],
+    [yB_tray0,                   pickplane(yB_tray0) + void_top_over]
 ];
 
 // The mouth both hoppers share, full width at the rim so the lid can pass
@@ -92,8 +92,8 @@ MOUTH = [
 // VOID_A -- tray A, the crossing chute, and hopper A. One
 // continuous void: the chute IS hopper A's lower half, so the
 // volume the crossing costs in height it gives back in capacity.
-// The floor breaks once, at tray B's back wall, from the 20
-// degree porch onto the 40 degree climb. The ceiling runs
+// The floor breaks once, at tray B's back wall, from the
+// porch_deg porch onto the ramp_deg climb. The ceiling runs
 // parallel to it the whole way, holding a constant section --
 // following a flat underside instead left 7197 mm^2 of bridged
 // ceiling in revision 2.
@@ -114,31 +114,35 @@ VOID_A = [
     // its own throat, which is the right way round for a hopper.
     [yA_hop0,                    chuteA_ceil(yA_hop0)],
     [yB_tray1,                   chuteA_ceil(yB_tray1)],       // parallel to the 40 deg floor
-    [yA_tray1,                   chuteA_ceil(yA_tray1)],       // parallel to the 20 deg porch
-    [yA_tray1,                   pickplane(yA_tray1)],
-    [yA_tray0,                   pickplane(yA_tray0)]
+    [yA_tray1,                   chuteA_ceil(yA_tray1)],       // parallel to the porch
+    [yA_tray1,                   pickplane(yA_tray1) + void_top_over],
+    [yA_tray0,                   pickplane(yA_tray0) + void_top_over]
 ];
 
 // Opening rounds the cavity's convex corners, which fillets every internal
 // corner of the solid -- tray floors and the chute foot, where a pill would
 // otherwise wedge. Applied to the flow voids only, never to OUTER, so the
-// part's bounding box stays exact.
+// part's bounding box stays exact. Both tray voids run void_top_over PAST the
+// pick plane (as MOUTH runs past the rim): a void top lying exactly on the
+// shell's top face is a coplanar boolean, and it left a zero-area face pair
+// on the plane once the rail-1 groove was cut out through it.
 module void_a_2d() { offset(r = fillet_r) offset(r = -fillet_r) polygon(VOID_A); }
 module void_b_2d() { offset(r = fillet_r) offset(r = -fillet_r) polygon(VOID_B); }
 module mouth_2d()  { polygon(MOUTH); }
 
 // The accessory cubby (params.scad 4d): one void the full inner width, opening
-// through the BACK face only, so both side walls stay solid. Its ceiling runs
-// parallel to the chute floor above it, which means it self-supports on the
-// way up instead of bridging. Cut here rather than in body_geometry so the
-// rail buttresses, which are unioned afterwards, are not eaten by it.
+// through the BACK face only, so both side walls stay solid. Its ceiling is a
+// 45 degree plane -- the conservative FDM overhang limit -- anchored cubby_ceil
+// under the chute floor at the back face and thickening forward (D21). Cut
+// here rather than in body_geometry so the rail buttresses, which are unioned
+// afterwards, are not eaten by it.
 CUBBY = [
     [cubby_y0,     base_t],
     [cubby_back,   base_t],                      // inside face of the retaining lip
     [cubby_back,   base_t + cubby_lip_h],        // up and over it
     [module_d + 1, base_t + cubby_lip_h],        // out through the back wall above it
-    [module_d + 1, chuteA_floor(module_d + 1) - cubby_ceil],
-    [cubby_y0,     chuteA_floor(cubby_y0)     - cubby_ceil]
+    [module_d + 1, cubby_ceil_z(module_d + 1)],  // 45 degree ceiling (D21)
+    [cubby_y0,     cubby_ceil_z(cubby_y0)]
 ];
 // No fillet pass here: nothing flows through the cubby, and the closing
 // operation the flow voids use would round the lip's own top edge away.
@@ -159,7 +163,7 @@ module body_shell() {
 
 // ------------------------------------------------------------
 // Porch splitter rib (params.scad 4a). Tray B's floor is carried
-// on the bay dividers alone, so at 20 degrees its underside is a
+// on the bay dividers alone, so at porch_deg its underside is a
 // near-flat ceiling bridging the whole bay. One fin down the
 // middle halves that span and carries the slab directly. The
 // upstream (back) edge is a knife so a pill coming down the 40
@@ -208,12 +212,18 @@ module fill_seat_cut() {
                    fill_tab_pocket_z])
             cube([fill_tab_w + 1.0, fill_tab_barb + 0.01, fill_tab_pocket_h]);
 
+    // Seat-ledge relief for each tab. Oversteps fill_notch_over INTO the wall
+    // (front) so its face never lands on the wall's own face. What is left
+    // between this cut and the barb pocket below it is fill_catch_t, asserted.
     for (side = [0, 1])
         translate([module_w / 2 - fill_tab_w / 2 - 1.0,
-                   side == 0 ? hop_mouth_y0 - 1 : hop_mouth_y1 - fill_ledge_w - 1,
-                   fill_seat_z - fill_ledge_w - 1])
-            cube([fill_tab_w + 2.0, fill_ledge_w + 1, fill_ledge_w + 2]);
+                   side == 0 ? hop_mouth_y0 - fill_notch_over
+                             : hop_mouth_y1 - fill_ledge_w - 1,
+                   fill_notch_bot_z])
+            cube([fill_tab_w + 2.0, fill_ledge_w + 1, fill_ledge_w + fill_notch_over + 1]);
 
+    // Pull-lip notch (D23): the wall in front of the lid comes down to the seat
+    // plane across fill_grip_d, so the lid's lip can carry on forward over it.
     translate([module_w / 2 - fill_grip_d / 2, hop_mouth_y0 - wall_div - 1, fill_seat_z])
         cube([fill_grip_d, wall_div + 3, lid_t + 2]);
 }
@@ -314,15 +324,28 @@ module rail_socket_cut() {
 // front face, below the lid skirt so it reads with the lid on; the upper strip
 // on the wall between the trays, which faces forward over tray A and is read at
 // a glance once the lid is off.
+// Both cuts start label_cut_over OUTSIDE the face and go label_z into it. The
+// upper cut used to start label_z in front of the wall and run label_z + 1
+// deep, i.e. 1.0mm into a 2.4mm wall instead of 0.6 (INCIDENTS.md, rev 6).
 module label_cuts() {
     for (i = [0 : bays - 1]) {
         cx = bay_center_x(i);
-        translate([cx - label_w / 2, -1, label_z_center - label_h / 2])
-            cube([label_w, 1 + label_z, label_h]);
-        translate([cx - label_w / 2, yA_tray1 - label_z,
+        translate([cx - label_w / 2, -label_cut_over, label_z_center - label_h / 2])
+            cube([label_w, label_cut_over + label_z, label_h]);
+        translate([cx - label_w / 2, yA_tray1 - label_cut_over,
                    label_b_center - label_h / 2])
-            cube([label_w, label_z + 1, label_h]);
+            cube([label_w, label_cut_over + label_z, label_h]);
     }
+}
+
+// Recesses for four stick-on rubber feet (D24), cut up into the base.
+module foot_pad_cuts() {
+    for (p = [[foot_pad_inset, foot_pad_inset],
+              [module_w - foot_pad_inset, foot_pad_inset],
+              [foot_pad_inset, module_d - foot_pad_inset],
+              [module_w - foot_pad_inset, module_d - foot_pad_inset]])
+        translate([p[0], p[1], -1])
+            cylinder(h = 1 + foot_pad_depth, d = foot_pad_d, $fn = 48);
 }
 
 // ------------------------------------------------------------
@@ -333,6 +356,7 @@ module body_geometry() {
         front_scallop_cut();
         rail_socket_cut();
         label_cuts();
+        foot_pad_cuts();
     }
 }
 
