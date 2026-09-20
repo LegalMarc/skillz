@@ -38,6 +38,11 @@ lid_t     = 3.0;
 weld_embed = 1.5;           // how far every added feature reaches INTO the
                             // solid it lands on; a coincident face is not
                             // reliably welded (INCIDENTS.md 2026-08-26)
+void_top_over = 1.0;        // how far every open-topped void runs PAST the
+                            // outer surface it opens through. A void whose top
+                            // edge lies exactly on the shell's top face is a
+                            // coplanar boolean; it held until a third cut broke
+                            // through that face (INCIDENTS.md, revision 6)
 
 // ------------------------------------------------------------
 // 3. Bay grid
@@ -82,7 +87,14 @@ tray_d      = 28.0;         // pick tray depth in Y, both rows
 trayB_h     = 38.0;         // tray B interior height, floor to rim
 outlet_h    = 30.0;         // gap under tray B's feed wall (row B's outlet)
 ramp_deg    = 40;           // ramp and chute angle from horizontal (D11)
-porch_deg   = 20;           // chute floor angle under tray B only (D12)
+// The porch was 20 degrees (D12). Pills reach tray A by flowing OVER the
+// stagnant wedge the porch carries, and that wedge's surface is by
+// construction at the angle of repose -- so the last 30mm to tray A never had
+// the 10 degree margin the ramp has. What the porch angle does control is how
+// much throat is left over the wedge if the real repose is higher than the 30
+// degree estimate: at 20 degrees a 35 degree repose closed the throat to
+// 25.8mm, under one pill length. At 25 it stays 28.9. (D20)
+porch_deg   = 25;           // chute floor angle under tray B only (D12, D20)
 hopperB_run = 70.0;         // hopper B mouth depth in Y
 hopperA_run = 32.0;         // hopper A mouth depth in Y
 chute_clear = 36.0;         // clear height of the crossing chute, at the ridge
@@ -137,7 +149,11 @@ function rampB(y) = trayB_floor + (y - yB_tray1) * ramp_tan;
 // Above the rim the pick surface is ONE SLOPED PLANE up to tray B's rim -- a
 // lid spanning two flat steps is a Z in section, and a Z cannot be printed
 // without support whichever way it is laid.
-trayA_rim       = 42.0;
+// 43, not 42: raising the porch to 25 degrees (D20) lifted tray B's floor by
+// 3.1mm, and the wall between the trays only keeps its pill_dia + 3 retaining
+// height if the plane's front end comes up with it. The front WALL is
+// scalloped to trayA_front_h regardless, so the reach over the wall is unchanged.
+trayA_rim       = 43.0;
 pickplane_front = trayA_rim;
 function pickplane(y) = pickplane_front
                       + (y / yB_tray1) * (trayB_rim - pickplane_front);
@@ -235,9 +251,32 @@ trayA_scallop_r = 6.0;
 // non-manifold edges the first time. It oversteps instead, taking a sliver off
 // each divider's front tip above the scallop line.
 scallop_over    = 0.4;
-// The front labels sit below the lid skirt, so they stay readable with the lid
-// on. They used to be centred on half the front face, which the skirt covers.
-label_z_center  = 13.0;
+// Label recesses for 1/2 inch Brother TZe tape (D19). Two per bay: the lower
+// strip on the module's own front face, below the lid skirt so it reads with
+// the lid on; the upper strip on the wall between the trays, which faces
+// forward over tray A. Revision 5 documented these sizes but never wrote them
+// here -- the recesses shipped 9mm tall for a 12mm tape (INCIDENTS.md,
+// revision 6). Defined here, not in section 10, because the skirt assert in
+// section 7 reads them.
+label_tape_w    = 12.0;     // 1/2 inch TZe, nominal
+label_clear     = 0.6;      // tape sits in the recess without being pushed
+label_h         = label_tape_w + label_clear;            //  12.6
+label_w         = 36.0;
+label_z         = 0.5;      // recess depth; tape is about 0.16 thick
+label_z_center  = 13.0;     // lower strip, centre height on the front face
+labelB_z0 = chuteA_ceil(yA_tray1);                       //  39.0, chute mouth top
+labelB_z1 = pickplane(yA_tray1);                         //  pick plane over that wall
+label_b_center = (labelB_z0 + labelB_z1) / 2;
+label_cut_over  = 1.0;      // the cut starts this far OUTSIDE the face, never inside it
+
+assert(label_w < bay_w - 4,
+       "the label recess is wider than the bay leaves room for");
+assert(labelB_z1 - labelB_z0 > label_h + 6,
+       "the wall between the trays is too short to carry a tape label");
+assert(min(wall_out, wall_div) - label_z >= 1.8,
+       "the label recess is cut so deep it leaves a wall thinner than 1.8mm");
+assert(label_z_center - label_h / 2 > 2,
+       "the lower label recess runs off the bottom of the front face");
 
 assert(trayA_front_h > trayA_pile_front + 5,
        "the scalloped front wall is at or under the pill line -- row A would spill out of its own front");
@@ -280,27 +319,40 @@ assert(rib_lane < 30.0,
 // to the chute floor so it self-supports rather than bridging.
 // ------------------------------------------------------------
 cubby_d    = 70.0;          // depth in Y from the back face
-cubby_ceil = 3.0;           // deck thickness between the cubby and the chute
+cubby_ceil = 3.0;           // MINIMUM deck thickness between the cubby and the chute
+// The ceiling used to run parallel to the chute floor at 40 degrees, which
+// revision 5 called "self-supporting". It is a 50-degree-from-vertical
+// overhang -- the same one the chute ceiling carries as an ADVISORY -- across
+// the full 224mm inner width with nothing to anchor a drooping perimeter to.
+// It now runs at 45 degrees, the conservative FDM limit, anchored so the deck
+// is cubby_ceil thick at the back face and thickens toward the front. (D21)
+cubby_ceil_deg = 45;
+cubby_back  = module_d - wall_out;
+cubby_y0   = module_d - cubby_d;
+function cubby_ceil_z(y) = chuteA_floor(module_d) - cubby_ceil
+                         - (module_d - y) * tan(cubby_ceil_deg);
+cubby_h_back  = cubby_ceil_z(module_d) - base_t;
+cubby_h_front = cubby_ceil_z(cubby_y0) - base_t;
 // A retaining lip across the opening, so whatever is in there stays in there
 // when the module is slid around the bench. You reach in over it rather than
 // sliding things out. It is simply the bottom of the back wall, left uncut.
-cubby_lip_h = 42.0;
-cubby_back  = module_d - wall_out;
-cubby_y0   = module_d - cubby_d;
-cubby_h_back  = chuteA_floor(module_d) - cubby_ceil - base_t;
-cubby_h_front = chuteA_floor(cubby_y0) - cubby_ceil - base_t;
+// Level with the cubby's shallow end, so the forward part is a shelf you can
+// see into, not a well you fish in (D21; the 42 of revision 5 stood 12mm
+// above a 30mm shallow end).
+cubby_lip_h = 30.0;
 
 assert(cubby_y0 > yB_tray1 + 10,
        "the cubby reaches forward into the porch, where the chute floor is too low to leave a deck");
+assert(cubby_ceil_deg >= ramp_deg && cubby_ceil_deg <= 45,
+       "the cubby ceiling must be at least as steep as the chute floor (or the deck thins toward the back) and no steeper than the 45 degree overhang limit");
 assert(cubby_h_front > 25,
        "the cubby's shallow end is too low to put anything in");
 assert(cubby_ceil >= 3.0,
        "the deck between the cubby and the chute is thinner than a printed floor");
-assert(cubby_lip_h + base_t < chuteA_floor(module_d) - cubby_ceil - 25,
+assert(cubby_lip_h + base_t < cubby_ceil_z(module_d) - 25,
        "the retaining lip leaves under 25mm of clear opening above it");
-// The lip may stand taller than the cubby's own shallow end (41.3) -- that just
-// makes the forward part of the cubby a well rather than a shelf, which is the
-// point of a retaining lip. What it must not do is swallow the opening.
+assert(cubby_lip_h <= cubby_h_front + 0.5,
+       "the retaining lip stands above the cubby's own shallow end -- the front becomes a well");
 assert(cubby_lip_h < cubby_h_back * 0.6,
        "the retaining lip takes more than 60% of the cubby's opening height");
 
@@ -352,6 +404,26 @@ assert(pick_lid_skirt_bot < trayA_front_h - 3.0,
 assert(pick_lid_skirt_bot > label_z_center + label_h / 2 + 2,
        "the lid skirt covers the bay labels");
 
+// Finger notches in the skirt (D22). The lid comes off with a straight lift --
+// its back edge is 0.35mm from the wall behind tray B, so tilting it about
+// that edge jams the top-back corner after 5 degrees -- and a 229mm plate
+// hung 0.35mm off the front face gives nothing to lift by. Two rounded slots
+// in the skirt's bottom edge, one under each hand, leave a 3mm ceiling to
+// hook a fingertip under. Their top runs a little above the scalloped wall,
+// so the notch shows a sliver of tray, but stays above the pill line.
+pick_notch_w   = 22.0;
+pick_notch_h   = 8.0;
+pick_notch_r   = 4.0;
+pick_notch_top = pick_lid_skirt_bot + pick_notch_h;              //  32.0
+pick_notch_x   = [bay_center_x(1), bay_center_x(bays - 2)];      // bays 2 and 4
+
+assert(pick_notch_top > trayA_pile_front + 5,
+       "a skirt notch opens the front below the pill line -- pills would roll out through it");
+assert(pick_notch_top < trayA_front_h + 3,
+       "a skirt notch runs so far above the scalloped wall that it stops closing the scallop");
+assert(pick_notch_w < bay_w - 6 && pick_notch_r * 2 < pick_notch_w,
+       "a skirt notch is wider than a bay's share of the skirt, or its rounding has eaten it");
+
 // ------------------------------------------------------------
 // 8. Fill lid (drops into the hopper mouth, flush with the rim,
 //    retained by two cantilever snap tabs)
@@ -368,10 +440,19 @@ fill_lid_x      = inner_w     - 2 * fill_lid_clear;
 fill_lid_y      = hop_mouth_d - 2 * fill_lid_clear;
 fill_tab_w      = 16.0;
 fill_tab_t      = 1.2;
-fill_tab_drop   = 10.0;
+// 12, not 10 (D23). The tab's barb pocket and the seat-ledge relief for the
+// same tab are two separate cuts in the same 2.4mm wall; in revision 5 they
+// were 0.7mm apart, so the barb latched on a 0.7 x 1.0mm sliver of PLA. The
+// pocket now sits a full fill_catch_t below the relief -- see the assert.
+fill_tab_drop   = 12.0;
 fill_tab_barb   = 1.1;
 fill_tab_engage = fill_tab_barb - fill_lid_clear;
 fill_tab_ramp   = 3.0;
+// The barb's retaining face is no longer flat (D23). A flat face against a
+// flat pocket ceiling is a permanent snap: it comes out by breaking. At 35
+// degrees the lid still needs a deliberate pull to release, but a pull
+// releases it, every refill, without fatiguing the tab.
+fill_tab_return_deg = 35;
 fill_tab_strain = 3 * fill_tab_t * (fill_tab_barb - fill_lid_clear) / (2 * pow(fill_tab_drop, 2));
 fill_tab_pocket_h = 6.0;
 fill_barb_top_z   = fill_seat_z - fill_tab_drop + 5.0;
@@ -384,9 +465,37 @@ assert(fill_tab_tip_z > ramp_at_back + 1.0,
        "the fill lid's back snap tab reaches below the ramp at the back of the hopper");
 assert(fill_tab_strain < 0.015,
        "snap-tab bending strain over 1.5% -- lengthen the tab or thin it");
-fill_grip_d     = 18.0;
+assert(fill_tab_return_deg >= 30 && fill_tab_return_deg <= 50,
+       "the barb return angle is outside the releasable-but-retained band");
+
+// A pull lip on the lid's front edge and a matching notch in the wall in
+// front of it (D23). The lid sits flush, so without these the only purchase
+// was a fingernail on a 3mm edge through an 18mm slot. The wall between tray
+// B and hopper B is cut down to the seat plane across fill_grip_d, and the
+// lid's plate carries on forward across that cut and out over tray B's air,
+// where a fingertip hooks under it. The cut stops at the seat plane, so it
+// opens nothing below the lid: the hopper stays closed with the lid on.
+fill_lip_w      = 30.0;
+fill_lip_len    = 8.0;
+fill_grip_d     = fill_lip_w + 4.0;                  //  34.0, the wall notch
 seat_cut_over   = 0.4;
 seat_lip_drop   = 0.2;
+// The seat-ledge relief for each tab oversteps INTO the wall by this much in
+// Y so its face never lands on the wall's own face (the coplanar-touch class).
+fill_notch_over = 1.0;
+fill_notch_bot_z = fill_seat_z - fill_ledge_w - fill_notch_over;    // 134.0
+// What the front barb actually latches on: the material between the top of
+// its pocket and the bottom of the relief notch above it.
+fill_catch_t    = fill_notch_bot_z - (fill_tab_pocket_z + fill_tab_pocket_h);  // 2.7
+
+assert(fill_catch_t >= 2.0,
+       "under 2mm of wall between the barb pocket and the seat-ledge relief -- the snap latches on a sliver");
+assert(fill_lip_len > wall_div + fill_lid_clear + 3.0,
+       "the pull lip does not reach past the wall in front of the lid far enough to get a finger under");
+assert(fill_lip_w + 2 * fill_lid_clear < fill_grip_d - 2.0,
+       "the pull lip is wider than the notch cut for it");
+assert(fill_grip_d < bay_w,
+       "the grip notch is wider than one bay");
 
 assert(seat_lip_drop > 0 && seat_lip_drop < 0.5,
        "seat_lip_drop must be a small positive offset");
@@ -441,19 +550,32 @@ assert(boss_clip_drop > 0 && boss_clip_drop < 0.5,
 // the porch and narrow one lane of an end bay below the single-file rule; tray
 // A is a pick pocket, where a 5mm buttress in one corner costs nothing.
 rail1_y      = (yA_tray0 + yA_tray1) / 2;                  //  16.8, mid tray A
-rail1_soc_z1 = pickplane(rail1_y - rail_boss_w / 2);       //  57.6, the wall top
-rail1_z1     = rail1_soc_z1 - 14.0;
+// A dovetail groove is entered from above, so it has to break out of the top
+// of the wall that carries it -- and over tray A that top is the pick plane,
+// which is HIGHEST at the groove's back edge. Revision 3 capped this groove at
+// the plane's lowest point across the buttress and asserted it must not run
+// past the wall: a blind pocket, 4-11mm under the surface along its whole
+// length, that no neighbouring module could ever enter (INCIDENTS.md,
+// revision 6). The groove now runs 1mm clear of the plane at its own back
+// edge; the pick lid covers the opening in use.
+rail1_groove_y1 = rail1_y + rail_tip_w / 2 + rail_clear;   //  22.65, groove back edge
+rail1_soc_z1 = pickplane(rail1_groove_y1) + 1.0;           //  62.9, out through the plane
+// The male on the neighbour stays below ITS OWN wall's lowest point across
+// the male's footprint, so it never stands proud of the plane it is under.
+rail1_z1     = pickplane(rail1_y - rail_tip_w / 2) - 4.0;  //  48.5
 rail2_y      = (yB_wall1 + yB_hop1) / 2;                   //  98.6, mid hopper B
 rail2_soc_z1 = hopper_rim + 1.0;                           // 142.0
 rail2_z1     = 112.0;
 
 rail_sep  = rail2_y - rail1_y;                             //  81.8
 
-assert(rail1_soc_z1 > rail1_z1 && rail2_soc_z1 > rail2_z1,
-       "a rail groove is shorter than its own male");
-assert(rail1_soc_z1 <= pickplane(rail1_y - rail_boss_w / 2) + 1e-6
-       && rail2_soc_z1 <= hopper_rim + 1.0,
-       "a rail groove runs past the side wall that is supposed to carry it");
+assert(rail1_soc_z1 > rail1_z1 + rail_lead && rail2_soc_z1 > rail2_z1 + rail_lead,
+       "a rail groove is shorter than its own male plus its lead");
+assert(rail1_soc_z1 >= pickplane(rail1_groove_y1) + 0.5
+       && rail2_soc_z1 >= hopper_rim + 0.5,
+       "a rail groove does not break out of the top of the wall that carries it -- a blind dovetail cannot be entered");
+assert(rail1_z1 + rail_lead < pickplane(rail1_y - rail_tip_w / 2),
+       "the front male rail stands proud of the pick plane on its own module");
 assert(rail1_y + rail_boss_w / 2 < yA_tray1,
        "rail 1's buttress reaches back into the chute mouth");
 assert(rail_boss + wall_out - rail_out - rail_depth_clear >= 1.5,
@@ -465,27 +587,20 @@ assert(rail_sep > 50, "the two rails are too close together to resist yaw");
 // ------------------------------------------------------------
 // 10. Cosmetic / ergonomic
 // ------------------------------------------------------------
-label_w   = 32.0;
-label_h   = 9.0;
-label_z   = 0.6;
-// The lower strip sits below the pick lid's skirt so it stays readable with the
-// lid on. The upper strip is centred on the exposed face of the wall between
-// the trays, between the chute ceiling and the pick plane.
-labelB_z0 = chuteA_ceil(yA_tray1);                       //  39.0
-labelB_z1 = pickplane(yA_tray1);                         //  66.7
-label_b_center = (labelB_z0 + labelB_z1) / 2;            //  52.9
-
-assert(label_w < bay_w - 4,
-       "the label recess is wider than the bay leaves room for");
-assert(labelB_z1 - labelB_z0 > label_h + 6,
-       "the wall between the trays is too short to carry a tape label");
-assert(label_z < min(wall_out, wall_div) - 1.2,
-       "the label recess is cut so deep it leaves a wall thinner than 1.2mm");
-assert(label_z_center - label_h / 2 > 2,
-       "the lower label recess runs off the bottom of the front face");
+// Label recesses: section 4c, beside the scalloped front wall they sit under.
 
 fillet_r  = 2.0;
-foot_h    = 0.0;
+
+// Recesses in the base for stick-on rubber feet (D24): a bench unit that is
+// slid about on rails and bumped while pouring should not skate. Under the
+// back pair the base is the cubby floor, so the recess leaves base_t less
+// foot_pad_depth of it.
+foot_pad_d     = 10.0;
+foot_pad_depth = 1.0;
+foot_pad_inset = 15.0;
+
+assert(base_t - foot_pad_depth >= 1.5,
+       "a foot-pad recess leaves under 1.5mm of floor");
 
 // ------------------------------------------------------------
 // 11. Scale -- 1.0 for the real module, <1 for a bench maquette.
@@ -506,8 +621,14 @@ echo(str("tray A reach below the lid plane: ", pickplane(yA_tray0) - outletA_top
 echo(str("90-day size-00 charge = ", charge_ml, " mL; porch lane ", rib_lane, " mm"));
 echo(str("cubby: ", inner_w, " wide x ", cubby_d, " deep x ",
          cubby_h_front, " .. ", cubby_h_back, " tall; lip ", cubby_lip_h,
-         " leaves ", chuteA_floor(module_d) - cubby_ceil - base_t - cubby_lip_h,
-         " clear above it"));
+         " leaves ", cubby_h_back - cubby_lip_h,
+         " clear above it; deck ", cubby_ceil, " at the back .. ",
+         chuteA_floor(cubby_y0) - cubby_ceil_z(cubby_y0), " at the front"));
+echo(str("rail 1 groove: open from z ", rail_z0, " to ", rail1_soc_z1,
+         " through the plane at ", pickplane(rail1_groove_y1),
+         "; fill catch ", fill_catch_t, " mm; porch throat at repose ",
+         chute_clear - porch_run * (tan(repose_deg) - porch_tan), " / at 35 deg ",
+         chute_clear - porch_run * (tan(35) - porch_tan)));
 echo(str("tray A front wall ", trayA_front_h, " over a pill line of ", trayA_pile_front,
          " -> reach over the wall ", trayA_front_h - trayA_pile_front,
          " mm; lid skirt ", pick_lid_hook_h, " mm down to ", pick_lid_skirt_bot));
