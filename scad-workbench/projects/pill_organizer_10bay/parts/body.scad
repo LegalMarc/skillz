@@ -28,6 +28,12 @@ module yz_extrude(x0, x1) {
         linear_extrude(height = x1 - x0) children();
 }
 
+// A profile in (x, z), extruded back along Y.
+module xz_extrude(y0, y1) {
+    translate([0, y1, 0]) rotate([90, 0, 0])
+        linear_extrude(height = y1 - y0) children();
+}
+
 function wall_x0(k) = k == 0 ? 0
                     : k == bays ? module_w - wall_out
                     : wall_out + k * bay_w + (k - 1) * wall_div;
@@ -121,6 +127,19 @@ module void_a_2d() { offset(r = fillet_r) offset(r = -fillet_r) polygon(VOID_A);
 module void_b_2d() { offset(r = fillet_r) offset(r = -fillet_r) polygon(VOID_B); }
 module mouth_2d()  { polygon(MOUTH); }
 
+// The accessory cubby (params.scad 4d): one void the full inner width, opening
+// through the BACK face only, so both side walls stay solid. Its ceiling runs
+// parallel to the chute floor above it, which means it self-supports on the
+// way up instead of bridging. Cut here rather than in body_geometry so the
+// rail buttresses, which are unioned afterwards, are not eaten by it.
+CUBBY = [
+    [cubby_y0,     base_t],
+    [module_d + 1, base_t],
+    [module_d + 1, chuteA_floor(module_d + 1) - cubby_ceil],
+    [cubby_y0,     chuteA_floor(cubby_y0)     - cubby_ceil]
+];
+module cubby_2d() { offset(r = fillet_r) offset(r = -fillet_r) polygon(CUBBY); }
+
 module body_shell() {
     difference() {
         yz_extrude(0, module_w) polygon(OUTER);
@@ -130,6 +149,7 @@ module body_shell() {
             yz_extrude(x0, x0 + bay_w) void_b_2d();
             yz_extrude(x0, x0 + bay_w) mouth_2d();
         }
+        yz_extrude(wall_out, module_w - wall_out) cubby_2d();
     }
 }
 
@@ -192,6 +212,26 @@ module fill_seat_cut() {
 
     translate([module_w / 2 - fill_grip_d / 2, hop_mouth_y0 - wall_div - 1, fill_seat_z])
         cube([fill_grip_d, wall_div + 3, lid_t + 2]);
+}
+
+// ------------------------------------------------------------
+// Scalloped front wall (params.scad 4c). The lid plane cannot come down any
+// further -- its back end is pinned to tray B's rim -- but the front WALL can.
+// Each bay's share of the front face drops to trayA_front_h, while the four
+// dividers and the two side walls still run up to the plane and carry the lid.
+// The lid's skirt hangs down the outside and closes the scallops.
+// ------------------------------------------------------------
+module front_scallop_cut() {
+    r = trayA_scallop_r;
+    for (i = [0 : bays - 1]) {
+        x0 = wall_x1(i) - scallop_over; x1 = x0 + bay_w + 2 * scallop_over;
+        xz_extrude(-1, wall_out + 1)
+            offset(r = r)
+                polygon([[x0 + r, trayA_front_h + r],
+                         [x1 - r, trayA_front_h + r],
+                         [x1 - r, trayA_front_h + 40],
+                         [x0 + r, trayA_front_h + 40]]);
+    }
 }
 
 // ------------------------------------------------------------
@@ -271,7 +311,7 @@ module rail_socket_cut() {
 module label_cuts() {
     for (i = [0 : bays - 1]) {
         cx = bay_center_x(i);
-        translate([cx - label_w / 2, -1, pickplane_front / 2 - label_h / 2])
+        translate([cx - label_w / 2, -1, label_z_center - label_h / 2])
             cube([label_w, 1 + label_z, label_h]);
         translate([cx - label_w / 2, yA_tray1 - label_z,
                    (trayB_floor + pickplane(yA_tray1)) / 2 - label_h / 2])
@@ -284,6 +324,7 @@ module body_geometry() {
     difference() {
         union() { body_shell(); porch_ribs(); rail_male(); rail_bosses(); }
         fill_seat_cut();
+        front_scallop_cut();
         rail_socket_cut();
         label_cuts();
     }

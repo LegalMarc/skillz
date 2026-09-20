@@ -150,7 +150,20 @@ wall between the trays is cut so low by the plane that tray B spills forward
 into tray A. 42 keeps 1.6mm over that bound.
 
 A second lid over tray A alone would remove the constraint entirely, at the cost
-of the two-lid brief.
+of the two-lid brief. What removes it without a third part is separating the lid
+plane from the front WALL (D17):
+
+| Quantity | Value |
+|---|---|
+| Lid plane at the front face | 42.0 — unchanged, so `trayB_front_retain` stays at 15.6 |
+| Front wall, scalloped across each bay | **30.0** |
+| Pill crest at that wall | 22.8 |
+| **Freeboard, and the reach over the wall** | **7.2** |
+| Lid skirt, hanging outside the front face | 18.2 long, bottom at 24.0, 6.0 of overlap |
+
+The dividers and both side walls still run up to the plane, so the lid is
+carried exactly as before and the scallops are invisible once it is on. With it
+off, tray A is a parts bin: open at the top and open at the front.
 
 ## Derived — the fill mouths (D16)
 
@@ -183,6 +196,23 @@ which reads about 8% high on row B because it ignores the seat ledges.
 Total across ten bays: **2.42 L** in a **5.54 L** envelope. Revision 2 held
 3.27 L in 9.45 L.
 
+## Derived — the accessory cubby (D18)
+
+| Quantity | Formula | Value |
+|---|---|---|
+| Depth in Y from the back face | `cubby_d` | 70.0 |
+| Width | `inner_w`, both side walls left full | 224.4 |
+| Ceiling | `chuteA_floor(y) - cubby_ceil`, parallel to the chute | — |
+| Height at the shallow end | `at y = 100.8` | 41.9 |
+| Height at the back face | `at y = 170.8` | 103.0 |
+| Deck between cubby and chute | `cubby_ceil` | 3.0 |
+| Solid volume, body | before / after | 2009.8 / **903.5 cm3** |
+
+The ceiling runs at the ramp angle, so it self-supports on the way up instead of
+bridging its 224 mm span. The deck it leaves is 3 mm; a uniformly loaded 3 mm
+PLA plate over that span deflects under a millimetre at the pill loads involved,
+and `attachments.json` declares it so nothing can silently cut it away.
+
 ## Derived — flow and escape paths
 
 | Check | Value | Status |
@@ -196,6 +226,7 @@ Total across ten bays: **2.42 L** in a **5.54 L** envelope. Revision 2 held
 | Chute ceiling overhang, 40 deg leg | 50 from vertical | ADVISORY — past the 45 rule, internal surface |
 | Chute ceiling overhang, porch leg | 70 from vertical | OK — bridged span cut to 20.28 by the rib |
 | Wall between trays, above tray B's floor | 15.6 | OK — 1.4x pill diameter, bounded by D15 |
+| Front wall over tray A's pill crest | 7.2 | OK — scalloped, D17 |
 | Bay width vs pill length | 1.65x | PATIKRINTI — see note |
 
 Arch note, unchanged from revision 1: 42.96 mm is 1.65x the longest pill against

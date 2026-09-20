@@ -22,14 +22,14 @@
     "min_material_mm": 1.0
   },
   {
-    "name": "pick_lid_hook_edge",
+    "name": "pick_lid_skirt_catch",
     "part": "body",
     "at": [
-      115.0,
+      92.32,
       1.4,
       38.0
     ],
-    "feature": "the front top edge the pick lid's hook hangs on -- the only thing stopping the lid sliding down its own 38.7 degree plane",
+    "feature": "a bay divider's share of the front face, above the scallop line -- what the pick lid's skirt catches on, and the only thing stopping the lid sliding down its own 38.7 degree plane",
     "min_material_mm": 1.2
   },
   {
@@ -42,5 +42,16 @@
     ],
     "feature": "buttress carrying the rear joining groove, which is cut deeper than the side wall is thick",
     "min_material_mm": 2.0
+  },
+  {
+    "name": "cubby_deck",
+    "part": "body",
+    "at": [
+      115.0,
+      135.0,
+      74.5
+    ],
+    "feature": "the deck between the accessory cubby and the crossing chute above it -- the chute floor's only support over the cubby's 224mm span",
+    "min_material_mm": 2.5
   }
 ]

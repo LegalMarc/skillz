@@ -56,12 +56,21 @@ What revision 3 does instead is shrink the box around the wedge.
   wedge — about 4 mL per bay, 2.8% of a charge, that fills once and stays. The
   flow channel over it is 29.5 mm, which is 1.1x a capsule's length and 2.7x its
   diameter, so nothing bridges. That is the whole price of the flush line.
-- **The front tray is shallow to reach into, not shallow to hold.** Pills pile
-  to 39 mm at the chute mouth and slope forward to about 23 mm at the front
-  wall. The lid plane above them runs 42 to 67 mm, so the reach is 21 mm at the
-  front and 28 mm at the back. The plane's back end is pinned to tray B's rim,
-  so its front end is the only free variable; 42 mm is as low as it goes before
-  the wall between the trays stops retaining tray B.
+- **The front tray is a parts bin, not a well.** Pills pile to 39 mm at the
+  chute mouth and slope forward to about 23 mm at the front wall. The lid plane
+  has to stay at 42 mm — its back end is pinned to tray B's rim, and a lower
+  front end cuts the wall between the trays below what stops tray B spilling
+  forward. So the front WALL drops instead: scalloped to 30 mm across each bay,
+  leaving the dividers and both side walls at the plane to carry the lid. The
+  reach over that wall is **7.2 mm**. With the lid off, tray A is open at the
+  top and open at the front; with it on, the lid's 18 mm skirt hangs down the
+  outside and the scallops are invisible.
+- **The wedge under the chute is an accessory cubby.** It can never hold pills,
+  so it holds everything else — a splitter, a funnel, the spare lids. One void
+  the full inner width, 70 mm deep, 42 mm tall at its shallow end and 103 mm at
+  the back, opening through the **back face only** so both side walls stay full.
+  Its ceiling runs parallel to the chute floor above it, so it self-supports
+  instead of bridging. 1.1 L of what was solid infill is now usable space.
 - **The fill mouths are 62 and 40 mm, about 3:2.** The wall between them leans
   8.8 mm forward at the rim (17.3 degrees from vertical), pivoting where it
   springs off the chute ceiling so hopper B's ramp is untouched. Left vertical
@@ -90,7 +99,7 @@ it is laid. Every wall over both trays dies on that plane.
 | Part | Qty | Print orientation |
 |---|---|---|
 | `body` | 1 | as modelled, flat on its base, no supports |
-| `pick_lid` | 1 | rotated 38.7 deg so the plate lies flat, hook upward |
+| `pick_lid` | 1 | rotated 38.7 deg so the plate lies flat, skirt upward |
 | `fill_lid` | 1 | flipped, plate top face on the bed, tabs up |
 
 Print-ready STLs are in `build/print_ready/`, already rotated and dropped to

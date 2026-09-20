@@ -6,10 +6,13 @@
 // flat steps would be a Z in section -- unprintable without
 // support whichever way it is laid, because one arm is always
 // cantilevered. So the body's whole pick surface is a single
-// 38.7 degree plane and this is a flat plate lying on it, hung
-// on a lip that hooks over the module's front top edge. The
-// hook is what holds it: PLA on PLA grips to about 17 degrees
-// and this slope is 32, so the plate would otherwise slide off.
+// 38.7 degree plane and this is a flat plate lying on it, with
+// a skirt down its front edge. The skirt is what holds it: PLA
+// on PLA grips to about 17 degrees and this slope is 39, so the
+// plate would otherwise slide straight off. The skirt also
+// closes the scalloped front wall, which is cut 12mm below the
+// plane so the front tray is open to the front once the lid is
+// lifted.
 //
 // Local origin: the module's front-bottom-left outer corner,
 // offset in X only. This part is modelled IN ASSEMBLED
@@ -26,7 +29,7 @@
 // To remove: lift the front edge until the hook clears the
 //   front face, then slide it forward. Nothing to unclip.
 //
-// EXPECTED_BBOX: [229.0, 63.85, 59.629]
+// EXPECTED_BBOX: [229.0, 63.85, 70.829]
 // ============================================================
 
 include <../params.scad>
@@ -38,8 +41,8 @@ lid_back_y = yB_tray1 - pick_lid_clear;        // 60.85
 
 assert(lid_back_y > yB_tray0,
        "the pick lid does not reach across tray B");
-assert(zu(0) - pick_lid_hook_h < pickplane_front - 4,
-       "the front hook does not reach far enough down the front face to retain the lid");
+assert(zu(0) - pick_lid_hook_h < trayA_front_h - 3,
+       "the front skirt does not reach down past the scalloped front wall");
 
 module yz_extrude(x0, x1) {
     rotate([90, 0, 90]) translate([0, 0, x0])
@@ -56,7 +59,7 @@ PLATE = [
     [hook_front, zu(hook_front) + pick_lid_tv]
 ];
 
-// The hook hangs down past the module's front face, 0.35mm clear of it. Its
+// The skirt hangs down past the module's front face, 0.35mm clear of it. Its
 // top edge runs 1mm ABOVE the plate's underside and well below the plate's top
 // face, so it lies strictly INSIDE the plate's section: an earlier version
 // traced the plate's own faces exactly and the union came out non-watertight,
