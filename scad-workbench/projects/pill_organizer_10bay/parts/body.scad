@@ -134,11 +134,15 @@ module mouth_2d()  { polygon(MOUTH); }
 // rail buttresses, which are unioned afterwards, are not eaten by it.
 CUBBY = [
     [cubby_y0,     base_t],
-    [module_d + 1, base_t],
+    [cubby_back,   base_t],                      // inside face of the retaining lip
+    [cubby_back,   base_t + cubby_lip_h],        // up and over it
+    [module_d + 1, base_t + cubby_lip_h],        // out through the back wall above it
     [module_d + 1, chuteA_floor(module_d + 1) - cubby_ceil],
     [cubby_y0,     chuteA_floor(cubby_y0)     - cubby_ceil]
 ];
-module cubby_2d() { offset(r = fillet_r) offset(r = -fillet_r) polygon(CUBBY); }
+// No fillet pass here: nothing flows through the cubby, and the closing
+// operation the flow voids use would round the lip's own top edge away.
+module cubby_2d() { polygon(CUBBY); }
 
 module body_shell() {
     difference() {
