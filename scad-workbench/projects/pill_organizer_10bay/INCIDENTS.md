@@ -33,3 +33,35 @@ upstreaming.
 - **Root cause:** FCL cannot define a penetration depth for two faces lying exactly on one another, which is what a lid resting flush on its seat is. The verdict takes the max over all contact points and gets the part's extent instead. This is the blind spot already logged on 2026-08-19 ("the declared-contact verdict has no spatial awareness"); this entry adds a concrete reproducible number for it.
 - **Fix (in this project):** the lid is modelled 0.15 mm above its seat, which is honest — the barb has 0.3 mm of lift slop, so its resting height genuinely is not determined — and the pair reports as a NEAR MISS instead.
 - **Already promoted to a rule?** not yet — candidate: a declared `touching` contact with a zero-width range should be verified by boolean volume, not by FCL penetration depth.
+
+---
+
+## Revision 2 — grouping both fill ports at the back and both trays at the front
+
+### 2026-09-20 -- a non-watertight part reported as "UNINTENDED INTERFERENCE, penetration depth 90.170 mm"
+- **Where:** `check_collisions.py` / `check_bore_reachability.py` on `pick_lid`.
+- **Symptom:** the bundle reported `collisions=FAIL` with a 90mm penetration against the body, and `bore_reachability=FAIL`. Both were misleading. The real cause was one line further down, and only visible when the checker was run by hand: `DEGRADED: build/positioned/body.stl is not watertight -- collision results for it are unreliable`. An exact boolean of the same pair refused to run at all ("Not all meshes are volumes"). The lid's own union had produced an open mesh.
+- **Root cause:** the hook's overlap polygon traced the plate's underside and top face *exactly*, so the union's coincident boundaries produced zero-area faces rather than a solid weld.
+- **Fix:** the hook's top edge now runs 1mm above the plate's underside and well below its top face -- strictly inside the plate's section, so the overlap is volumetric on every side.
+- **Already promoted to a rule?** not yet -- candidate: when a mesh is not watertight, the bundle's `CHECK_RESULT` line should say so instead of reporting a derived number from an unreliable computation. A 90mm penetration figure that is really "this mesh is broken" sends you looking at layout positions for a long time.
+
+### 2026-09-20 -- two rotations whose signs had to agree, and did not
+- **Where:** `parts/pick_lid.scad` + `layout.scad`, the lid's tilt onto the pick plane.
+- **Symptom:** 18,080 mm^3 of the lid buried in the body. The lid had swung *down* into the trays instead of up the plane.
+- **Root cause:** the lid was modelled flat and tilted by `layout.scad`, while its hook was pre-rotated inside the part file so it would come out vertical. Two rotations, opposite signs, one of them wrong.
+- **Fix:** the lid is modelled directly in assembled orientation. There is now one rotation in the whole chain -- the print orientation -- and it lives in a comment, not in code.
+- **Already promoted to a rule?** not yet -- candidate: prefer modelling a part in the orientation it is *used* in when its placement involves a rotation; pay the cost in the print-orientation note rather than in two rotations that must cancel.
+
+### 2026-09-20 -- a buttress under a sloped surface, capped three different wrong ways
+- **Where:** `parts/body.scad`, the buttress carrying the front joining groove, which sits under the sloped pick plane.
+- **Symptom:** capped at the rail's centreline height, it stood ~5mm proud at its front edge and speared the pick lid (725 mm^3). Capped at the plane's value at its footprint's low end, it left a 0.3mm wedge of wall above it, and the socket cut through that wedge tore 3 boundary edges in the mesh -- genus 1, not watertight, every containment check unreliable.
+- **Root cause:** trying to derive a scalar cap height for a feature whose ceiling is not flat.
+- **Fix:** the buttresses are `intersection()`-ed with the outer silhouette. They then end exactly on whatever surface is above them, with no sliver and no height to get wrong.
+- **Already promoted to a rule?** not yet -- candidate: a feature added under a non-planar surface should be intersected with that surface's own solid, never capped at a computed height.
+
+### 2026-09-20 -- 7197 mm^2 of flat bridged ceiling, invisible to every gate
+- **Where:** `parts/body.scad`, the crossing chute's ceiling where it runs under tray B.
+- **Symptom:** none, from the validation bundle -- connectivity, dimensions, collisions, bores and attachment all passed. Found only by scanning face normals for near-horizontal downward faces: 7197 mm^2 at one Z, spanning 36mm of depth across every bay. It would have sagged into the chute.
+- **Root cause:** the chute's ceiling followed tray B's flat underside instead of its own floor.
+- **Fix:** the ceiling now runs parallel to the chute floor, holding a constant section at `ramp_deg`. Flat ceiling across the whole body fell to 1105 mm^2, none of it one large span, and the chute got a constant section as a side effect.
+- **Already promoted to a rule?** not yet -- candidate: `check_printability.py` is documented as failing 4 of 4 real parts on overhang *area*, which is why it is advisory. But a scan for **near-horizontal downward faces above the bed, grouped by Z**, separates real bridged ceilings from the fillet facets that make the area metric useless -- three lines of trimesh, and it found a defect nothing else in the suite could see.

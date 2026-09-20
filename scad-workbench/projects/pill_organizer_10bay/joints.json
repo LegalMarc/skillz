@@ -1,33 +1,4 @@
 {
-  "_comment": "No declared contacts. Every interface in this assembly is a running or clearance fit: the pick lid hangs on its rod with hinge_clearance=0.15mm radial, and the fill lid floats in fill_lid_seat_gap=0.15mm of barb slop above its seat. Both therefore report as NEAR MISS, which is correct -- declaring either as a contact would also exempt it from the motion sweep, and the pick lid's swing is the single most important thing here to sweep.",
-  "contacts": [],
-  "motion": [
-    {
-      "id": "pick_lid_swing",
-      "drivers": [
-        {
-          "part": "pick_lid",
-          "type": "revolute",
-          "axis": [
-            1,
-            0,
-            0
-          ],
-          "origin": [
-            0,
-            33.8,
-            47.0
-          ],
-          "ratio": -1.0
-        }
-      ],
-      "range_deg": [
-        0,
-        105
-      ],
-      "step_deg": 0.5,
-      "min_clearance_mm": 0.1,
-      "_derivation": "origin is hinge_rod_y/hinge_rod_z from params.scad. ratio -1.0 because a POSITIVE rotation about +X drops the lid's front edge; negative opens it. Range stops at 105 deg: the lid's designed hard stop against the stepped hopper wall is at 111.7 deg (measured by boolean intersection, not calculated -- two hand calculations of this angle were both wrong), and sweeping into the stop would report the stop itself as a clash. min_clearance_mm is 0.10 because this joint's OWN designed running clearance is hinge_clearance = 0.15 mm radial between rod and bore; a threshold above that reports the hinge as a fault. It is derived from the joint, not relaxed to make the sweep pass."
-    }
-  ]
+  "_comment": "No declared contacts and no motion. Nothing in this revision moves: grouping both trays at the front put 81mm of step between them, which makes a hinged shared lid impossible (an L-section lid's mass centre sits ~48mm below any back-top pivot, putting its over-centre angle near 144 degrees), so both lids now lift off. Both are clearance fits -- the pick lid floats 0.2mm above its plane and the fill lid 0.15mm above its seat -- so both report as NEAR MISS, which is correct. Modelling either as a coplanar resting contact is what made FCL report 66.9mm of penetration on a pair whose real boolean overlap measured 0.000 mm3.",
+  "contacts": []
 }

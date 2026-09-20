@@ -15,7 +15,7 @@
 //   inward over the wall and snap into their pockets. Lift it
 //   out by the front edge, through the body's relief notch.
 //
-// EXPECTED_BBOX: [223.8, 68.8, 16.0]
+// EXPECTED_BBOX: [223.8, 124.674, 13.0]
 // ============================================================
 
 include <../params.scad>
