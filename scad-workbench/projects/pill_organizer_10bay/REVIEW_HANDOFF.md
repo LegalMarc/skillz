@@ -42,7 +42,7 @@ python3 ~/.local/src/openscad-cad-skills/scad-modeler/scripts/check_rules.py --p
 | File | What it holds |
 |---|---|
 | `INCIDENTS.md` | Twelve real defects across three revisions, each with the tell that found it |
-| `plan.md` | Decisions **D1–D18**, with criticality and provenance. D8, D11–D18 are revision 3 |
+| `plan.md` | Decisions **D1–D19**, with criticality and provenance. D8, D11–D19 are revision 3 |
 | `calculations.md` | Every derived number, the `PATIKRINTI` assumptions, and the decisions/assumptions log |
 | `README.md` | What it is, how it works, and the reviewer's-attention list |
 | `params.scad` | Single source of dimensions. Every constraint is an `assert()` here |
@@ -82,7 +82,16 @@ python3 ~/.local/src/openscad-cad-skills/scad-modeler/scripts/check_rules.py --p
    clearance — rail 0.35, fill lid 0.30, snap barb 0.8 of real engagement — is
    geometry only. A calibration coupon ships alongside and should be printed
    first.
-8. **Coverage gaps are not passes.** Four checks are `not-applicable` and
+8. **The accessory cubby's retaining lip is 42 mm**, which is taller than the
+   cubby's own shallow end (41.3). That is intentional — it makes the forward
+   part a well rather than a shelf — but it means anything stored there is
+   lifted in and out over a lip nearly as tall as the space is deep at the
+   front. Judge whether that is usable or merely defensible.
+9. **The label recesses are 0.5 mm deep in walls 2.4 and 2.8 mm thick**, and
+   the upper strip sits on the wall between the trays, which is also the wall
+   doing the `trayB_front_retain` job. Check the interaction: the recess is not
+   in the assert's formula.
+10. **Coverage gaps are not passes.** Four checks are `not-applicable` and
    `check_rules.py` reports three antecedents that never fired (R-01, R-09,
    R-12). Seven rules are `MANUAL` and need explicit self-assessment. Nothing
    moves in this revision, so there is no motion sweep at all — a genuine

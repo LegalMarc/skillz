@@ -215,6 +215,18 @@ bridging its 224 mm span. The deck it leaves is 3 mm; a uniformly loaded 3 mm
 PLA plate over that span deflects under a millimetre at the pill loads involved,
 and `attachments.json` declares it so nothing can silently cut it away.
 
+## Derived — label recesses (D19)
+
+| Quantity | Formula | Value |
+|---|---|---|
+| Tape width, 1/2 inch TZe | `label_tape_w` | 12.0 |
+| Recess height | `+ label_clear` | 12.6 |
+| Recess length / depth | | 36.0 / 0.5 |
+| Lower strip, on the front face | `label_z_center` | 13.0 — clears the lid skirt at 24.0 |
+| Upper strip, on the wall between the trays | `(chuteA_ceil(yA_tray1) + pickplane(yA_tray1)) / 2` | 52.9 |
+| Exposed height of that wall | `39.0 .. 66.7` | 27.7 — carries 12.6 with 7.5 either side |
+| Wall left behind the recess | `wall_div - label_z` | 1.9 |
+
 ## Derived — flow and escape paths
 
 | Check | Value | Status |

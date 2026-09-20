@@ -96,6 +96,12 @@ PLA on PLA grips to about 17 degrees and the pick plane is 32.
 steps is a Z in section, and a Z cannot be printed without support whichever way
 it is laid. Every wall over both trays dies on that plane.
 
+- **Two label strips per bay, sized for 1/2 inch TZe tape.** The lower one is
+  on the module's own front face, below the lid skirt, so it reads with the lid
+  on; the upper one is on the wall between the trays, facing forward over tray
+  A. They are 0.5 mm deep, so the tape sits below flush and cannot be caught.
+  Neither is on a lid — lids come off and go back the other way round.
+
 ## Bill of materials
 
 | Part | Qty | Print orientation |
