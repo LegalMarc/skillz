@@ -1,5 +1,5 @@
 // ============================================================
-// body.scad -- the organizer body, revision 3. Two pick trays
+// body.scad -- the organizer body, revision 5. Two pick trays
 // at the FRONT under one lid, two fill mouths at the BACK under
 // one lid.
 //

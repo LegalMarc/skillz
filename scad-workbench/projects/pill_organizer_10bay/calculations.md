@@ -3,13 +3,12 @@
 All lengths mm, all angles degrees. `tan(40) = 0.839100`, `tan(20) = 0.363970`,
 `tan(30) = 0.577350`.
 
-**Revision 3.** Revision 1 alternated tray / mouth / tray / mouth front-to-back
-with four lids. Revision 2 grouped both fill mouths at the back under one lid
-and both pick trays at the front under one lid, which forced a crossing.
-Revision 3 keeps that topology and changes two things about the crossing
-chute — the ramp angle, and a shallow porch under tray B — which together take
-the envelope from 9.45 L to 5.54 L without dropping either row below the
-90-day charge.
+**Revision 5.** See `plan.md` for the revision table and the full decision log.
+Revision 2 forced the crossing by grouping the lids by function; revision 3
+changed the crossing chute's ramp angle and added the porch under tray B, taking
+the envelope from 9.45 L to 5.54 L; revision 4 fixed the reach into tray A and
+the fill-mouth split; revision 5 put the dead wedge to work as a cubby. Neither
+row ever drops below the 90-day charge.
 
 ## Inputs
 
@@ -29,7 +28,7 @@ Both `PATIKRINTI` rows set margins, not fits. Neither can make one part fail to
 fit another. They are resolved by loading the finished unit.
 
 The repose figure now carries more weight than it did in revision 2, because
-revision 3 spends margin against it deliberately — see "The porch" below. If
+revision 3 onward spends margin against it deliberately — see "The porch" below. If
 the real requirement turns out to be nearer mass flow (walls 55–60 degrees from
 horizontal) rather than repose, the dead wedge grows rather than shrinks and
 the ramp has to go back up. That is what the calibration coupon print is for.

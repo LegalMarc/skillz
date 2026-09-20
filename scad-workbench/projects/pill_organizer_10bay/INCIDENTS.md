@@ -66,7 +66,7 @@ upstreaming.
 - **Fix:** the ceiling now runs parallel to the chute floor, holding a constant section at `ramp_deg`. Flat ceiling across the whole body fell to 1105 mm^2, none of it one large span, and the chute got a constant section as a side effect.
 - **Already promoted to a rule?** not yet -- candidate: `check_printability.py` is documented as failing 4 of 4 real parts on overhang *area*, which is why it is advisory. But a scan for **near-horizontal downward faces above the bed, grouped by Z**, separates real bridged ceilings from the fillet facets that make the area metric useless -- three lines of trimesh, and it found a defect nothing else in the suite could see.
 
-## Revision 3 -- the 40 degree ramp and the porch under tray B
+## Revisions 3-5 -- the 40 degree ramp, the porch, the scallop and the cubby
 
 ### 2026-09-20 -- a 2D section study cannot see a bridged ceiling, and this one hid a whole defect
 

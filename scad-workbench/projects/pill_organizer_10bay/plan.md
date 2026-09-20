@@ -19,6 +19,23 @@ Constraints taken from the brief and the sketch:
 - Modules gang left/right on rails so a second unit adds more pill types.
 - Everyday pick lid hinges up and stays open on its own while picking.
 
+## Revision history
+
+A **revision** here is a change that alters what the object is or how you use
+it, not merely a dimension — each one required the whole suite to be re-run.
+Revisions 1–3 were labelled by topology alone, which stopped being honest once
+revision 3 kept absorbing changes to how you pick and pour; 4 and 5 are split
+out to match. The decision IDs are the real change log and have always been
+accurate.
+
+| Rev | What changed | Decisions | Commit |
+|---|---|---|---|
+| 1 | Terraced two tiers, tray / mouth / tray / mouth front-to-back, four lids, hinged pick lids | D1–D7 | `165a436` |
+| 2 | Both fill ports grouped at the BACK, both pick trays at the FRONT, two lids. Forces the crossing chute; both lids become lift-off; the pick surface becomes one sloped plane | D8–D10 | `9f98c89` |
+| 3 | Ramp 48 → 40 degrees, a 20-degree porch under tray B, and a splitter rib to carry the porch ceiling. Envelope 9.45 → 5.54 L | D11–D14 | `82494c1` |
+| 4 | Reach and pour. Tray A's rim set independently of tray B's floor, the hopper divider leaned to even the two fill mouths, the front wall scalloped and the lid's hook grown into a skirt | D15–D17 | `8944111`, `d521a1e` |
+| 5 | The dead wedge becomes an accessory cubby with a 42 mm retaining lip, and two rows of 1/2 inch TZe tape recesses | D18–D19 | `4d129da`, `22db5bb`, `b2de005` |
+
 ## Architecture options
 
 | Option | Description |
