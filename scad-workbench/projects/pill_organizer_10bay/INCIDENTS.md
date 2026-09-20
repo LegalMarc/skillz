@@ -65,3 +65,49 @@ upstreaming.
 - **Root cause:** the chute's ceiling followed tray B's flat underside instead of its own floor.
 - **Fix:** the ceiling now runs parallel to the chute floor, holding a constant section at `ramp_deg`. Flat ceiling across the whole body fell to 1105 mm^2, none of it one large span, and the chute got a constant section as a side effect.
 - **Already promoted to a rule?** not yet -- candidate: `check_printability.py` is documented as failing 4 of 4 real parts on overhang *area*, which is why it is advisory. But a scan for **near-horizontal downward faces above the bed, grouped by Z**, separates real bridged ceilings from the fillet facets that make the area metric useless -- three lines of trimesh, and it found a defect nothing else in the suite could see.
+
+## Revision 3 -- the 40 degree ramp and the porch under tray B
+
+### 2026-09-20 -- a 2D section study cannot see a bridged ceiling, and this one hid a whole defect
+
+The revision-3 profile was agreed from an annotated 2D section: 40 degree ramp,
+20 degree porch under tray B, tray B's floor landing on tray A's rim. Every
+number in that study was right. It still missed the defect that mattered.
+
+Tray B's floor is carried on the bay dividers alone -- the chute passes
+underneath, so the tray's own front and back walls never reach down to it. At
+48 and at 40 degrees that floor's underside is the chute ceiling, sloped, and
+it self-supports. At 20 degrees it is a near-flat ceiling bridging the full
+43mm bay width. That is the same class of defect as the 7197 mm^2 found on this
+project two revisions ago, and the suite still has no gate for it.
+
+A section drawing is a slice through ONE plane. Bridging is about the span
+PERPENDICULAR to that plane, which a section by construction cannot show. The
+study was not wrong; it was answering a different question, and it was read as
+though it answered this one.
+
+Found by modelling the porch and re-running the face-normal scan (downward
+faces grouped by overhang angle from vertical), not by any check in the
+bundle. Fixed with a splitter rib down the middle of each porch, which halves
+the bridge to 20.3mm and carries the slab directly. Confirmed by a bore
+declaration that walks a lane end to end past the rib -- a sealed lane would
+still be one watertight single body, so no other check would have noticed.
+
+### 2026-09-20 -- print-ready exports dropped in build/ were silently adopted as the parts under test
+
+The maquette and the print-oriented exports were written to `build/test_*.stl`
+and `build/print_*.stl`. `validate_scad.sh --all` globs `build/` and matches STLs
+to declared parts by name, so it picked those up as `body`, `pick_lid` and
+`fill_lid` and ran every declaration against them. Two checks that had just
+passed came back FAIL: the bores were "blocked" in `test_body.stl` because that
+mesh is at 0.42 scale, and the rail grooves were "blocked" in `print_body.stl`
+because that one has been translated to sit on z = 0.
+
+Both failures were real reports about the wrong meshes. The declarations were
+fine; the directory was not. Nothing warned that `build/` had grown two extra
+copies of every part, and the failure text names the file, which is the only
+reason it took one read rather than an afternoon.
+
+Fixed by moving the exports to `build/print_ready/` and `build/maquette/`. Worth
+upstreaming: the bundle should either ignore unexpected STLs in `build/` or say
+out loud which files it adopted as which part before it starts checking them.

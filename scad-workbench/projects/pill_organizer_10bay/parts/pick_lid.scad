@@ -1,11 +1,12 @@
 // ============================================================
 // pick_lid.scad -- ONE lid over BOTH pick tray rows.
 //
-// The two tray floors are 81mm apart, so a lid covering both as
-// an L would be a Z in section -- unprintable without support
-// whichever way it is laid, because one arm is always
+// Revision 3 brings tray B's floor down onto tray A's rim, but
+// their RIMS are still 38mm apart, so a lid covering both as two
+// flat steps would be a Z in section -- unprintable without
+// support whichever way it is laid, because one arm is always
 // cantilevered. So the body's whole pick surface is a single
-// 31.9 degree plane and this is a flat plate lying on it, hung
+// 31.8 degree plane and this is a flat plate lying on it, hung
 // on a lip that hooks over the module's front top edge. The
 // hook is what holds it: PLA on PLA grips to about 17 degrees
 // and this slope is 32, so the plate would otherwise slide off.
@@ -18,14 +19,14 @@
 // instead of up the plane.
 //
 // Material: PLA or PETG.
-// Print orientation: rotate -31.9 deg about X so the plate lies
+// Print orientation: rotate -31.8 deg about X so the plate lies
 //   flat on the bed, hook upward. The hook then rises at 58 deg
 //   and self-supports. NOT as modelled.
 //
 // To remove: lift the front edge until the hook clears the
 //   front face, then slide it forward. Nothing to unclip.
 //
-// EXPECTED_BBOX: [229.0, 79.85, 58.315]
+// EXPECTED_BBOX: [229.0, 63.85, 48.314]
 // ============================================================
 
 include <../params.scad>
@@ -33,7 +34,7 @@ include <../params.scad>
 // The underside of the plate: the pick plane, floated by pick_lid_gap.
 function zu(y) = pickplane(y) + pick_lid_gap;
 
-lid_back_y = yB_tray1 - pick_lid_clear;        // 76.85
+lid_back_y = yB_tray1 - pick_lid_clear;        // 60.85
 
 assert(lid_back_y > yB_tray0,
        "the pick lid does not reach across tray B");
