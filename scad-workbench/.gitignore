@@ -1,2 +1,7 @@
-build/**/.*
-build/*/.bbox.stl
+
+
+# render.sh scratch inside any project's build/: the per-view logs and the
+# bounding-box probe STL it measures the shared camera from. Regenerated on
+# every render; the contact sheet and the six views are the artefacts worth
+# keeping.
+**/build/**/.*
