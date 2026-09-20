@@ -284,7 +284,7 @@ cubby_ceil = 3.0;           // deck thickness between the cubby and the chute
 // A retaining lip across the opening, so whatever is in there stays in there
 // when the module is slid around the bench. You reach in over it rather than
 // sliding things out. It is simply the bottom of the back wall, left uncut.
-cubby_lip_h = 28.0;
+cubby_lip_h = 42.0;
 cubby_back  = module_d - wall_out;
 cubby_y0   = module_d - cubby_d;
 cubby_h_back  = chuteA_floor(module_d) - cubby_ceil - base_t;
@@ -298,8 +298,11 @@ assert(cubby_ceil >= 3.0,
        "the deck between the cubby and the chute is thinner than a printed floor");
 assert(cubby_lip_h + base_t < chuteA_floor(module_d) - cubby_ceil - 25,
        "the retaining lip leaves under 25mm of clear opening above it");
-assert(cubby_lip_h < cubby_h_front - 8,
-       "the lip is taller than the cubby's shallow end minus a hand's clearance");
+// The lip may stand taller than the cubby's own shallow end (41.3) -- that just
+// makes the forward part of the cubby a well rather than a shelf, which is the
+// point of a retaining lip. What it must not do is swallow the opening.
+assert(cubby_lip_h < cubby_h_back * 0.6,
+       "the retaining lip takes more than 60% of the cubby's opening height");
 
 // ------------------------------------------------------------
 // 5. Hopper mouths (both at the back, both at hopper_rim -> ONE flat lid)

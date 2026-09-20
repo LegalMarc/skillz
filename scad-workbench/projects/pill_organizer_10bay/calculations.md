@@ -206,9 +206,9 @@ Total across ten bays: **2.42 L** in a **5.54 L** envelope. Revision 2 held
 | Height at the shallow end | `at y = 100.8` | 41.3 |
 | Height at the back face | `at y = 170.8` | 100.0 |
 | Deck between cubby and chute | `cubby_ceil` | 3.0 |
-| Retaining lip across the opening | `cubby_lip_h` | 28.0 |
-| Clear opening above the lip | | 72.0 |
-| Solid volume, body | before / after | 2009.8 / **920.5 cm3** |
+| Retaining lip across the opening | `cubby_lip_h` | 42.0 |
+| Clear opening above the lip | | 58.0 |
+| Solid volume, body | before / after | 2009.8 / **929.3 cm3** |
 
 The ceiling runs at the ramp angle, so it self-supports on the way up instead of
 bridging its 224 mm span. The deck it leaves is 3 mm; a uniformly loaded 3 mm

@@ -70,8 +70,8 @@ What revision 3 does instead is shrink the box around the wedge.
   the full inner width, 70 mm deep, 42 mm tall at its shallow end and 103 mm at
   the back, opening through the **back face only** so both side walls stay full.
   Its ceiling runs parallel to the chute floor above it, so it self-supports
-  instead of bridging, and a 28 mm lip across the opening keeps the contents in
-  when you slide the module about — 72 mm of clear opening remains above it.
+  instead of bridging, and a 42 mm lip across the opening keeps the contents in
+  when you slide the module about — 58 mm of clear opening remains above it.
   1.1 L of what was solid infill is now usable space.
 - **The fill mouths are 62 and 40 mm, about 3:2.** The wall between them leans
   8.8 mm forward at the rim (17.3 degrees from vertical), pivoting where it
