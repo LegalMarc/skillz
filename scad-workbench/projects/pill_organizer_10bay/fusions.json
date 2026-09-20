@@ -1,8 +1,30 @@
 [
-  { "pair": ["body_shell", "rail_male"],
-    "reason": "each male rail carries a weld_embed=1.5mm root block reaching into the side wall, kept separate from the trapezoid so the flank geometry the neighbouring socket receives stays exact. Meeting the wall on a coincident face instead left a whole sub-feature detached in an earlier revision." },
-  { "pair": ["pick_plate", "pick_hook"],
-    "reason": "the hook is rotated by the pick plane's own slope and overlaps 2mm into the plate's front edge, so the two weld volumetrically rather than meeting along the single line where the plate's front face and the hook would otherwise touch." },
-  { "pair": ["fill_plate", "fill_tabs"],
-    "reason": "both cantilever tabs are rooted in the plate's underside; the overlap is the built-in end of the beam." }
+  {
+    "pair": [
+      "body_shell",
+      "rail_male"
+    ],
+    "reason": "each male rail carries a weld_embed=1.5mm root block reaching into the side wall, kept separate from the trapezoid so the flank geometry the neighbouring socket receives stays exact. Meeting the wall on a coincident face instead left a whole sub-feature detached in an earlier revision."
+  },
+  {
+    "pair": [
+      "body_shell",
+      "porch_ribs"
+    ],
+    "reason": "each porch rib reaches weld_embed=1.5mm up into tray B's floor slab, the thing it exists to carry. Meeting the slab on a coincident face instead is what left a whole sub-feature detached in an earlier revision."
+  },
+  {
+    "pair": [
+      "pick_plate",
+      "pick_hook"
+    ],
+    "reason": "the hook is rotated by the pick plane's own slope and overlaps 2mm into the plate's front edge, so the two weld volumetrically rather than meeting along the single line where the plate's front face and the hook would otherwise touch."
+  },
+  {
+    "pair": [
+      "fill_plate",
+      "fill_tabs"
+    ],
+    "reason": "both cantilever tabs are rooted in the plate's underside; the overlap is the built-in end of the beam."
+  }
 ]

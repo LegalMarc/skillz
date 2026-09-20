@@ -1,15 +1,16 @@
 // ============================================================
-// body.scad -- the organizer body. Two pick trays at the FRONT
-// under one lid, two fill mouths at the BACK under one lid.
+// body.scad -- the organizer body, revision 3. Two pick trays
+// at the FRONT under one lid, two fill mouths at the BACK under
+// one lid.
 //
 //   [ tray A ][ tray B ][ hopper B mouth ][ hopper A mouth ]
 //     front                                           back
 //
-// Hopper B is the front mouth and feeds tray B, right in front
+// Hopper B is the front mouth and feeds tray B right in front
 // of it -- a plain ramp. Hopper A is the BACK mouth and feeds
 // the FRONT tray, so its chute ducks under tray B and under
-// hopper B. That crossing is what lifts tray B onto a pedestal;
-// see params.scad section 4.
+// hopper B. See params.scad section 4 for why the chute runs at
+// 20 degrees under tray B and 40 degrees everywhere else.
 //
 // Local origin: front-bottom-left outer corner. +X right,
 // +Y back, +Z up. This is the assembly datum.
@@ -17,12 +18,11 @@
 // Material: PLA or PETG.
 // Print orientation: as modelled, flat on its base, no supports.
 //
-// EXPECTED_BBOX: [235.0, 205.474, 200.0]
+// EXPECTED_BBOX: [235.0, 170.8, 141.0]
 // ============================================================
 
 include <../params.scad>
 
-// ------------------------------------------------------------
 module yz_extrude(x0, x1) {
     rotate([90, 0, 90]) translate([0, 0, x0])
         linear_extrude(height = x1 - x0) children();
@@ -37,17 +37,17 @@ function wall_x1(k) = k == 0 ? wall_out
 
 // ------------------------------------------------------------
 // Outer silhouette: the maximum-material outline, in (y, z).
-// Two steps down toward the front, one per tray row.
+// One step down at tray B's back wall, then ONE straight slope
+// forward to the front face -- every wall over both trays dies
+// on that plane, so a single flat plate lids both rows.
 // ------------------------------------------------------------
 OUTER = [
     [0,         0],
     [module_d,  0],
     [module_d,  hopper_rim],
-    [yB_tray1,  hopper_rim],     // hopper B's front wall, outer face
-    [yB_tray1,  trayB_rim],      // top of the pick plane, at tray B's rim
-    [0,         pickplane_front] // ONE straight slope forward to the front face:
-                                 // every wall over both trays dies on this plane,
-                                 // so a single flat plate lids both rows
+    [yB_tray1,  hopper_rim],
+    [yB_tray1,  trayB_rim],
+    [0,         pickplane_front]
 ];
 
 // ------------------------------------------------------------
@@ -56,24 +56,22 @@ OUTER = [
 // ------------------------------------------------------------
 VOID_B = [
     [yB_tray0,                   trayB_floor],
-    [yB_tray1,                   trayB_floor],                 // ramp foot
-    [yB_hop1,                    rampB(yB_hop1)],              // up the ramp
+    [yB_tray1,                   trayB_floor],
+    [yB_hop1,                    rampB(yB_hop1)],
     [yB_hop1,                    fill_seat_z - fill_ledge_w],
-    [yB_hop1 - fill_ledge_w,     fill_seat_z],                 // 45 deg under the back lip
+    [yB_hop1 - fill_ledge_w,     fill_seat_z],
     [yB_hop1 - fill_ledge_w,     hopper_rim + 1],
     [yB_wall1 + fill_ledge_w,    hopper_rim + 1],
     [yB_wall1 + fill_ledge_w,    fill_seat_z],
-    [yB_wall1,                   fill_seat_z - fill_ledge_w],  // 45 deg under the front lip
+    [yB_wall1,                   fill_seat_z - fill_ledge_w],
     [yB_wall1,                   outletB_top],
-    [yB_tray1,                   outletB_top + wall_div],      // 45 deg, as tray A's
+    [yB_tray1,                   outletB_top + wall_div],
     [yB_tray1,                   trayB_rim],
-    [yB_tray0,                   pickplane(yB_tray0)]     // up under the pick plane
+    [yB_tray0,                   pickplane(yB_tray0)]
 ];
 
 // The mouth both hoppers share, full width at the rim so the lid can pass
-// down, overlapping the voids by 1mm in Z so the union is volumetric. Without
-// it the seat lips ran all the way to the rim and the lid could not drop in --
-// 6450 mm^3 of it was buried in them.
+// down. Without it the seat lips run to the rim and the lid cannot drop in.
 MOUTH = [
     [hop_mouth_y0, fill_seat_z - seat_lip_drop],
     [hop_mouth_y1, fill_seat_z - seat_lip_drop],
@@ -82,35 +80,30 @@ MOUTH = [
 ];
 
 // ------------------------------------------------------------
-// VOID_A -- tray A, its outlet, the crossing chute, and hopper A.
-// One continuous void: the chute IS hopper A's lower half, so the
+// VOID_A -- tray A, the crossing chute, and hopper A. One
+// continuous void: the chute IS hopper A's lower half, so the
 // volume the crossing costs in height it gives back in capacity.
-// Its ceiling is the underside of tray B, then the underside of
-// hopper B's ramp, which is why the two never meet.
+// The floor breaks once, at tray B's back wall, from the 20
+// degree porch onto the 40 degree climb. The ceiling runs
+// parallel to it the whole way, holding a constant section --
+// following a flat underside instead left 7197 mm^2 of bridged
+// ceiling in revision 2.
 // ------------------------------------------------------------
 VOID_A = [
     [yA_tray0,                   base_z],
     [yA_tray1,                   base_z],                      // chute foot
-    [yA_hop1,                    rampA(yA_hop1)],              // one straight climb to the back
+    [yB_tray1,                   z_porch],                     // end of the porch
+    [yA_hop1,                    chuteA_floor(yA_hop1)],       // one 40 deg climb to the back
     [yA_hop1,                    fill_seat_z - fill_ledge_w],
-    [yA_hop1 - fill_ledge_w,     fill_seat_z],                 // 45 deg under the back lip
+    [yA_hop1 - fill_ledge_w,     fill_seat_z],
     [yA_hop1 - fill_ledge_w,     hopper_rim + 1],
     [yA_hop0 + fill_ledge_w,     hopper_rim + 1],
     [yA_hop0 + fill_ledge_w,     fill_seat_z],
-    [yA_hop0,                    fill_seat_z - fill_ledge_w],  // 45 deg under the front lip
-    [yA_hop0,                    rampB(yB_hop1) - chute_ceil], // down to the chute ceiling
-    // The ceiling runs PARALLEL to the chute floor the whole way, holding a
-    // constant chute_clear section. Following tray B's flat underside instead
-    // left 7197 mm^2 of flat ceiling bridging 43mm across every bay -- the
-    // single worst print risk in the part. Sloped at ramp_deg it self-supports,
-    // and row A has capacity to spare for what the change gives back.
-    [yB_wall1,                   rampA(yB_wall1) + chute_clear],
-    [yA_wall1,                   rampA(yA_wall1) + chute_clear],
-    [yA_tray1,                   rampA(yA_tray1) + chute_clear],// straight on into tray A: the
-                                                               // chute's own section IS row A's
-                                                               // outlet, and its ceiling is already
-                                                               // a ramp_deg chamfer
-    [yA_tray1,                   pickplane(yA_tray1)],   // up under the pick plane
+    [yA_hop0,                    fill_seat_z - fill_ledge_w],
+    [yA_hop0,                    chuteA_ceil(yA_hop0)],        // down to the chute ceiling
+    [yB_tray1,                   chuteA_ceil(yB_tray1)],       // parallel to the 40 deg floor
+    [yA_tray1,                   chuteA_ceil(yA_tray1)],       // parallel to the 20 deg porch
+    [yA_tray1,                   pickplane(yA_tray1)],
     [yA_tray0,                   pickplane(yA_tray0)]
 ];
 
@@ -135,9 +128,38 @@ module body_shell() {
 }
 
 // ------------------------------------------------------------
-// Fill-lid seat. One lid spans BOTH mouths, so everything standing
-// above the seat plane between them comes down to it: the four
-// dividers, and the wall that separates hopper A from hopper B.
+// Porch splitter rib (params.scad 4a). Tray B's floor is carried
+// on the bay dividers alone, so at 20 degrees its underside is a
+// near-flat ceiling bridging the whole bay. One fin down the
+// middle halves that span and carries the slab directly. The
+// upstream (back) edge is a knife so a pill coming down the 40
+// degree chute is deflected into a lane, not stopped by a step.
+// ------------------------------------------------------------
+RIB_YZ = [
+    [yA_tray1, base_z],
+    [yB_tray1, z_porch],
+    [yB_tray1, chuteA_ceil(yB_tray1) + weld_embed],
+    [yA_tray1, chuteA_ceil(yA_tray1) + weld_embed]
+];
+
+module porch_rib(cx) {
+    intersection() {
+        translate([0, 0, -1])
+            linear_extrude(height = trayB_floor + 4)
+                polygon([[cx - rib_t / 2, yA_tray1 - weld_embed],
+                         [cx + rib_t / 2, yA_tray1 - weld_embed],
+                         [cx + rib_t / 2, yB_tray1 - rib_lead],
+                         [cx,             yB_tray1],
+                         [cx - rib_t / 2, yB_tray1 - rib_lead]]);
+        yz_extrude(cx - rib_t, cx + rib_t) polygon(RIB_YZ);
+    }
+}
+
+module porch_ribs() { for (i = [0 : bays - 1]) porch_rib(bay_center_x(i)); }
+
+// ------------------------------------------------------------
+// Fill-lid seat. One lid spans BOTH mouths, so everything
+// standing above the seat plane between them comes down to it.
 // ------------------------------------------------------------
 module fill_seat_cut() {
     for (k = [1 : bays - 1])
@@ -150,32 +172,25 @@ module fill_seat_cut() {
         cube([inner_w + 2 * seat_cut_over,
               wall_div + 2 * seat_cut_over, lid_t + 2]);
 
-    // Barb pockets: front one in hopper B's front wall, back one in the
-    // module's back wall.
     for (s = [0, 1])
         translate([module_w / 2 - fill_tab_w / 2 - 0.5,
                    s == 0 ? hop_mouth_y0 - fill_tab_barb : hop_mouth_y1 - 0.01,
                    fill_tab_pocket_z])
             cube([fill_tab_w + 1.0, fill_tab_barb + 0.01, fill_tab_pocket_h]);
 
-    // The seat lips run right under the lid's front and back edges, which is
-    // exactly where its snap tabs hang down. Relieve them where the tabs pass,
-    // or the tabs drive straight through the lips.
     for (side = [0, 1])
         translate([module_w / 2 - fill_tab_w / 2 - 1.0,
                    side == 0 ? hop_mouth_y0 - 1 : hop_mouth_y1 - fill_ledge_w - 1,
                    fill_seat_z - fill_ledge_w - 1])
             cube([fill_tab_w + 2.0, fill_ledge_w + 1, fill_ledge_w + 2]);
 
-    // Fingernail relief in the front mouth wall.
     translate([module_w / 2 - fill_grip_d / 2, hop_mouth_y0 - wall_div - 1, fill_seat_z])
         cube([fill_grip_d, wall_div + 3, lid_t + 2]);
 }
 
 // ------------------------------------------------------------
 // Joining rails. Trapezoid by two explicit widths, never a flank
-// angle (INCIDENTS 2026-08-30), extruded along Z so nothing
-// overhangs. Rail 1 sits beside tray B, rail 2 beside hopper B.
+// angle, extruded along Z so nothing overhangs.
 // ------------------------------------------------------------
 module rail_trapezoid(root_w, tip_w, depth, clear = 0) {
     polygon([[ 0,     -(root_w / 2 + clear)],
@@ -201,23 +216,16 @@ module rail_male() {
     rail_male_one(rail2_y, rail2_z1);
 }
 
-// The buttress stops just BELOW the plane above it, never on it: ending a
-// union exactly on a cut plane left a detached sliver of buttress behind.
 module rail_boss_one(y, z1, right) {
-    w = boss_w;
     translate([right ? module_w - wall_out - rail_boss : wall_out - weld_embed,
-               y - w / 2, 0])
-        cube([rail_boss + weld_embed, w, z1]);
+               y - rail_boss_w / 2, 0])
+        cube([rail_boss + weld_embed, rail_boss_w, z1]);
 }
 
-// Rail 1's buttress lives under the SLOPED pick plane. Rather than guess a cap
-// height for it -- capping at the centreline left it proud at the front edge
-// and it speared the pick lid; capping at the footprint's low end left a 0.3mm
-// wedge of wall that tore a hole in the mesh -- the buttresses are simply
-// INTERSECTED with the outer silhouette. They then end exactly on whatever
-// surface is above them, with no sliver and nothing to get wrong.
-boss_w = rail_tip_w + 8;
-
+// The buttresses are INTERSECTED with the outer silhouette rather than capped
+// at a guessed height. Capping at the centreline left rail 1 proud at its
+// front edge and it speared the pick lid; capping at the footprint's low end
+// left a 0.3mm wedge of wall that tore a hole in the mesh.
 module rail_bosses() {
     intersection() {
         union() {
@@ -242,7 +250,7 @@ module rail_socket_cut() {
 }
 
 // Labels: tray A on the module's front face, tray B on its own front wall,
-// which faces forward over tray A's lid and is read at a glance from standing.
+// which faces forward over tray A's lid and is read at a glance.
 module label_cuts() {
     for (i = [0 : bays - 1]) {
         cx = bay_center_x(i);
@@ -257,17 +265,18 @@ module label_cuts() {
 // ------------------------------------------------------------
 module body_geometry() {
     difference() {
-        union() { body_shell(); rail_male(); rail_bosses(); }
+        union() { body_shell(); porch_ribs(); rail_male(); rail_bosses(); }
         fill_seat_cut();
         rail_socket_cut();
         label_cuts();
     }
 }
 
-// SUBFEATURES: body_shell, rail_male
+// SUBFEATURES: body_shell, porch_ribs, rail_male
 SUBFEATURE = is_undef(SUBFEATURE) ? "" : SUBFEATURE;
 module subfeature_by_name(name) {
     if (name == "body_shell") body_shell();
+    else if (name == "porch_ribs") porch_ribs();
     else if (name == "rail_male") rail_male();
     else assert(false, str("Unknown sub-feature '", name, "' in body.scad"));
 }

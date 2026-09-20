@@ -1,6 +1,7 @@
 // ============================================================
-// fill_lid.scad -- the secure lid over one hopper mouth.
-// Printed twice: hopper A and hopper B present the same mouth.
+// fill_lid.scad -- ONE lid over BOTH hopper mouths. Both mouths
+// finish at hopper_rim, which is what lets a single flat plate
+// cover them.
 //
 // Local origin: front-bottom-left corner of the lid plate.
 //   +Y toward the back, +Z up (as installed).
@@ -15,7 +16,7 @@
 //   inward over the wall and snap into their pockets. Lift it
 //   out by the front edge, through the body's relief notch.
 //
-// EXPECTED_BBOX: [223.8, 124.674, 13.0]
+// EXPECTED_BBOX: [223.8, 106.0, 13.0]
 // ============================================================
 
 include <../params.scad>
