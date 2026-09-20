@@ -58,9 +58,12 @@ VOID_B = [
     [yB_tray0,                   trayB_floor],
     [yB_tray1,                   trayB_floor],
     [yB_hop1,                    rampB(yB_hop1)],
-    [yB_hop1,                    fill_seat_z - fill_ledge_w],
-    [yB_hop1 - fill_ledge_w,     fill_seat_z],
-    [yB_hop1 - fill_ledge_w,     hopper_rim + 1],
+    // Hopper B's back wall leans forward at the top (params.scad 4b), which is
+    // what evens the two fill mouths up to about 3:2. It pivots here, at its
+    // own floor, so the ramp below it is untouched.
+    [hopwall_B(fill_seat_z - fill_ledge_w), fill_seat_z - fill_ledge_w],
+    [hopwall_B(fill_seat_z) - fill_ledge_w, fill_seat_z],
+    [hopwall_B(fill_seat_z) - fill_ledge_w, hopper_rim + 1],
     [yB_wall1 + fill_ledge_w,    hopper_rim + 1],
     [yB_wall1 + fill_ledge_w,    fill_seat_z],
     [yB_wall1,                   fill_seat_z - fill_ledge_w],
@@ -97,10 +100,13 @@ VOID_A = [
     [yA_hop1,                    fill_seat_z - fill_ledge_w],
     [yA_hop1 - fill_ledge_w,     fill_seat_z],
     [yA_hop1 - fill_ledge_w,     hopper_rim + 1],
-    [yA_hop0 + fill_ledge_w,     hopper_rim + 1],
-    [yA_hop0 + fill_ledge_w,     fill_seat_z],
-    [yA_hop0,                    fill_seat_z - fill_ledge_w],
-    [yA_hop0,                    chuteA_ceil(yA_hop0)],        // down to the chute ceiling
+    [hopwall_A(fill_seat_z) + fill_ledge_w, hopper_rim + 1],
+    [hopwall_A(fill_seat_z) + fill_ledge_w, fill_seat_z],
+    [hopwall_A(fill_seat_z - fill_ledge_w), fill_seat_z - fill_ledge_w],
+    // the same leaning wall from hopper A's side, straight down to where it
+    // springs off the chute ceiling. Hopper A ends up with a mouth wider than
+    // its own throat, which is the right way round for a hopper.
+    [yA_hop0,                    chuteA_ceil(yA_hop0)],
     [yB_tray1,                   chuteA_ceil(yB_tray1)],       // parallel to the 40 deg floor
     [yA_tray1,                   chuteA_ceil(yA_tray1)],       // parallel to the 20 deg porch
     [yA_tray1,                   pickplane(yA_tray1)],
@@ -226,6 +232,17 @@ module rail_boss_one(y, z1, right) {
 // at a guessed height. Capping at the centreline left rail 1 proud at its
 // front edge and it speared the pick lid; capping at the footprint's low end
 // left a 0.3mm wedge of wall that tore a hole in the mesh.
+// The silhouette used for that clip, with the pick plane dropped a hair so the
+// buttress tops land strictly inside the shell instead of on its own top face.
+OUTER_CLIP = [
+    [0,         0],
+    [module_d,  0],
+    [module_d,  hopper_rim],
+    [yB_tray1,  hopper_rim],
+    [yB_tray1,  trayB_rim      - boss_clip_drop],
+    [0,         pickplane_front - boss_clip_drop]
+];
+
 module rail_bosses() {
     intersection() {
         union() {
@@ -234,7 +251,7 @@ module rail_bosses() {
                 rail_boss_one(rail2_y, fill_seat_z - 0.3, right);
             }
         }
-        yz_extrude(0, module_w) polygon(OUTER);
+        yz_extrude(0, module_w) polygon(OUTER_CLIP);
     }
 }
 

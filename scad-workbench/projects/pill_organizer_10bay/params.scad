@@ -125,11 +125,18 @@ trayB_rim   = trayB_floor + trayB_h;                     //  91.06
 outletB_top = trayB_floor + outlet_h;                    //  83.06
 function rampB(y) = trayB_floor + (y - yB_tray1) * ramp_tan;
 
-// Tray A's rim lands exactly on tray B's floor: the line the whole revision
-// is named for. Above it, the pick surface is ONE SLOPED PLANE up to tray B's
-// rim -- a lid spanning two flat steps is a Z in section, and a Z cannot be
-// printed without support whichever way it is laid.
-trayA_rim       = trayB_floor;                           //  53.06
+// Tray A's rim is set INDEPENDENTLY of tray B's floor (D15). It started life
+// level with it, which looked right in section, but pills only pile to the
+// chute mouth at 39 and slope forward from there to about 23 at the front
+// wall -- so a 53mm rim left a 32mm reach down into the front tray every time.
+// Dropping the rim steepens the one pick plane instead of adding a second lid:
+// the reach falls to 21mm at the front and 28mm at the back, and the front
+// face loses 11mm. How far it can drop is bounded by trayB_front_retain below.
+//
+// Above the rim the pick surface is ONE SLOPED PLANE up to tray B's rim -- a
+// lid spanning two flat steps is a Z in section, and a Z cannot be printed
+// without support whichever way it is laid.
+trayA_rim       = 42.0;
 pickplane_front = trayA_rim;
 function pickplane(y) = pickplane_front
                       + (y / yB_tray1) * (trayB_rim - pickplane_front);
@@ -140,6 +147,39 @@ outletA_top = base_z + chute_clear;                      //  39.0
 
 hopper_rim = 141.0;
 module_h   = hopper_rim;
+
+// ------------------------------------------------------------
+// 4b. Hopper divider lean (D16)
+//
+// Hopper A's mouth was 32mm against hopper B's 70 -- you pour the same charge
+// into both, and one of them is a slot. That ratio was not chosen; it fell out
+// of holding the two rows' VOLUMES near each other, which is the wrong thing
+// to equalise when the number you meet with a bottle in your hand is the mouth.
+//
+// The wall between the two mouths therefore leans forward at the top, pivoting
+// where it springs off the chute ceiling. Leaning costs hopper B a wedge above
+// its own floor and gives hopper A the same wedge, which is cheap: hopper A is
+// the taller of the two there. It also gives hopper A a mouth wider than its
+// throat, which is the right way round for a hopper.
+// ------------------------------------------------------------
+hopA_lean  = 8.8;                                        // forward offset at the rim
+hopwall_z0 = chuteA_ceil(yA_hop0);                       // 112.8, where the wall springs
+function hopwall_A(z) = yA_hop0
+                      - hopA_lean * max(0, z - hopwall_z0) / (hopper_rim - hopwall_z0);
+function hopwall_B(z) = hopwall_A(z) - wall_div;
+
+hop_lean_deg  = atan(hopA_lean / (hopper_rim - hopwall_z0));   // 17.3
+mouthB_w      = hopwall_B(hopper_rim - lid_t) - yB_wall1;             // 62.1
+mouthA_w      = yA_hop1 - hopwall_A(hopper_rim - lid_t);              // 39.9
+mouth_ratio   = mouthB_w / mouthA_w;                           // 1.56, about 3:2
+
+assert(hop_lean_deg < 40,
+       "the hopper divider leans past the FDM overhang band -- its front face would need support");
+assert(mouth_ratio > 1.3 && mouth_ratio < 1.9,
+       "the two fill mouths are no longer within the 3:2 band the lean exists to hit");
+assert(mouthA_w > pill_len + 8 && mouthB_w > pill_len + 8,
+       "a fill mouth is too narrow to pour a bottle into");
+
 
 assert(trayB_floor > chuteA_ceil(yB_tray1),
        "tray B's floor is not above the chute ceiling -- the two feeds intersect");
@@ -305,6 +345,15 @@ rail_z0   = 10.0;
 rail_lead = 3.0;
 rail_boss = 5.0;
 rail_boss_w = rail_tip_w + 8;   // buttress footprint in Y
+// Rail 1's buttress is clipped by the outer silhouette rather than capped at a
+// guessed height. Over tray A that silhouette IS the pick plane, so the clip
+// lands the buttress top exactly on the shell's own top face -- two coplanar
+// surfaces, an edge shared by four faces, and a mesh that reports as having no
+// holes while still not being watertight. The clip is therefore taken against
+// a silhouette dropped by this much, so the buttress ends strictly inside.
+boss_clip_drop = 0.2;
+assert(boss_clip_drop > 0 && boss_clip_drop < 0.5,
+       "boss_clip_drop must be a small positive offset: 0 puts two faces on one plane");
 
 // Rail 1 sits under tray A, not under tray B. Under tray B it would stand in
 // the porch and narrow one lane of an end bay below the single-file rule; tray
@@ -347,8 +396,13 @@ foot_h    = 0.0;
 model_scale = is_undef(MODEL_SCALE) ? 1.0 : MODEL_SCALE;
 
 echo(str("bay_w = ", bay_w, "   module = ", module_w, " x ", module_d, " x ", module_h));
-echo(str("tray A rim ", trayA_rim, " = tray B floor ", trayB_floor,
-         "  -> pick step ", tray_step, " mm at ", pick_lid_slope, " deg"));
+echo(str("tray A rim ", trayA_rim, " / tray B floor ", trayB_floor,
+         " / tray B rim ", trayB_rim, "  -> pick plane ", pick_lid_slope, " deg"));
 echo(str("hopper A floor ", chuteA_floor(yA_hop0), " .. ", chuteA_floor(yA_hop1),
          "   hopper B floor ", rampB(yB_wall1), " .. ", rampB(yB_hop1)));
+echo(str("fill mouths: hopper B ", mouthB_w, " x hopper A ", mouthA_w,
+         " = ", mouth_ratio, " : 1   (divider leans ", hop_lean_deg, " deg)"));
+echo(str("tray A reach below the lid plane: ", pickplane(yA_tray0) - outletA_top
+         + (yA_tray1 - yA_tray0) * tan(repose_deg), " front .. ",
+         pickplane(yA_tray1) - outletA_top, " back"));
 echo(str("90-day size-00 charge = ", charge_ml, " mL; porch lane ", rib_lane, " mm"));
