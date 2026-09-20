@@ -1,4 +1,4 @@
-# Review handoff — pill_organizer_10bay, revision 6
+# Review handoff — pill_organizer_10bay, revision 7
 
 For a fresh session asked to review this design critically. It is written to be
 pasted as that session's opening prompt, or read from the repo.
@@ -6,7 +6,7 @@ pasted as that session's opening prompt, or read from the repo.
 ## Your task
 
 Independently review `scad-workbench/projects/pill_organizer_10bay` at
-revision 6 and report what is wrong with it. Do not rubber-stamp it. The suite
+revision 7 and report what is wrong with it. Do not rubber-stamp it. The suite
 it ships with reports 13 passed / 0 failed / 4 n/a / 0 inconclusive / 1
 advisory, and that is exactly the condition under which a review is worth
 doing: every automated gate is already green, so anything still wrong is
@@ -41,8 +41,8 @@ python3 ~/.local/src/openscad-cad-skills/scad-modeler/scripts/check_rules.py --p
 
 | File | What it holds |
 |---|---|
-| `INCIDENTS.md` | Twenty real defects across six revisions, each with the tell that found it |
-| `plan.md` | The revision table (1–6) and decisions D1–D25, with criticality and provenance |
+| `INCIDENTS.md` | Twenty-two real defects across seven revisions, each with the tell that found it |
+| `plan.md` | The revision table (1–7) and decisions D1–D27, with criticality and provenance |
 | `calculations.md` | Every derived number, the PATIKRINTI assumptions, and the decisions/assumptions log |
 | `README.md` | What it is, how it works, and the reviewer's-attention list |
 | `params.scad` | Single source of dimensions. Every constraint is an assert() here |
@@ -65,13 +65,17 @@ python3 ~/.local/src/openscad-cad-skills/scad-modeler/scripts/check_rules.py --p
    30 mm stretch. The splitter rib's knife-edged upstream taper is the only
    thing stopping a capsule that arrives crosswise from stopping dead at it.
    Nothing verifies this.
-3. **The chute ceiling on the 40-degree leg is a 50-degree-from-vertical
-   overhang**, 30,900 mm² of it in 43 mm bays. This is the single ADVISORY and
-   the one print risk left in the body. `chute_clear` carries a sag allowance;
-   the stated fallback is a gabled ceiling. The cubby ceiling, which was the
-   same overhang across 224 mm, is at 45 now (D21) — check that the deck it
-   leaves (3 mm at the back face, 14 at the front) is right, and that the
-   `cubby_deck` attachment point is still in the deck.
+3. **The vault (D26) is new geometry with four numbers to distrust.** The
+   face is 44.8 degrees from vertical, 0.2 inside the rule. The chute is 30 mm
+   clear at the dividers, 1.15x a pill. Hopper B's ramp foot is a 6 mm riser
+   above tray B's floor. The deck between the ridge and hopper B's floor is
+   3 mm at the ridge (`vault_deck` in `attachments.json`). The roof solid is
+   built from two mirrored halves per bay, each overlapping its partner by
+   1 mm at the centre and the ridge void by 1 mm at each end — the coplanar
+   class waits at every one of those joins. Split the mesh and count edges
+   shared by more than two faces before believing the suite.
+   The cubby ceiling is at 45 (D21); check the deck it leaves (3 mm at the
+   back face, 14 at the front) and that `cubby_deck` is still in the deck.
 4. **The fill lid's snap is new geometry** (D23): 12 mm tabs, a 35-degree barb
    return, 0.8 mm of real engagement, a 2.7 mm catch, and a pull lip. The
    release force under a fingertip on the lip against two tabs is not
@@ -96,7 +100,14 @@ python3 ~/.local/src/openscad-cad-skills/scad-modeler/scripts/check_rules.py --p
     the upper strip sits on the wall between the trays, which is also the wall
     doing the `trayB_front_retain` job. The retained wall was measured on the
     mesh at 1.9; `trayB_front_retain` itself is 14.6 against a 14.0 floor.
-12. **Coverage gaps are not passes.** Four checks are not-applicable and
+12. **Every external edge is rounded or chamfered (D27)** with small cutters
+    and 2D opening passes. Each is a boolean against an existing face: the
+    corner cutters overstep outward, the fill lid's lip ends inside the
+    plate's chamfer band and sits 0.1 above its underside, the pick lid's
+    chamfer cutters are centred on the edge lines. Check that the rounds are
+    where the decision says and nowhere else — a 1.5 round on a 2.4 wall top
+    leaves 0.9 of flat.
+13. **Coverage gaps are not passes.** Four checks are not-applicable and
     `check_rules.py` reports three antecedents that never fired (R-01, R-09,
     R-12). Seven rules are MANUAL. Nothing moves in this revision, so there is
     no motion sweep at all.
