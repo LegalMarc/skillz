@@ -6,7 +6,7 @@
 // flat steps would be a Z in section -- unprintable without
 // support whichever way it is laid, because one arm is always
 // cantilevered. So the body's whole pick surface is a single
-// 31.8 degree plane and this is a flat plate lying on it, hung
+// 38.7 degree plane and this is a flat plate lying on it, hung
 // on a lip that hooks over the module's front top edge. The
 // hook is what holds it: PLA on PLA grips to about 17 degrees
 // and this slope is 32, so the plate would otherwise slide off.
@@ -19,14 +19,14 @@
 // instead of up the plane.
 //
 // Material: PLA or PETG.
-// Print orientation: rotate -31.8 deg about X so the plate lies
-//   flat on the bed, hook upward. The hook then rises at 58 deg
+// Print orientation: rotate -38.7 deg about X so the plate lies
+//   flat on the bed, hook upward. The hook then rises at 51 deg
 //   and self-supports. NOT as modelled.
 //
 // To remove: lift the front edge until the hook clears the
 //   front face, then slide it forward. Nothing to unclip.
 //
-// EXPECTED_BBOX: [229.0, 63.85, 48.314]
+// EXPECTED_BBOX: [229.0, 63.85, 59.629]
 // ============================================================
 
 include <../params.scad>

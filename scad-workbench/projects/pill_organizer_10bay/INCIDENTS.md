@@ -111,3 +111,26 @@ reason it took one read rather than an afternoon.
 Fixed by moving the exports to `build/print_ready/` and `build/maquette/`. Worth
 upstreaming: the bundle should either ignore unexpected STLs in `build/` or say
 out loud which files it adopted as which part before it starts checking them.
+
+### 2026-09-20 -- a buttress clipped by the silhouette landed exactly on the shell's own top face
+
+Dropping tray A's rim steepened the pick plane, and the body came back
+`watertight = False` with **zero** boundary edges. Not a hole: two edges shared
+by four faces each, at `y = 13.93, z = 53.17` -- which is the pick plane, at the
+two X positions where rail 1's buttress meets it.
+
+The buttress is deliberately INTERSECTED with the outer silhouette rather than
+capped at a guessed height, because guessing produced a lid-spearing buttress
+one way and a mesh-tearing sliver the other. But over tray A that silhouette IS
+the pick plane, so the intersection lands the buttress top on the shell's own
+top face. Two coplanar surfaces, no hole, no degenerate edge, and every gate
+downstream refuses to run because the mesh is not watertight.
+
+Fixed with `boss_clip_drop = 0.2`: the clip is taken against a silhouette whose
+pick plane is dropped a hair, so the buttress ends strictly inside. Same shape
+of fix as `seat_lip_drop`, and the third time on this project that two boolean
+faces sharing one plane has cost a debugging session.
+
+Worth saying plainly: "not watertight with zero boundary edges" is the signature
+of a coplanar touch, not a gap. Counting unshared edges finds holes; it takes
+counting edges shared by MORE than two faces to find this.

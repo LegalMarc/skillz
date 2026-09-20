@@ -7,10 +7,12 @@ Lift one lid and all ten types are exposed.
 **Two lids total.** Both fill ports at the back under one flat lid, both pick
 rows at the front under one sloped lid.
 
-**Revision 3.** Same topology as revision 2, two changes to the crossing chute:
-a 40-degree ramp instead of 48, and a 20-degree *porch* under tray B. Together
-they bring tray B's floor down onto tray A's rim — one unbroken line across the
-front — and take the envelope from 9.45 L to 5.54 L.
+**Revision 3.** Same topology as revision 2, with a 40-degree ramp instead of
+48 and a 20-degree *porch* under tray B, which take the envelope from 9.45 L to
+5.54 L. Tray A's rim then drops to 42 mm, steepening the single pick plane to
+38.7 degrees so the front tray is a 21 mm reach rather than a 32 mm one, and the
+wall between the two fill mouths leans forward so you pour into openings of
+roughly the same size.
 
 ## What it is
 
@@ -18,13 +20,13 @@ front — and take the envelope from 9.45 L to 5.54 L.
 |---|---|
 | Overall | 235 x 170.8 x 141 mm (the 235 includes the 5 mm joining rail) |
 | Bays | 10, two rows of 5, 42.96 mm clear each |
-| Capacity | **298.4 mL/bay front row, 198.8 mL/bay back row** — 2.49 L total |
+| Capacity | **293.0 mL/bay front row, 191.6 mL/bay back row** — 2.42 L total |
 | Printed parts | **3 designs, 3 pieces**, no hardware |
 | Validation | **13 passed, 0 failed, 4 n/a, 0 inconclusive, 1 advisory** |
 | Confidence | Tier 2 — geometry verified, fit uncalibrated |
 
-A 90-day once-daily size-00 charge is 147.4 mL, so the front row carries 182
-days and the back row 121.
+A 90-day once-daily size-00 charge is 147.4 mL, so the front row carries 179
+days and the back row 117.
 
 ## The one thing to understand before printing
 
@@ -54,6 +56,17 @@ What revision 3 does instead is shrink the box around the wedge.
   wedge — about 4 mL per bay, 2.8% of a charge, that fills once and stays. The
   flow channel over it is 29.5 mm, which is 1.1x a capsule's length and 2.7x its
   diameter, so nothing bridges. That is the whole price of the flush line.
+- **The front tray is shallow to reach into, not shallow to hold.** Pills pile
+  to 39 mm at the chute mouth and slope forward to about 23 mm at the front
+  wall. The lid plane above them runs 42 to 67 mm, so the reach is 21 mm at the
+  front and 28 mm at the back. The plane's back end is pinned to tray B's rim,
+  so its front end is the only free variable; 42 mm is as low as it goes before
+  the wall between the trays stops retaining tray B.
+- **The fill mouths are 62 and 40 mm, about 3:2.** The wall between them leans
+  8.8 mm forward at the rim (17.3 degrees from vertical), pivoting where it
+  springs off the chute ceiling so hopper B's ramp is untouched. Left vertical
+  the split was 70 : 32, which is what you get from equalising the two rows'
+  volumes rather than the openings you actually pour into.
 - **The splitter rib.** Tray B's floor is carried on the bay dividers alone —
   the chute runs underneath, so the tray's own walls never reach it. At 20
   degrees that underside is a near-flat ceiling bridging the whole bay, so a
@@ -62,7 +75,7 @@ What revision 3 does instead is shrink the box around the wedge.
 
 ## Two things that were forced, not chosen
 
-**Neither lid is hinged.** The two tray rims are still 38 mm apart, so a lid
+**Neither lid is hinged.** The two tray rims are 49 mm apart, so a lid
 bridging them as an L has its mass centre well below any back-top pivot and
 falls shut every time; a front pivot runs the far corner into the benchtop. The
 pick lid lifts off, hung on a lip that hooks over the module's front top edge:
@@ -77,7 +90,7 @@ it is laid. Every wall over both trays dies on that plane.
 | Part | Qty | Print orientation |
 |---|---|---|
 | `body` | 1 | as modelled, flat on its base, no supports |
-| `pick_lid` | 1 | rotated 31.8 deg so the plate lies flat, hook upward |
+| `pick_lid` | 1 | rotated 38.7 deg so the plate lies flat, hook upward |
 | `fill_lid` | 1 | flipped, plate top face on the bed, tabs up |
 
 Print-ready STLs are in `build/print_ready/`, already rotated and dropped to

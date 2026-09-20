@@ -1,50 +1,130 @@
 [
-  { "name": "chute_porch_bay1",
+  {
+    "name": "chute_porch_bay1",
     "part": "body",
-    "start": [34.28, 32.0, 10.0],
-    "end":   [34.28, 60.0, 20.0],
+    "start": [
+      34.28,
+      32.0,
+      10.0
+    ],
+    "end": [
+      34.28,
+      60.0,
+      20.0
+    ],
     "step_mm": 0.5,
-    "_why": "the 20 degree porch leg of the crossing chute, in the right-hand lane of bay 1. The porch is the one stretch where a splitter rib stands in the flow, so this line proves a lane is still open end to end. A blocked lane would leave the part watertight and single-bodied, which is exactly why no other check would notice." },
-  { "name": "chute_ramp_bay1",
+    "_why": "the 20 degree porch leg of the crossing chute, in the right-hand lane of bay 1. The porch is the one stretch where a splitter rib stands in the flow, so this line proves a lane is still open end to end. A blocked lane would leave the part watertight and single-bodied, which is exactly why no other check would notice."
+  },
+  {
+    "name": "chute_ramp_bay1",
     "part": "body",
-    "start": [34.28, 62.0, 22.0],
-    "end":   [34.28, 165.0, 108.0],
+    "start": [
+      34.28,
+      62.0,
+      22.0
+    ],
+    "end": [
+      34.28,
+      165.0,
+      108.0
+    ],
     "step_mm": 0.5,
-    "_why": "the 40 degree leg, from the end of the porch out into hopper A's mouth: 105mm enclosed under tray B and under hopper B's ramp. If anything closes this, half the bays silently stop feeding." },
-  { "name": "chute_porch_bay5",
+    "_why": "the 40 degree leg, from the end of the porch out into hopper A's mouth: 105mm enclosed under tray B and under hopper B's ramp. If anything closes this, half the bays silently stop feeding."
+  },
+  {
+    "name": "chute_porch_bay5",
     "part": "body",
-    "start": [215.72, 32.0, 10.0],
-    "end":   [215.72, 60.0, 20.0],
+    "start": [
+      215.72,
+      32.0,
+      10.0
+    ],
+    "end": [
+      215.72,
+      60.0,
+      20.0
+    ],
     "step_mm": 0.5,
-    "_why": "the same porch lane in the far bay" },
-  { "name": "chute_ramp_bay5",
+    "_why": "the same porch lane in the far bay"
+  },
+  {
+    "name": "chute_ramp_bay5",
     "part": "body",
-    "start": [215.72, 62.0, 22.0],
-    "end":   [215.72, 165.0, 108.0],
+    "start": [
+      215.72,
+      62.0,
+      22.0
+    ],
+    "end": [
+      215.72,
+      165.0,
+      108.0
+    ],
     "step_mm": 0.5,
-    "_why": "the same ramp leg in the bay the right-hand rail buttress intrudes into" },
-  { "name": "outlet_trayA_bay1",
+    "_why": "the same ramp leg in the bay the right-hand rail buttress intrudes into"
+  },
+  {
+    "name": "outlet_trayA_bay1",
     "part": "body",
-    "start": [34.28, 10.0, 15.0],
-    "end":   [34.28, 45.0, 15.0],
+    "start": [
+      34.28,
+      10.0,
+      15.0
+    ],
+    "end": [
+      34.28,
+      45.0,
+      15.0
+    ],
     "step_mm": 0.5,
-    "_why": "tray A's outlet: from inside the tray, under the wall that separates it from tray B, into the chute" },
-  { "name": "outlet_trayB_bay5",
+    "_why": "tray A's outlet: from inside the tray, under the wall that separates it from tray B, into the chute"
+  },
+  {
+    "name": "outlet_trayB_bay5",
     "part": "body",
-    "start": [215.72, 40.0, 72.0],
-    "end":   [215.72, 75.0, 72.0],
+    "start": [
+      215.72,
+      40.0,
+      72.0
+    ],
+    "end": [
+      215.72,
+      75.0,
+      72.0
+    ],
     "step_mm": 0.5,
-    "_why": "tray B's outlet: from inside the tray, under hopper B's front wall, into hopper B" },
-  { "name": "rail_groove_front",
+    "_why": "tray B's outlet: from inside the tray, under hopper B's front wall, into hopper B"
+  },
+  {
+    "name": "rail_groove_front",
     "part": "body",
-    "start": [227.3, 16.8, 12.0],
-    "end":   [227.3, 16.8, 57.0],
+    "start": [
+      227.3,
+      16.8,
+      12.0
+    ],
+    "end": [
+      227.3,
+      16.8,
+      47.0
+    ],
     "step_mm": 0.5,
-    "_why": "the front joining groove must be open from its floor out of the top of the side wall, or a neighbouring module's rail cannot be lowered in" },
-  { "name": "rail_groove_back",
+    "_why": "the front joining groove must be open from its floor out of the top of the side wall, or a neighbouring module's rail cannot be lowered in. Its top is the pick plane over tray A, so this end moves whenever trayA_rim does."
+  },
+  {
+    "name": "rail_groove_back",
     "part": "body",
-    "start": [227.3, 98.6, 12.0],
-    "end":   [227.3, 98.6, 140.0],
+    "start": [
+      227.3,
+      98.6,
+      12.0
+    ],
+    "end": [
+      227.3,
+      98.6,
+      140.0
+    ],
     "step_mm": 0.5,
-    "_why": "same for the back groove" }
+    "_why": "same for the back groove"
+  }
 ]

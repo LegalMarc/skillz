@@ -82,7 +82,7 @@ on an internal surface nobody sees, with a sag allowance carried in
 | Porch run | `yB_tray1 - yA_tray1` | 30.4 |
 | Chute floor at the porch end | `base_z + porch_run x tan(20)` | 14.06 |
 | Tray B floor | `+ chute_clear + chute_ceil` | **53.06** |
-| Tray A rim | `= tray B floor`, by construction | **53.06** |
+| Tray A rim | set independently — see "the reach" below | **42.0** |
 | Stagnant wedge on the porch | `0.5 x run^2 x (tan(30) - tan(20)) x bay_w` | **4.2 mL/bay**, 2.8% of a charge |
 | Flow channel over that wedge | `chute_clear - run x (tan(30) - tan(20))` | **29.5** — 1.1x pill length, 2.7x pill diameter |
 
@@ -111,7 +111,7 @@ body, so no other check in the bundle would notice.
 
 | Feature | Y span | Z |
 |---|---|---|
-| **Tray A** | 2.8 .. 30.8 | floor 3.0, rim 53.06 |
+| **Tray A** | 2.8 .. 30.8 | floor 3.0, rim 42.0 |
 | Wall between trays | 30.8 .. 33.2 | |
 | **Tray B** | 33.2 .. 61.2 | floor 53.06, rim 91.06 |
 | **Chute A porch**, 20 deg | 30.8 .. 61.2 | floor 3.0 .. 14.06, ridge 39.0 .. 50.06 |
@@ -121,21 +121,66 @@ body, so no other check in the bundle would notice.
 | **Overall** | | **235.0 x 170.8 x 141.0** (235 includes the 5 mm rail) |
 
 Both mouths finish at `hopper_rim = 141`, which is what lets one flat lid cover
-both. Both trays finish on one 31.8-degree plane from 53.06 at the front face to
+both. Both trays finish on one 38.7-degree plane from 42.0 at the front face to
 91.06 at tray B's rim, which is what lets one flat lid cover both.
+
+## Derived — the reach into tray A (D15)
+
+Tray A is fed by the chute mouth, so its pill surface is not flat: it peaks at
+the mouth and falls forward at the angle of repose.
+
+| Quantity | Formula | Value |
+|---|---|---|
+| Pill surface at the chute mouth | `base_z + chute_clear` | 39.0 |
+| Pill surface at the front wall | `- tray_d x tan(30)` | 22.8 |
+
+The reach is the gap between that surface and the one lid plane above it, and
+the plane's front end is the only free variable — its back end is pinned to tray
+B's rim.
+
+| Tray A rim | Pick plane | Reach at the front | Reach at the back | Tray-B retaining wall |
+|---|---|---|---|---|
+| 53.06 (level with tray B's floor) | 31.8 deg | 32.0 | 33.2 | 20.6 |
+| 48.0 | 35.1 deg | 27.1 | 30.7 | 18.3 |
+| **42.0** | **38.7 deg** | **21.4** | **27.7** | **15.6** |
+| 38.0 | 40.9 deg | 17.6 | 25.7 | 13.7 — fails `trayB_front_retain` |
+
+The floor on this is `trayB_front_retain > pill_dia + 3`: below about 38.6 the
+wall between the trays is cut so low by the plane that tray B spills forward
+into tray A. 42 keeps 1.6mm over that bound.
+
+A second lid over tray A alone would remove the constraint entirely, at the cost
+of the two-lid brief.
+
+## Derived — the fill mouths (D16)
+
+The two mouths were 70mm and 32mm, a 2.2 : 1 split that fell out of holding the
+two rows' volumes near each other. Leaning the wall between them evens the
+openings instead:
+
+| Lean at the rim | Angle from vertical | Hopper B mouth | Hopper A mouth | Ratio |
+|---|---|---|---|---|
+| 0 | 0 | 70.0 | 32.0 | 2.19 : 1 |
+| 6.0 | 12.0 deg | 64.6 | 37.4 | 1.73 : 1 |
+| **8.8** | **17.3 deg** | **62.1** | **39.9** | **1.56 : 1** |
+| 12.0 | 23.1 deg | 59.3 | 42.7 | 1.39 : 1 |
+
+The wall pivots where it springs off the chute ceiling, so hopper B's ramp below
+it is untouched. Its overhanging face is 17.3 degrees from vertical, well inside
+the FDM band. Hopper B loses about 5 mL/bay and hopper A gains the same.
 
 ## Derived — capacity (measured from the rendered cavity meshes)
 
 | Row | Per bay | vs 147.4 mL charge | Days at one/day |
 |---|---|---|---|
-| Row A — front tray, back mouth, crossing chute | **298.4 mL** | 2.02x | 182 |
-| Row B — back tray, front mouth, plain ramp | **198.8 mL** | 1.35x | 121 |
+| Row A — front tray, back mouth, crossing chute | **293.0 mL** | 1.99x | 179 |
+| Row B — back tray, front mouth, plain ramp | **191.6 mL** | 1.30x | 117 |
 
 Measured with the fill line at the underside of the lid (`fill_seat_z`), the
 porch ribs subtracted and the fillets included — not from the idealised section,
 which reads about 8% high on row B because it ignores the seat ledges.
 
-Total across ten bays: **2.49 L** in a **5.54 L** envelope. Revision 2 held
+Total across ten bays: **2.42 L** in a **5.54 L** envelope. Revision 2 held
 3.27 L in 9.45 L.
 
 ## Derived — flow and escape paths
@@ -150,7 +195,7 @@ Total across ten bays: **2.49 L** in a **5.54 L** envelope. Revision 2 held
 | Porch lane vs pill diameter | 20.28 / 11.0 = 1.8x | OK for single file |
 | Chute ceiling overhang, 40 deg leg | 50 from vertical | ADVISORY — past the 45 rule, internal surface |
 | Chute ceiling overhang, porch leg | 70 from vertical | OK — bridged span cut to 20.28 by the rib |
-| Wall between trays, above tray B's floor | 20.6 | OK — 1.9x pill diameter |
+| Wall between trays, above tray B's floor | 15.6 | OK — 1.4x pill diameter, bounded by D15 |
 | Bay width vs pill length | 1.65x | PATIKRINTI — see note |
 
 Arch note, unchanged from revision 1: 42.96 mm is 1.65x the longest pill against
@@ -166,3 +211,4 @@ needed, as with any gravity dispenser.
 | A2 | Assumption | Ordinary | Static angle of repose ~30 degrees on PLA | Open — resolved by the coupon print and a loaded trial |
 | A3 | Assumption | Ordinary | A 50-degree-from-vertical internal ceiling prints acceptably in PLA with part cooling | Open — resolved by the test print |
 | A4 | Assumption | Ordinary | A 20.28 mm bridge prints without support | Open — resolved by the test print |
+| A5 | Assumption | Ordinary | Tray A's pill surface follows a 30-degree repose slope forward from the chute mouth, which is what the reach table is computed from | Open — resolved by loading the unit |
