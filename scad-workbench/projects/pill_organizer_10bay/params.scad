@@ -281,6 +281,11 @@ assert(rib_lane < 30.0,
 // ------------------------------------------------------------
 cubby_d    = 70.0;          // depth in Y from the back face
 cubby_ceil = 3.0;           // deck thickness between the cubby and the chute
+// A retaining lip across the opening, so whatever is in there stays in there
+// when the module is slid around the bench. You reach in over it rather than
+// sliding things out. It is simply the bottom of the back wall, left uncut.
+cubby_lip_h = 28.0;
+cubby_back  = module_d - wall_out;
 cubby_y0   = module_d - cubby_d;
 cubby_h_back  = chuteA_floor(module_d) - cubby_ceil - base_t;
 cubby_h_front = chuteA_floor(cubby_y0) - cubby_ceil - base_t;
@@ -291,6 +296,10 @@ assert(cubby_h_front > 25,
        "the cubby's shallow end is too low to put anything in");
 assert(cubby_ceil >= 3.0,
        "the deck between the cubby and the chute is thinner than a printed floor");
+assert(cubby_lip_h + base_t < chuteA_floor(module_d) - cubby_ceil - 25,
+       "the retaining lip leaves under 25mm of clear opening above it");
+assert(cubby_lip_h < cubby_h_front - 8,
+       "the lip is taller than the cubby's shallow end minus a hand's clearance");
 
 // ------------------------------------------------------------
 // 5. Hopper mouths (both at the back, both at hopper_rim -> ONE flat lid)
@@ -477,7 +486,9 @@ echo(str("tray A reach below the lid plane: ", pickplane(yA_tray0) - outletA_top
          pickplane(yA_tray1) - outletA_top, " back"));
 echo(str("90-day size-00 charge = ", charge_ml, " mL; porch lane ", rib_lane, " mm"));
 echo(str("cubby: ", inner_w, " wide x ", cubby_d, " deep x ",
-         cubby_h_front, " .. ", cubby_h_back, " tall, opening at the back"));
+         cubby_h_front, " .. ", cubby_h_back, " tall; lip ", cubby_lip_h,
+         " leaves ", chuteA_floor(module_d) - cubby_ceil - base_t - cubby_lip_h,
+         " clear above it"));
 echo(str("tray A front wall ", trayA_front_h, " over a pill line of ", trayA_pile_front,
          " -> reach over the wall ", trayA_front_h - trayA_pile_front,
          " mm; lid skirt ", pick_lid_hook_h, " mm down to ", pick_lid_skirt_bot));
