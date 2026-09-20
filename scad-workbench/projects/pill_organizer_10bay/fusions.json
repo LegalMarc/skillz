@@ -1,12 +1,8 @@
 [
-  { "pair": ["body_shell", "hinge_bar_a"],
-    "reason": "each of the six hinge webs reaches weld_embed=1.5mm down into the tray rim and back into the hopper front wall. The overlap IS the joint: an earlier version met those faces exactly and the whole tier B hinge bar came out as a detached body." },
-  { "pair": ["body_shell", "hinge_bar_b"],
-    "reason": "same weld as hinge_bar_a, one tier up. This is the pair that actually failed check_connectivity.py before weld_embed existed." },
   { "pair": ["body_shell", "rail_male"],
-    "reason": "each male rail carries a weld_embed=1.5mm root block that reaches into the side wall, kept separate from the trapezoid so the flank geometry the neighbouring socket receives stays exact." },
-  { "pair": ["pick_plate", "pick_clips"],
-    "reason": "the lower 1.15mm of each C-clip ring is buried in the plate, and its anchor block runs from the ring's lower-back quadrant down to the plate's underside. That anchor position is what keeps both clip lips long enough to snap at 1.3% strain." },
+    "reason": "each male rail carries a weld_embed=1.5mm root block reaching into the side wall, kept separate from the trapezoid so the flank geometry the neighbouring socket receives stays exact. Meeting the wall on a coincident face instead left a whole sub-feature detached in an earlier revision." },
+  { "pair": ["pick_plate", "pick_hook"],
+    "reason": "the hook is rotated by the pick plane's own slope and overlaps 2mm into the plate's front edge, so the two weld volumetrically rather than meeting along the single line where the plate's front face and the hook would otherwise touch." },
   { "pair": ["fill_plate", "fill_tabs"],
     "reason": "both cantilever tabs are rooted in the plate's underside; the overlap is the built-in end of the beam." }
 ]

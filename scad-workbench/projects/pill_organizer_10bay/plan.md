@@ -55,14 +55,15 @@ hopper.
 | D4 | Decision | Ordinary | Ramp angle 50 degrees from horizontal for both tiers. Well above the ~30 degree static angle of repose of gelatin capsules and coated tablets on PLA, and its underside is a 50-degree-from-horizontal overhang, inside FDM's 45-degree-from-vertical comfort band. | Confirmed | Standard FDM overhang limit; angle-of-repose margin stated, not measured |
 | D5 | Decision | Ordinary | Joining rails are straight-sided trapezoids defined by explicit top and bottom widths, extruded along Z, never by a flank angle. | Confirmed | INCIDENTS.md 2026-08-30 "dovetail bowtie, impossible 50deg angle" — a flank-angle-parameterised trapezoid self-intersected |
 | D6 | Decision | Critical | Snap-fit dimensions (pick-lid C-clip on its rod, fill-lid tab engagement) are geometry-only at tier 2 — no calibration profile exists on this machine. A calibration coupon is proposed to the user rather than a single guessed clearance. | Confirmed | doctor.py: "Calibration profile: none -- fits are uncalibrated" |
-| D7 | Decision | Ordinary | Hopper A and hopper B have equal ramp run, so one fill-lid part serves both; pocket A and pocket B are dimensionally identical, so one pick-lid part serves both. | Confirmed | Derived in calculations.md |
+| D7 | Decision | Ordinary | SUPERSEDED by D8. |
+| D8 | Decision | Critical | Both fill ports grouped at the BACK under one lid, both pick trays at the FRONT under one lid -- two lids total. This forces a crossing: hopper A is the back mouth but feeds the front tray, so its chute runs 159mm enclosed under tray B and under hopper B. The crossing sets tray B onto an 81mm pedestal; that number is not a choice, it falls out of the chute clearance at ramp_deg and is asserted in params.scad. | Confirmed | User instruction, this session |
+| D9 | Decision | Ordinary | Both lids lift off; neither is hinged. An L-section lid spanning an 81mm step has its mass centre ~48mm below any back-top pivot, putting its over-centre angle near 144 degrees (unreachable), and a front pivot runs the far corner into the benchtop at ~24 degrees. | Confirmed | Measured on the previous revision's lid; same geometry, worse step |
+| D10 | Decision | Ordinary | The pick surface is a single sloped plane rather than two steps, so its lid is a flat plate. A Z-section lid cannot be printed without support whichever way it is laid, because one arm is always cantilevered. | Confirmed | This session |
 
 ## Parts and dependency order
 
 | Part | Depends on | Notes |
 |---|---|---|
 | body | - | The terraced two-tier body: 10 bays, both ramps, both pick trays, joining rails, label recesses, hinge rods, fill-lid seats. Print upright, no supports. |
-| pick_lid | body | One part, printed x2. C-clips snap onto the body's hinge rod. `layout.scad` places it as `pick_lid` (tier A). |
-| pick_lid_b | pick_lid | The SAME part placed a second time, at the tier offset [0, 113.2, 101.0]. Not a separate design -- listed because it is a separate layout placement. |
-| fill_lid | body | One part, printed x2. Drops into the mouth onto a seat lip, retained by two cantilever snap tabs. `layout.scad` places it as `fill_lid` (tier A). |
-| fill_lid_b | fill_lid | The SAME part at the tier offset. Again a placement, not a design. |
+| pick_lid | body | ONE lid over both tray rows. A flat plate lying on the body's 31.9 degree pick plane, hung on a hook over the front top edge. Lifts off. |
+| fill_lid | body | ONE lid over both hopper mouths. Drops into the shared mouth onto seat lips, retained by two cantilever snap tabs. |
