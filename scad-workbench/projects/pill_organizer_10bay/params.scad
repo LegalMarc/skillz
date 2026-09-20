@@ -26,6 +26,7 @@ max_part_z = bed_z - bed_margin;
 // ------------------------------------------------------------
 pill_len = 26.0;
 pill_dia = 11.0;
+repose_deg = 30;            // static angle of repose on PLA, PATIKRINTI -- estimated
 
 // ------------------------------------------------------------
 // 2. Walls and shell
@@ -144,6 +145,10 @@ function pickplane(y) = pickplane_front
 // Row A's outlet is the chute's own section: at tray A the ridge stands
 // chute_clear above the floor and the ceiling is already a chamfer.
 outletA_top = base_z + chute_clear;                      //  39.0
+// Tray A is fed by that mouth, so its pill surface is not flat: it peaks there
+// and falls forward at the angle of repose. That surface, not the tray's depth,
+// is what the front wall has to retain (D17).
+trayA_pile_front = outletA_top - tray_d * tan(repose_deg);   //  22.8
 
 hopper_rim = 141.0;
 module_h   = hopper_rim;
@@ -207,7 +212,39 @@ assert(porch_deg < ramp_deg,
 assert(module_d <= max_part_y && module_h <= max_part_z,
        "the module no longer fits the usable bed");
 
-tray_step = trayB_rim - trayA_rim;                       //  38.0
+tray_step = trayB_rim - trayA_rim;                       //  49.06
+
+// ------------------------------------------------------------
+// 4c. Scalloped front wall (D17)
+//
+// Dropping the LID PLANE any further is blocked: its back end is pinned to
+// tray B's rim, so a lower front end cuts the wall between the trays below
+// trayB_front_retain and tray B spills forward into tray A. But the lid plane
+// and the front WALL do not have to be the same height.
+//
+// So the front face is scalloped down to trayA_front_h across each bay, while
+// the dividers and the two side walls still run up to the plane and carry the
+// lid. With the lid off you reach over a 30mm wall instead of a 42mm one, and
+// the pills -- which crest at 22.8 there -- are open to the front. With the
+// lid on, its skirt hangs down the outside and closes the scallops.
+// ------------------------------------------------------------
+trayA_front_h   = 30.0;
+trayA_scallop_r = 6.0;
+// The scallop's sides would otherwise land exactly on the bay dividers' own
+// faces -- two boolean faces sharing one plane, which is what left 57
+// non-manifold edges the first time. It oversteps instead, taking a sliver off
+// each divider's front tip above the scallop line.
+scallop_over    = 0.4;
+// The front labels sit below the lid skirt, so they stay readable with the lid
+// on. They used to be centred on half the front face, which the skirt covers.
+label_z_center  = 13.0;
+
+assert(trayA_front_h > trayA_pile_front + 5,
+       "the scalloped front wall is at or under the pill line -- row A would spill out of its own front");
+assert(trayA_front_h < trayA_rim - 6,
+       "the scallop is too shallow to be worth cutting");
+assert(trayA_scallop_r < (bay_w - 2 * trayA_scallop_r) / 2,
+       "the scallop radius has eaten the flat part of the scallop");
 
 // ------------------------------------------------------------
 // 4a. Porch splitter rib (D13)
@@ -232,6 +269,30 @@ assert(rib_lane < 30.0,
        "the porch bridge is still too wide to print without support");
 
 // ------------------------------------------------------------
+// 4d. Accessory cubby (D18)
+//
+// The wedge under the crossing chute is a third of the printed section and it
+// can never hold pills -- the chute floor has to fall toward tray A at the
+// angle of repose, so nothing can sit below that line and still discharge.
+// What it CAN do is hold everything else: a splitter, a funnel, the spare
+// lids. The cubby opens through the BACK face only -- both side walls are left
+// full -- as one void the full inner width, with its ceiling running parallel
+// to the chute floor so it self-supports rather than bridging.
+// ------------------------------------------------------------
+cubby_d    = 70.0;          // depth in Y from the back face
+cubby_ceil = 3.0;           // deck thickness between the cubby and the chute
+cubby_y0   = module_d - cubby_d;
+cubby_h_back  = chuteA_floor(module_d) - cubby_ceil - base_t;
+cubby_h_front = chuteA_floor(cubby_y0) - cubby_ceil - base_t;
+
+assert(cubby_y0 > yB_tray1 + 10,
+       "the cubby reaches forward into the porch, where the chute floor is too low to leave a deck");
+assert(cubby_h_front > 25,
+       "the cubby's shallow end is too low to put anything in");
+assert(cubby_ceil >= 3.0,
+       "the deck between the cubby and the chute is thinner than a printed floor");
+
+// ------------------------------------------------------------
 // 5. Hopper mouths (both at the back, both at hopper_rim -> ONE flat lid)
 // ------------------------------------------------------------
 hop_mouth_y0 = yB_wall1;                                 //  63.6
@@ -245,7 +306,6 @@ capsule_00_ml       = 0.95;
 loose_packing_frac  = 0.58;    // PATIKRINTI -- estimated, see calculations.md
 charge_days         = 90;
 charge_ml           = charge_days * capsule_00_ml / loose_packing_frac;
-repose_deg          = 30;      // PATIKRINTI -- estimated, see calculations.md
 
 bayA_vol_measured_ml = 0;
 bayB_vol_measured_ml = 0;
@@ -259,16 +319,26 @@ pick_lid_slope = atan((trayB_rim - pickplane_front) / yB_tray1);   // 31.8 deg
 pick_lid_len   = sqrt(pow(yB_tray1, 2) + pow(trayB_rim - pickplane_front, 2))
                  - pick_lid_clear;
 pick_lid_hook_t = 3.0;
-pick_lid_hook_h = 7.0;
-pick_lid_gap = 0.2;
+pick_lid_gap    = 0.2;   // vertical float above the pick plane; keeps the pair a
+                         // near miss rather than a coplanar resting contact
+// Not a hook any more but a skirt (D17): it hangs down the OUTSIDE of the front
+// face, past the scalloped wall, and closes the scallops. It also does what the
+// old 7mm hook did -- stop the lid sliding down its own plane -- because it
+// cannot pass the front face.
+pick_lid_skirt_over = 6.0;                       // overlap onto the scalloped wall
+pick_lid_hook_h = pickplane_front + pick_lid_gap
+                - (trayA_front_h - pick_lid_skirt_over);       //  18.2
+pick_lid_skirt_bot = pickplane_front + pick_lid_gap - pick_lid_hook_h;   //  24.0
 pick_lid_tv  = lid_t / cos(pick_lid_slope);
 
 assert(pick_lid_slope > 17.0,
        "the pick plane is shallow enough for friction to hold the lid, so the hook is over-designed");
 assert(pick_lid_hook_h > 4.0,
        "the front hook is too shallow to retain the lid on its slope");
-assert(pick_lid_hook_h < trayA_rim - outletA_top + 5.0,
-       "the front hook hangs below row A's outlet top and would foul the chute mouth");
+assert(pick_lid_skirt_bot < trayA_front_h - 3.0,
+       "the lid skirt does not reach far enough down to overlap the scalloped front wall");
+assert(pick_lid_skirt_bot > label_z_center + label_h / 2 + 2,
+       "the lid skirt covers the bay labels");
 
 // ------------------------------------------------------------
 // 8. Fill lid (drops into the hopper mouth, flush with the rim,
@@ -406,3 +476,8 @@ echo(str("tray A reach below the lid plane: ", pickplane(yA_tray0) - outletA_top
          + (yA_tray1 - yA_tray0) * tan(repose_deg), " front .. ",
          pickplane(yA_tray1) - outletA_top, " back"));
 echo(str("90-day size-00 charge = ", charge_ml, " mL; porch lane ", rib_lane, " mm"));
+echo(str("cubby: ", inner_w, " wide x ", cubby_d, " deep x ",
+         cubby_h_front, " .. ", cubby_h_back, " tall, opening at the back"));
+echo(str("tray A front wall ", trayA_front_h, " over a pill line of ", trayA_pile_front,
+         " -> reach over the wall ", trayA_front_h - trayA_pile_front,
+         " mm; lid skirt ", pick_lid_hook_h, " mm down to ", pick_lid_skirt_bot));

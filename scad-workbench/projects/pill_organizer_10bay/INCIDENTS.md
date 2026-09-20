@@ -134,3 +134,38 @@ faces sharing one plane has cost a debugging session.
 Worth saying plainly: "not watertight with zero boundary edges" is the signature
 of a coplanar touch, not a gap. Counting unshared edges finds holes; it takes
 counting edges shared by MORE than two faces to find this.
+
+### 2026-09-20 -- params.scad is evaluated top to bottom, and a forward reference fails as the wrong assert
+
+Three asserts fired in a row on values that were plainly correct:
+`hop_lean_deg < 40` on a lean of 17.3 degrees, `trayA_front_h > pile + 5` on
+30 against 22.8, `pick_lid_hook_h > 4` on 18.2. Each time the cause was the
+same: the expression referenced a variable defined LOWER in the file, that
+reference evaluated to `undef`, and the comparison came back false.
+
+OpenSCAD's documented "last assignment wins" behaviour had me assuming top-level
+variables were hoisted. In this build they are not, at least not across
+`include`d scope in the way that matters here. The failure mode is nasty because
+the assert that fires names a constraint that is not the problem -- it sends you
+to re-check the geometry rather than the line number.
+
+Fixed by ordering: `repose_deg` moved up beside the pill envelope it describes,
+`trayA_pile_front` moved down beside `outletA_top` it derives from,
+`pick_lid_gap` moved above the skirt derived from it, and the hopper-lean block
+moved below the Z stations. Rule of thumb for this file: a derived value goes
+immediately after the last thing it reads, never in the section it belongs to
+thematically.
+
+### 2026-09-20 -- a per-bay cut whose sides landed exactly on the bay dividers
+
+Scalloping the front face down per bay produced 57 non-manifold edges. The
+scallop spanned exactly `wall_x1(i) .. + bay_w`, which is exactly the divider
+faces on either side, so the cut plane and an existing face plane coincided --
+the third instance of this failure on this project, after `seat_lip_drop` and
+`boss_clip_drop`.
+
+Fixed with `scallop_over = 0.4`, the same overstep `seat_cut_over` already uses,
+which takes a sliver off each divider's front tip above the scallop line and
+nothing else. Three fixes, three names, one root cause: any cut whose boundary
+is derived from the same expression as the face it lands on needs an explicit
+overstep or drop. It is worth a lint rule.
