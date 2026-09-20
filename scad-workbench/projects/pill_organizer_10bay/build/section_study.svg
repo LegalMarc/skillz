@@ -1,116 +1,118 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="1073" height="876" viewBox="0 0 1073 876" font-family="Helvetica,Arial,sans-serif">
-<rect width="1073" height="876" fill="#fcfbf8"/>
+<svg xmlns="http://www.w3.org/2000/svg" width="1202" height="876" viewBox="0 0 1202 876" font-family="Helvetica,Arial,sans-serif">
+<rect width="1202" height="876" fill="#fcfbf8"/>
 <defs><pattern id="hx" width="9" height="9" patternTransform="rotate(45)" patternUnits="userSpaceOnUse"><rect width="9" height="9" fill="#e0705a" fill-opacity="0.30"/><line x1="0" y1="0" x2="0" y2="9" stroke="#e0705a" stroke-width="2.2" stroke-opacity="0.75"/></pattern></defs>
-<polygon points="56.0,564.0 528.6,564.0 528.6,104.0 233.6,104.0 233.6,283.4 56.0,393.8" fill="#cfc8b9" stroke="#242424" stroke-width="1.2"/>
-<polygon points="145.2,557.1 522.2,138.4 522.2,564.0 145.2,564.0" fill="url(#hx)" stroke="none" stroke-width="0"/>
-<polygon points="62.4,557.1 145.2,557.1 145.2,338.3 62.4,389.8" fill="#8fbf6a" stroke="#242424" stroke-width="1.2"/>
-<polygon points="145.2,557.1 410.2,262.8 410.2,186.9 145.2,481.2" fill="#8fbf6a" stroke="#242424" stroke-width="1.2"/>
-<polygon points="410.2,262.8 522.2,138.4 522.2,104.0 410.2,104.0" fill="#8fbf6a" stroke="#242424" stroke-width="1.2"/>
-<polygon points="150.8,370.8 233.6,370.8 233.6,283.4 150.8,283.4" fill="#8fbf6a" stroke="#242424" stroke-width="1.2"/>
-<polygon points="239.1,364.7 404.7,180.8 404.7,104.0 239.1,104.0" fill="#8fbf6a" stroke="#242424" stroke-width="1.2"/>
-<polygon points="62.4,481.2 145.2,481.2 145.2,338.3 62.4,389.8" fill="url(#hx)" stroke="none"/>
-<line x1="56" y1="390" x2="234" y2="279" stroke="#3d5a80" stroke-width="6" stroke-linecap="round"/>
-<line x1="239" y1="100" x2="522" y2="100" stroke="#3d5a80" stroke-width="6" stroke-linecap="round"/>
-<text x="56.0" y="42.0" font-size="18" fill="#242424" text-anchor="start" font-weight="bold">CURRENT &#183; revision 2</text>
-<text x="56.0" y="62.0" font-size="13.5" fill="#555" text-anchor="start" font-weight="normal">230 &#215; 205 &#215; 200 mm   =   9.45 L</text>
-<text x="56.0" y="80.0" font-size="12.5" fill="#8c3b25" text-anchor="start" font-weight="bold">pick tray 73&#8211;95 mm deep &#183; front face 74 mm</text>
-<text x="103.8" y="438.6" font-size="12" fill="#1b3a10" text-anchor="middle" font-weight="bold">tray A</text>
-<text x="103.8" y="453.6" font-size="10.5" fill="#8c3b25" text-anchor="middle" font-weight="bold">reach 73&#8211;95 mm</text>
-<text x="277.7" y="376.0" font-size="11" fill="#1b3a10" text-anchor="middle" font-weight="bold">chute A &#183; 159 mm enclosed</text>
-<text x="466.2" y="156.3" font-size="11" fill="#1b3a10" text-anchor="middle" font-weight="bold">hopper A</text>
-<text x="192.2" y="331.1" font-size="11" fill="#1b3a10" text-anchor="middle" font-weight="bold">tray B</text>
-<text x="321.9" y="192.4" font-size="11" fill="#1b3a10" text-anchor="middle" font-weight="bold">hopper B</text>
-<text x="393.3" y="543.3" font-size="12.5" fill="#8c3b25" text-anchor="middle" font-weight="bold">SOLID &#183; 46% of the section</text>
-<line x1="38" y1="564" x2="38" y2="394" stroke="#7a5b3a" stroke-width="1.2"/>
-<line x1="34" y1="564" x2="42" y2="564" stroke="#7a5b3a" stroke-width="1.6"/>
-<line x1="34" y1="394" x2="42" y2="394" stroke="#7a5b3a" stroke-width="1.6"/>
-<text x="30.6" y="482.9" font-size="11" fill="#7a5b3a" text-anchor="end" font-weight="bold">74</text>
-<polygon points="624.6,564.0 1017.4,564.0 1017.4,175.3 765.4,175.3 765.4,302.3 695.4,302.3 695.4,478.9 624.6,478.9" fill="#cfc8b9" stroke="#242424" stroke-width="1.2"/>
-<polygon points="695.4,557.1 1011.0,206.6 1011.0,564.0 695.4,564.0" fill="url(#hx)" stroke="none" stroke-width="0"/>
-<polygon points="631.0,557.1 695.4,557.1 695.4,478.9 631.0,478.9" fill="#8fbf6a" stroke="#242424" stroke-width="1.2"/>
-<polygon points="695.4,557.1 937.4,288.4 937.4,205.6 695.4,474.3" fill="#8fbf6a" stroke="#242424" stroke-width="1.2"/>
-<polygon points="937.4,288.4 1011.0,206.6 1011.0,175.3 937.4,175.3" fill="#8fbf6a" stroke="#242424" stroke-width="1.2"/>
-<polygon points="701.0,389.7 765.4,389.7 765.4,302.3 701.0,302.3" fill="#8fbf6a" stroke="#242424" stroke-width="1.2"/>
-<polygon points="770.9,383.6 931.9,204.8 931.9,175.3 770.9,175.3" fill="#8fbf6a" stroke="#242424" stroke-width="1.2"/>
-<line x1="625" y1="475" x2="695" y2="475" stroke="#3d5a80" stroke-width="6" stroke-linecap="round"/>
-<line x1="701" y1="298" x2="765" y2="298" stroke="#3d5a80" stroke-width="6" stroke-linecap="round"/>
-<line x1="765" y1="171" x2="1017" y2="171" stroke="#3d5a80" stroke-width="6" stroke-linecap="round"/>
-<text x="624.6" y="42.0" font-size="18" fill="#242424" text-anchor="start" font-weight="bold">PROPOSED &#183; revision 3</text>
-<text x="624.6" y="62.0" font-size="13.5" fill="#555" text-anchor="start" font-weight="normal">230 &#215; 171 &#215; 169 mm   =   6.64 L   (&#8722;30%)</text>
-<text x="624.6" y="80.0" font-size="12.5" fill="#1b3a10" text-anchor="start" font-weight="bold">pick tray 34 mm deep &#183; front face 37 mm</text>
-<text x="663.2" y="516.0" font-size="11" fill="#1b3a10" text-anchor="middle" font-weight="bold">tray A</text>
-<text x="663.2" y="530.0" font-size="10.5" fill="#1b3a10" text-anchor="middle" font-weight="bold">34 mm</text>
-<text x="761.2" y="462.0" font-size="11" fill="#1b3a10" text-anchor="middle" font-weight="bold">chute A = the store &#183; 36 mm clear</text>
-<text x="974.2" y="215.4" font-size="11" fill="#1b3a10" text-anchor="middle" font-weight="bold">hop A</text>
-<text x="733.2" y="350.0" font-size="11" fill="#1b3a10" text-anchor="middle" font-weight="bold">tray B</text>
-<text x="851.4" y="238.8" font-size="11" fill="#1b3a10" text-anchor="middle" font-weight="bold">hopper B</text>
-<text x="889.9" y="537.0" font-size="12.5" fill="#8c3b25" text-anchor="middle" font-weight="bold">SAME WEDGE &#183; still 47%</text>
-<text x="850.0" y="556.0" font-size="11" fill="#8c3b25" text-anchor="middle" font-weight="normal">hollow it out &#8594; open front cubby, 3.3 L</text>
-<line x1="606" y1="564" x2="606" y2="479" stroke="#7a5b3a" stroke-width="1.2"/>
-<line x1="602" y1="564" x2="610" y2="564" stroke="#7a5b3a" stroke-width="1.6"/>
-<line x1="602" y1="479" x2="610" y2="479" stroke="#7a5b3a" stroke-width="1.6"/>
-<text x="599.2" y="525.5" font-size="11" fill="#7a5b3a" text-anchor="end" font-weight="bold">37</text>
-<line x1="1038" y1="564" x2="1038" y2="175" stroke="#7a5b3a" stroke-width="1.2"/>
-<line x1="1034" y1="564" x2="1042" y2="564" stroke="#7a5b3a" stroke-width="1.6"/>
-<line x1="1034" y1="175" x2="1042" y2="175" stroke="#7a5b3a" stroke-width="1.6"/>
-<text x="1045.1" y="373.6" font-size="11" fill="#7a5b3a" text-anchor="start" font-weight="bold">169</text>
-<text x="56.0" y="590.0" font-size="13" fill="#242424" text-anchor="start" font-weight="bold">one bay, 90-day size-00 charge = 147.4 mL &#183; both designs are 230 mm wide, 5 bays per row</text>
-<text x="56.0" y="616.0" font-size="12.5" fill="#555" text-anchor="start" font-weight="bold"></text>
-<text x="408.0" y="616.0" font-size="12.5" fill="#555" text-anchor="end" font-weight="bold">current</text>
-<text x="576.0" y="616.0" font-size="12.5" fill="#555" text-anchor="end" font-weight="bold">proposed</text>
-<text x="756.0" y="616.0" font-size="12.5" fill="#555" text-anchor="end" font-weight="bold">change</text>
-<line x1="56" y1="622.0" x2="756" y2="622.0" stroke="#bbb" stroke-width="1"/>
-<rect x="50" y="629.0" width="712" height="18" fill="#000" fill-opacity="0.028"/>
-<text x="56.0" y="642.0" font-size="12" fill="#444" text-anchor="start" font-weight="normal">row A  (front tray, back port, crossing chute)</text>
-<text x="408.0" y="642.0" font-size="12" fill="#888" text-anchor="end" font-weight="normal">381 mL  2.58&#215;</text>
-<text x="576.0" y="642.0" font-size="12" fill="#1b3a10" text-anchor="end" font-weight="bold">247 mL  1.67&#215;</text>
-<text x="756.0" y="642.0" font-size="12" fill="#666" text-anchor="end" font-weight="normal">232 days</text>
-<text x="56.0" y="660.0" font-size="12" fill="#444" text-anchor="start" font-weight="normal">row B  (back tray, front port, plain ramp)</text>
-<text x="408.0" y="660.0" font-size="12" fill="#888" text-anchor="end" font-weight="normal">286 mL  1.94&#215;</text>
-<text x="576.0" y="660.0" font-size="12" fill="#1b3a10" text-anchor="end" font-weight="bold">201 mL  1.36&#215;</text>
-<text x="756.0" y="660.0" font-size="12" fill="#666" text-anchor="end" font-weight="normal">122 days</text>
-<rect x="50" y="665.0" width="712" height="18" fill="#000" fill-opacity="0.028"/>
-<text x="56.0" y="678.0" font-size="12" fill="#444" text-anchor="start" font-weight="normal">front face height</text>
-<text x="408.0" y="678.0" font-size="12" fill="#888" text-anchor="end" font-weight="normal">74 mm</text>
-<text x="576.0" y="678.0" font-size="12" fill="#1b3a10" text-anchor="end" font-weight="bold">37 mm</text>
-<text x="756.0" y="678.0" font-size="12" fill="#666" text-anchor="end" font-weight="normal">&#8722;50%</text>
-<text x="56.0" y="696.0" font-size="12" fill="#444" text-anchor="start" font-weight="normal">reach down into the pick tray</text>
-<text x="408.0" y="696.0" font-size="12" fill="#888" text-anchor="end" font-weight="normal">73&#8211;95 mm</text>
-<text x="576.0" y="696.0" font-size="12" fill="#1b3a10" text-anchor="end" font-weight="bold">34 mm</text>
-<text x="756.0" y="696.0" font-size="12" fill="#666" text-anchor="end" font-weight="normal">&#8722;60%</text>
-<rect x="50" y="701.0" width="712" height="18" fill="#000" fill-opacity="0.028"/>
-<text x="56.0" y="714.0" font-size="12" fill="#444" text-anchor="start" font-weight="normal">step, tray A rim to tray B rim</text>
-<text x="408.0" y="714.0" font-size="12" fill="#888" text-anchor="end" font-weight="normal">48 mm</text>
-<text x="576.0" y="714.0" font-size="12" fill="#1b3a10" text-anchor="end" font-weight="bold">77 mm</text>
-<text x="756.0" y="714.0" font-size="12" fill="#666" text-anchor="end" font-weight="normal">taller row B</text>
-<text x="56.0" y="732.0" font-size="12" fill="#444" text-anchor="start" font-weight="normal">chute A clear section / enclosed run</text>
-<text x="408.0" y="732.0" font-size="12" fill="#888" text-anchor="end" font-weight="normal">33 mm / 159 mm</text>
-<text x="576.0" y="732.0" font-size="12" fill="#1b3a10" text-anchor="end" font-weight="bold">36 mm / 104 mm</text>
-<text x="756.0" y="732.0" font-size="12" fill="#666" text-anchor="end" font-weight="normal">wider, shorter</text>
-<rect x="50" y="737.0" width="712" height="18" fill="#000" fill-opacity="0.028"/>
-<text x="56.0" y="750.0" font-size="12" fill="#444" text-anchor="start" font-weight="normal">cavity as a share of the printed section</text>
-<text x="408.0" y="750.0" font-size="12" fill="#888" text-anchor="end" font-weight="normal">46.7%</text>
-<text x="576.0" y="750.0" font-size="12" fill="#1b3a10" text-anchor="end" font-weight="bold">45.1%</text>
-<text x="756.0" y="750.0" font-size="12" fill="#666" text-anchor="end" font-weight="normal">unchanged</text>
-<text x="56.0" y="768.0" font-size="12" fill="#444" text-anchor="start" font-weight="normal">overall envelope</text>
-<text x="408.0" y="768.0" font-size="12" fill="#888" text-anchor="end" font-weight="normal">9.45 L</text>
-<text x="576.0" y="768.0" font-size="12" fill="#1b3a10" text-anchor="end" font-weight="bold">6.64 L</text>
-<text x="756.0" y="768.0" font-size="12" fill="#666" text-anchor="end" font-weight="normal">&#8722;30%</text>
-<rect x="50" y="773.0" width="712" height="18" fill="#000" fill-opacity="0.028"/>
-<text x="56.0" y="786.0" font-size="12" fill="#444" text-anchor="start" font-weight="normal">flat lids needed</text>
-<text x="408.0" y="786.0" font-size="12" fill="#888" text-anchor="end" font-weight="normal">2 &#183; sloped planes</text>
-<text x="576.0" y="786.0" font-size="12" fill="#1b3a10" text-anchor="end" font-weight="bold">2 &#183; stepped pick lid</text>
-<text x="756.0" y="786.0" font-size="12" fill="#666" text-anchor="end" font-weight="normal">same count</text>
-<text x="826.0" y="616.0" font-size="12.5" fill="#242424" text-anchor="start" font-weight="bold">key</text>
-<rect x="826" y="630.0" width="17" height="13" fill="#8fbf6a" stroke="#242424" stroke-width=".8"/>
-<text x="851.0" y="640.0" font-size="12" fill="#555" text-anchor="start" font-weight="normal">pill cavity</text>
-<rect x="826" y="650.0" width="17" height="13" fill="#cfc8b9" stroke="#242424" stroke-width=".8"/>
-<text x="851.0" y="660.0" font-size="12" fill="#555" text-anchor="start" font-weight="normal">printed wall</text>
-<rect x="826" y="670.0" width="17" height="13" fill="url(#hx)" stroke="#242424" stroke-width=".8"/>
-<text x="851.0" y="680.0" font-size="12" fill="#555" text-anchor="start" font-weight="normal">dead wedge &#8212; cannot hold pills</text>
-<rect x="826" y="690.0" width="17" height="13" fill="#3d5a80" stroke="#242424" stroke-width=".8"/>
-<text x="851.0" y="700.0" font-size="12" fill="#555" text-anchor="start" font-weight="normal">lid</text>
-<text x="826.0" y="730.0" font-size="11.5" fill="#8c3b25" text-anchor="start" font-weight="bold">the wedge is the price of filling at the back</text>
-<text x="826.0" y="746.0" font-size="11.5" fill="#8c3b25" text-anchor="start" font-weight="normal">and picking at the front &#8212; it is ~47% at any</text>
-<text x="826.0" y="762.0" font-size="11.5" fill="#8c3b25" text-anchor="start" font-weight="normal">ramp angle. Shrink the box, not the wedge.</text>
+<polygon points="56.0,504.7 448.8,504.7 448.8,116.0 196.8,116.0 196.8,243.0 126.8,243.0 126.8,419.6 56.0,419.6" fill="#cfc8b9" stroke="#242424" stroke-width="1.2"/>
+<polygon points="126.8,497.8 442.4,147.3 442.4,504.7 126.8,504.7" fill="url(#hx)" stroke="none" stroke-width="0"/>
+<polygon points="62.4,497.8 126.8,497.8 126.8,419.6 62.4,419.6" fill="#8fbf6a" stroke="#242424" stroke-width="1.2"/>
+<polygon points="126.8,497.8 368.8,229.1 368.8,146.3 126.8,415.0" fill="#8fbf6a" stroke="#242424" stroke-width="1.2"/>
+<polygon points="368.8,229.1 442.4,147.3 442.4,116.0 368.8,116.0" fill="#8fbf6a" stroke="#242424" stroke-width="1.2"/>
+<polygon points="132.4,330.4 196.8,330.4 196.8,243.0 132.4,243.0" fill="#8fbf6a" stroke="#242424" stroke-width="1.2"/>
+<polygon points="202.3,324.3 363.3,145.5 363.3,116.0 202.3,116.0" fill="#8fbf6a" stroke="#242424" stroke-width="1.2"/>
+<line x1="56" y1="416" x2="127" y2="416" stroke="#3d5a80" stroke-width="6" stroke-linecap="round"/>
+<line x1="132" y1="239" x2="197" y2="239" stroke="#3d5a80" stroke-width="6" stroke-linecap="round"/>
+<line x1="197" y1="112" x2="449" y2="112" stroke="#3d5a80" stroke-width="6" stroke-linecap="round"/>
+<text x="56.0" y="42.0" font-size="18" fill="#242424" text-anchor="start" font-weight="bold">48&#176; ramp &#183; what I showed you</text>
+<text x="56.0" y="62.0" font-size="13.5" fill="#555" text-anchor="start" font-weight="normal">230 &#215; 171 &#215; 169 mm = 6.64 L</text>
+<text x="56.0" y="80.0" font-size="12.5" fill="#8c3b25" text-anchor="start" font-weight="bold">hopper A bottoms out 120 mm up &#8212; a sliver</text>
+<text x="94.6" y="456.7" font-size="11" fill="#1b3a10" text-anchor="middle" font-weight="bold">tray A</text>
+<text x="94.6" y="470.7" font-size="10.5" fill="#1b3a10" text-anchor="middle" font-weight="bold">34 mm</text>
+<text x="164.6" y="290.7" font-size="11" fill="#1b3a10" text-anchor="middle" font-weight="bold">tray B</text>
+<text x="186.6" y="411.4" font-size="11" fill="#1b3a10" text-anchor="middle" font-weight="bold">chute A &#183; 36 mm clear</text>
+<text x="405.6" y="156.1" font-size="11" fill="#1b3a10" text-anchor="middle" font-weight="bold">hop A</text>
+<text x="282.8" y="179.5" font-size="11" fill="#1b3a10" text-anchor="middle" font-weight="bold">hopper B</text>
+<line x1="362" y1="229" x2="376" y2="229" stroke="#7a5b3a" stroke-width="2"/>
+<text x="357.8" y="233.1" font-size="11" fill="#7a5b3a" text-anchor="end" font-weight="bold">hop A floor 120</text>
+<text x="351.0" y="482.8" font-size="12.5" fill="#8c3b25" text-anchor="middle" font-weight="bold">DEAD WEDGE &#183; 47%</text>
+<polygon points="544.8,504.7 937.7,504.7 937.7,148.2 685.6,148.2 685.6,262.0 615.7,262.0 615.7,419.6 544.8,419.6" fill="#cfc8b9" stroke="#242424" stroke-width="1.2"/>
+<polygon points="615.7,497.8 931.2,233.0 931.2,504.7 615.7,504.7" fill="url(#hx)" stroke="none" stroke-width="0"/>
+<polygon points="551.3,497.8 615.7,497.8 615.7,419.6 551.3,419.6" fill="#8fbf6a" stroke="#242424" stroke-width="1.2"/>
+<polygon points="615.7,497.8 857.6,294.8 857.6,212.0 615.7,415.0" fill="#8fbf6a" stroke="#242424" stroke-width="1.2"/>
+<polygon points="857.6,294.8 931.2,233.0 931.2,148.2 857.6,148.2" fill="#8fbf6a" stroke="#242424" stroke-width="1.2"/>
+<polygon points="621.2,349.4 685.6,349.4 685.6,262.0 621.2,262.0" fill="#8fbf6a" stroke="#242424" stroke-width="1.2"/>
+<polygon points="691.1,344.8 852.1,209.7 852.1,148.2 691.1,148.2" fill="#8fbf6a" stroke="#242424" stroke-width="1.2"/>
+<line x1="545" y1="416" x2="616" y2="416" stroke="#3d5a80" stroke-width="6" stroke-linecap="round"/>
+<line x1="621" y1="258" x2="686" y2="258" stroke="#3d5a80" stroke-width="6" stroke-linecap="round"/>
+<line x1="686" y1="144" x2="938" y2="144" stroke="#3d5a80" stroke-width="6" stroke-linecap="round"/>
+<text x="544.8" y="42.0" font-size="18" fill="#242424" text-anchor="start" font-weight="bold">40&#176; ramp &#183; your fix</text>
+<text x="544.8" y="62.0" font-size="13.5" fill="#555" text-anchor="start" font-weight="normal">230 &#215; 171 &#215; 155 mm = 6.09 L</text>
+<text x="544.8" y="80.0" font-size="12.5" fill="#1b3a10" text-anchor="start" font-weight="bold">hopper A bottoms out 91 mm up &#8212; and the box is 14 mm shorter</text>
+<text x="583.5" y="456.7" font-size="11" fill="#1b3a10" text-anchor="middle" font-weight="bold">tray A</text>
+<text x="583.5" y="470.7" font-size="10.5" fill="#1b3a10" text-anchor="middle" font-weight="bold">34 mm</text>
+<text x="653.4" y="309.7" font-size="11" fill="#1b3a10" text-anchor="middle" font-weight="bold">tray B</text>
+<text x="675.5" y="427.6" font-size="11" fill="#1b3a10" text-anchor="middle" font-weight="bold">chute A &#183; 36 mm clear</text>
+<text x="894.4" y="210.0" font-size="11" fill="#1b3a10" text-anchor="middle" font-weight="bold">hop A</text>
+<text x="771.6" y="216.7" font-size="11" fill="#1b3a10" text-anchor="middle" font-weight="bold">hopper B</text>
+<line x1="851" y1="295" x2="865" y2="295" stroke="#7a5b3a" stroke-width="2"/>
+<text x="846.6" y="298.8" font-size="11" fill="#7a5b3a" text-anchor="end" font-weight="bold">hop A floor 91</text>
+<text x="839.9" y="482.8" font-size="12.5" fill="#8c3b25" text-anchor="middle" font-weight="bold">DEAD WEDGE &#183; 39%</text>
+<text x="56.0" y="538.7" font-size="13" fill="#242424" text-anchor="start" font-weight="bold">same footprint, same bays, same two lids &#183; one bay, 90-day size-00 charge = 147.4 mL</text>
+<text x="56.0" y="566.7" font-size="12.5" fill="#555" text-anchor="start" font-weight="bold"></text>
+<text x="428.0" y="566.7" font-size="12.5" fill="#555" text-anchor="end" font-weight="bold">48&#176; ramp</text>
+<text x="596.0" y="566.7" font-size="12.5" fill="#555" text-anchor="end" font-weight="bold">40&#176; ramp</text>
+<text x="780.0" y="566.7" font-size="12.5" fill="#555" text-anchor="end" font-weight="bold">change</text>
+<line x1="56" y1="572.7" x2="780" y2="572.7" stroke="#bbb" stroke-width="1"/>
+<rect x="50" y="579.7" width="736" height="18" fill="#000" fill-opacity="0.028"/>
+<text x="56.0" y="592.7" font-size="12" fill="#444" text-anchor="start" font-weight="normal">hopper A floor, at its front edge</text>
+<text x="428.0" y="592.7" font-size="12" fill="#888" text-anchor="end" font-weight="normal">120 mm</text>
+<text x="596.0" y="592.7" font-size="12" fill="#1b3a10" text-anchor="end" font-weight="bold">91 mm</text>
+<text x="780.0" y="592.7" font-size="12" fill="#666" text-anchor="end" font-weight="normal">29 mm lower</text>
+<text x="56.0" y="610.7" font-size="12" fill="#444" text-anchor="start" font-weight="normal">hopper B floor</text>
+<text x="428.0" y="610.7" font-size="12" fill="#888" text-anchor="end" font-weight="normal">78 mm</text>
+<text x="596.0" y="610.7" font-size="12" fill="#1b3a10" text-anchor="end" font-weight="bold">70 mm</text>
+<text x="780.0" y="610.7" font-size="12" fill="#666" text-anchor="end" font-weight="normal">8 mm lower</text>
+<rect x="50" y="615.7" width="736" height="18" fill="#000" fill-opacity="0.028"/>
+<text x="56.0" y="628.7" font-size="12" fill="#444" text-anchor="start" font-weight="normal">tray B floor / rim</text>
+<text x="428.0" y="628.7" font-size="12" fill="#888" text-anchor="end" font-weight="normal">76 / 114 mm</text>
+<text x="596.0" y="628.7" font-size="12" fill="#1b3a10" text-anchor="end" font-weight="bold">68 / 106 mm</text>
+<text x="780.0" y="628.7" font-size="12" fill="#666" text-anchor="end" font-weight="normal">8 mm lower</text>
+<text x="56.0" y="646.7" font-size="12" fill="#444" text-anchor="start" font-weight="normal">row A capacity</text>
+<text x="428.0" y="646.7" font-size="12" fill="#888" text-anchor="end" font-weight="normal">247 mL  1.67&#215;</text>
+<text x="596.0" y="646.7" font-size="12" fill="#1b3a10" text-anchor="end" font-weight="bold">273 mL  1.85&#215;</text>
+<text x="780.0" y="646.7" font-size="12" fill="#666" text-anchor="end" font-weight="normal">+7%</text>
+<rect x="50" y="651.7" width="736" height="18" fill="#000" fill-opacity="0.028"/>
+<text x="56.0" y="664.7" font-size="12" fill="#444" text-anchor="start" font-weight="normal">row B capacity</text>
+<text x="428.0" y="664.7" font-size="12" fill="#888" text-anchor="end" font-weight="normal">201 mL  1.36&#215;</text>
+<text x="596.0" y="664.7" font-size="12" fill="#1b3a10" text-anchor="end" font-weight="bold">214 mL  1.45&#215;</text>
+<text x="780.0" y="664.7" font-size="12" fill="#666" text-anchor="end" font-weight="normal">+7%</text>
+<text x="56.0" y="682.7" font-size="12" fill="#444" text-anchor="start" font-weight="normal">dead wedge, share of the section</text>
+<text x="428.0" y="682.7" font-size="12" fill="#888" text-anchor="end" font-weight="normal">47.0%</text>
+<text x="596.0" y="682.7" font-size="12" fill="#1b3a10" text-anchor="end" font-weight="bold">38.9%</text>
+<text x="780.0" y="682.7" font-size="12" fill="#666" text-anchor="end" font-weight="normal">&#8722;8 pts</text>
+<rect x="50" y="687.7" width="736" height="18" fill="#000" fill-opacity="0.028"/>
+<text x="56.0" y="700.7" font-size="12" fill="#444" text-anchor="start" font-weight="normal">cavity, share of the section</text>
+<text x="428.0" y="700.7" font-size="12" fill="#888" text-anchor="end" font-weight="normal">45.1%</text>
+<text x="596.0" y="700.7" font-size="12" fill="#1b3a10" text-anchor="end" font-weight="bold">53.2%</text>
+<text x="780.0" y="700.7" font-size="12" fill="#666" text-anchor="end" font-weight="normal">cavity now wins</text>
+<text x="56.0" y="718.7" font-size="12" fill="#444" text-anchor="start" font-weight="normal">overall height</text>
+<text x="428.0" y="718.7" font-size="12" fill="#888" text-anchor="end" font-weight="normal">169 mm</text>
+<text x="596.0" y="718.7" font-size="12" fill="#1b3a10" text-anchor="end" font-weight="bold">155 mm</text>
+<text x="780.0" y="718.7" font-size="12" fill="#666" text-anchor="end" font-weight="normal">&#8722;14 mm</text>
+<rect x="50" y="723.7" width="736" height="18" fill="#000" fill-opacity="0.028"/>
+<text x="56.0" y="736.7" font-size="12" fill="#444" text-anchor="start" font-weight="normal">envelope</text>
+<text x="428.0" y="736.7" font-size="12" fill="#888" text-anchor="end" font-weight="normal">6.64 L</text>
+<text x="596.0" y="736.7" font-size="12" fill="#1b3a10" text-anchor="end" font-weight="bold">6.09 L</text>
+<text x="780.0" y="736.7" font-size="12" fill="#666" text-anchor="end" font-weight="normal">&#8722;8%</text>
+<text x="56.0" y="754.7" font-size="12" fill="#444" text-anchor="start" font-weight="normal">margin over the ~30&#176; angle of repose</text>
+<text x="428.0" y="754.7" font-size="12" fill="#888" text-anchor="end" font-weight="normal">18&#176;</text>
+<text x="596.0" y="754.7" font-size="12" fill="#1b3a10" text-anchor="end" font-weight="bold">10&#176;</text>
+<text x="780.0" y="754.7" font-size="12" fill="#666" text-anchor="end" font-weight="normal">still ample</text>
+<rect x="50" y="759.7" width="736" height="18" fill="#000" fill-opacity="0.028"/>
+<text x="56.0" y="772.7" font-size="12" fill="#444" text-anchor="start" font-weight="normal">chute ceiling, as an overhang</text>
+<text x="428.0" y="772.7" font-size="12" fill="#888" text-anchor="end" font-weight="normal">42&#176; from vertical</text>
+<text x="596.0" y="772.7" font-size="12" fill="#1b3a10" text-anchor="end" font-weight="bold">50&#176; from vertical</text>
+<text x="780.0" y="772.7" font-size="12" fill="#666" text-anchor="end" font-weight="normal">past the 45&#176; rule</text>
+<text x="854.0" y="566.7" font-size="12.5" fill="#242424" text-anchor="start" font-weight="bold">key</text>
+<rect x="854" y="580.7" width="17" height="13" fill="#8fbf6a" stroke="#242424" stroke-width=".8"/>
+<text x="879.0" y="590.7" font-size="12" fill="#555" text-anchor="start" font-weight="normal">pill cavity</text>
+<rect x="854" y="600.7" width="17" height="13" fill="#cfc8b9" stroke="#242424" stroke-width=".8"/>
+<text x="879.0" y="610.7" font-size="12" fill="#555" text-anchor="start" font-weight="normal">printed wall</text>
+<rect x="854" y="620.7" width="17" height="13" fill="url(#hx)" stroke="#242424" stroke-width=".8"/>
+<text x="879.0" y="630.7" font-size="12" fill="#555" text-anchor="start" font-weight="normal">dead wedge &#8212; cannot hold pills</text>
+<rect x="854" y="640.7" width="17" height="13" fill="#3d5a80" stroke="#242424" stroke-width=".8"/>
+<text x="879.0" y="650.7" font-size="12" fill="#555" text-anchor="start" font-weight="normal">lid</text>
+<text x="854.0" y="694.7" font-size="11.5" fill="#8c3b25" text-anchor="start" font-weight="bold">a shallower ramp lowers hopper A's floor, and</text>
+<text x="854.0" y="710.7" font-size="11.5" fill="#8c3b25" text-anchor="start" font-weight="normal">hopper B's floor rides on it, so both deepen.</text>
+<text x="854.0" y="726.7" font-size="11.5" fill="#8c3b25" text-anchor="start" font-weight="normal">The only thing 48&#176; was buying was a self-</text>
+<text x="854.0" y="742.7" font-size="11.5" fill="#8c3b25" text-anchor="start" font-weight="normal">supporting chute ceiling &#8212; and that ceiling is</text>
+<text x="854.0" y="758.7" font-size="11.5" fill="#8c3b25" text-anchor="start" font-weight="normal">an internal surface nobody sees.</text>
 </svg>
