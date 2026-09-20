@@ -54,7 +54,7 @@ assert(bay_w >= pill_len * 1.5,
        "bay_w is under 1.5x pill_len -- a pill cannot lie freely across the bay");
 
 // ------------------------------------------------------------
-// 4. Section, in Y (front to back)  -- REVISION 3
+// 4. Section, in Y (front to back)  -- REVISION 3 onward
 //
 //   [ tray A ][ tray B ][ hopper B mouth ][ hopper A mouth ]
 //     front                                            back
@@ -63,7 +63,7 @@ assert(bay_w >= pill_len * 1.5,
 // under ONE lid. That grouping forces a crossing: hopper A is the BACK mouth
 // but feeds the FRONT tray, so its chute ducks under tray B and hopper B.
 //
-// Revision 3 changes two things about that chute.
+// Revision 3 changed two things about that chute.
 //
 // (a) The ramp is 40 degrees, not 48. The chute floor is the top of hopper A's
 //     floor, so a shallower ramp lowers hopper A -- and hopper B's floor rides

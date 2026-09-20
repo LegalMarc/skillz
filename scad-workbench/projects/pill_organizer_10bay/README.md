@@ -7,12 +7,12 @@ Lift one lid and all ten types are exposed.
 **Two lids total.** Both fill ports at the back under one flat lid, both pick
 rows at the front under one sloped lid.
 
-**Revision 3.** Same topology as revision 2, with a 40-degree ramp instead of
-48 and a 20-degree *porch* under tray B, which take the envelope from 9.45 L to
-5.54 L. Tray A's rim then drops to 42 mm, steepening the single pick plane to
-38.7 degrees so the front tray is a 21 mm reach rather than a 32 mm one, and the
-wall between the two fill mouths leans forward so you pour into openings of
-roughly the same size.
+**Revision 5.** Five revisions, nineteen recorded decisions — `plan.md` has the
+table. Revision 3 took the envelope from 9.45 L to 5.54 L with a 40-degree ramp
+and a 20-degree *porch* under tray B; revision 4 fixed reach and pour, dropping
+the front wall to a scalloped 30 mm and leaning the hopper divider to even the
+two fill mouths; revision 5 turned the dead wedge under the chute into an
+accessory cubby and added tape labels.
 
 ## What it is
 
@@ -38,7 +38,8 @@ it can never sit below a straight line drawn at that angle from tray A. A
 curved floor was considered and rejected — it gains volume that fills once and
 never discharges.
 
-What revision 3 does instead is shrink the box around the wedge.
+What revisions 3–5 do instead is shrink the box around the wedge, then put
+the wedge to work.
 
 ## How it works
 

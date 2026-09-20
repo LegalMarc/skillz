@@ -1,4 +1,4 @@
-# Review handoff — pill_organizer_10bay, revision 3
+# Review handoff — pill_organizer_10bay, revision 5
 
 For a fresh session asked to review this design critically. It is written to be
 pasted as that session's opening prompt, or read from the repo.
@@ -8,7 +8,7 @@ pasted as that session's opening prompt, or read from the repo.
 ## Your task
 
 Independently review `scad-workbench/projects/pill_organizer_10bay` at revision
-3 and report what is wrong with it. **Do not rubber-stamp it.** The suite it
+5 and report what is wrong with it. **Do not rubber-stamp it.** The suite it
 ships with reports 13 passed / 0 failed / 4 n/a / 0 inconclusive / 1 advisory,
 and that is exactly the condition under which a review is worth doing: every
 automated gate is already green, so anything still wrong is something no gate
@@ -42,7 +42,7 @@ python3 ~/.local/src/openscad-cad-skills/scad-modeler/scripts/check_rules.py --p
 | File | What it holds |
 |---|---|
 | `INCIDENTS.md` | Twelve real defects across three revisions, each with the tell that found it |
-| `plan.md` | Decisions **D1–D19**, with criticality and provenance. D8, D11–D19 are revision 3 |
+| `plan.md` | The revision table (1–5) and decisions **D1–D19**, with criticality and provenance |
 | `calculations.md` | Every derived number, the `PATIKRINTI` assumptions, and the decisions/assumptions log |
 | `README.md` | What it is, how it works, and the reviewer's-attention list |
 | `params.scad` | Single source of dimensions. Every constraint is an `assert()` here |
@@ -53,7 +53,7 @@ python3 ~/.local/src/openscad-cad-skills/scad-modeler/scripts/check_rules.py --p
 ## Known soft spots — start here, then look for what is not on this list
 
 1. **The angle of repose is an estimate.** `repose_deg = 30`, marked
-   `PATIKRINTI`. Revision 3 deliberately spends margin against it: the ramp went
+   `PATIKRINTI`. Revision 3 onward deliberately spends margin against it: the ramp went
    48 → 40 degrees (18 → 10 degrees of margin) and the porch under tray B runs at
    **20 degrees, which is below repose on purpose**. Every capacity number and
    the whole "dead wedge" argument rests on that figure. If the real requirement

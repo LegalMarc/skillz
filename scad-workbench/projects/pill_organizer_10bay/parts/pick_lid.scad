@@ -1,7 +1,7 @@
 // ============================================================
 // pick_lid.scad -- ONE lid over BOTH pick tray rows.
 //
-// Revision 3 brings tray B's floor down onto tray A's rim, but
+// Revision 3 brought tray B's floor down onto tray A's rim, but
 // their RIMS are still 38mm apart, so a lid covering both as two
 // flat steps would be a Z in section -- unprintable without
 // support whichever way it is laid, because one arm is always
