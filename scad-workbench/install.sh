@@ -49,7 +49,9 @@ if [ ! -x "$PREFIX/squashfs-root/AppRun" ]; then
   ( cd "$PREFIX" && ./openscad.AppImage --appimage-extract >/dev/null )
   rm -f "$PREFIX/openscad.AppImage"
 fi
-OPENSCAD_BIN="$PREFIX/squashfs-root/AppRun"
+export OPENSCAD_BIN="$PREFIX/squashfs-root/AppRun"
+export OPENSCAD="$OPENSCAD_BIN"
+export OPENSCADPATH="$LIBDIR"
 "$OPENSCAD_BIN" --version
 
 # Manifold is the whole reason for the nightly. Fail loudly if it is absent
@@ -76,7 +78,8 @@ clone_lib MCAD  https://github.com/openscad/MCAD.git
 # degrades honestly without them, which is why they install separately.
 say "Python verification stack"
 pip install -q --disable-pip-version-check \
-  trimesh shapely scipy networkx python-fcl manifold3d rtree pyyaml jsonschema
+  trimesh shapely scipy networkx python-fcl manifold3d rtree pyyaml jsonschema \
+  pillow   # render.sh's contact sheet; views still render without it
 
 # --- 5. The skills ------------------------------------------------------------
 say "openscad-cad-skills"
@@ -102,13 +105,25 @@ echo "  wrote $ENVFILE"
 
 # --- 7. Self-check ------------------------------------------------------------
 say "Doctor"
-OPENSCAD_BIN="$OPENSCAD_BIN" OPENSCADPATH="$LIBDIR" \
-  python3 "$SKILLS_SRC/scad-modeler/scripts/doctor.py" || true
+DOCTOR_LOG="$PREFIX/doctor.log"
+python3 "$SKILLS_SRC/scad-modeler/scripts/doctor.py" 2>&1 | tee "$DOCTOR_LOG" || true
+
+# The doctor is the authority on whether this install is usable. An earlier
+# revision printed "Workbench ready" over a tier-0 report because OPENSCAD_BIN
+# was set but never exported, so the doctor could not see the binary that had
+# just been installed one step above. Trust the report, not the script.
+if grep -q "Highest supportable tier: 0" "$DOCTOR_LOG"; then
+  echo >&2
+  echo "INSTALL FAILED: the doctor reports tier 0 -- nothing can be rendered" >&2
+  echo "or exported. Full report: $DOCTOR_LOG" >&2
+  exit 1
+fi
 
 cat <<DONE
 
 Workbench ready.  Activate with:   source $ENVFILE
 Acceptance test:                   ./verify.sh
+Render six views + contact sheet:  ./render.sh model.scad build/preview
 
 Note the doctor's tier line. Without a measured calibration profile the
 stack verifies geometry, not fit -- a bore will be the diameter you asked
