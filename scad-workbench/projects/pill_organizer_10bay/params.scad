@@ -468,6 +468,22 @@ assert(rail_sep > 50, "the two rails are too close together to resist yaw");
 label_w   = 32.0;
 label_h   = 9.0;
 label_z   = 0.6;
+// The lower strip sits below the pick lid's skirt so it stays readable with the
+// lid on. The upper strip is centred on the exposed face of the wall between
+// the trays, between the chute ceiling and the pick plane.
+labelB_z0 = chuteA_ceil(yA_tray1);                       //  39.0
+labelB_z1 = pickplane(yA_tray1);                         //  66.7
+label_b_center = (labelB_z0 + labelB_z1) / 2;            //  52.9
+
+assert(label_w < bay_w - 4,
+       "the label recess is wider than the bay leaves room for");
+assert(labelB_z1 - labelB_z0 > label_h + 6,
+       "the wall between the trays is too short to carry a tape label");
+assert(label_z < min(wall_out, wall_div) - 1.2,
+       "the label recess is cut so deep it leaves a wall thinner than 1.2mm");
+assert(label_z_center - label_h / 2 > 2,
+       "the lower label recess runs off the bottom of the front face");
+
 fillet_r  = 2.0;
 foot_h    = 0.0;
 

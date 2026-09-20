@@ -310,15 +310,17 @@ module rail_socket_cut() {
         }
 }
 
-// Labels: tray A on the module's front face, tray B on its own front wall,
-// which faces forward over tray A's lid and is read at a glance.
+// Label recesses for 1/2 inch TZe tape: the lower strip on the module's own
+// front face, below the lid skirt so it reads with the lid on; the upper strip
+// on the wall between the trays, which faces forward over tray A and is read at
+// a glance once the lid is off.
 module label_cuts() {
     for (i = [0 : bays - 1]) {
         cx = bay_center_x(i);
         translate([cx - label_w / 2, -1, label_z_center - label_h / 2])
             cube([label_w, 1 + label_z, label_h]);
         translate([cx - label_w / 2, yA_tray1 - label_z,
-                   (trayB_floor + pickplane(yA_tray1)) / 2 - label_h / 2])
+                   label_b_center - label_h / 2])
             cube([label_w, label_z + 1, label_h]);
     }
 }
