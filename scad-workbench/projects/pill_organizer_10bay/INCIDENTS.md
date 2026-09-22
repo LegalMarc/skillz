@@ -263,3 +263,34 @@ declarations against what they claimed to test and by probing the mesh with
 - **Root cause:** `offset(r = 1.5) offset(r = -1.5)` on a section whose perpendicular thickness is exactly 3.0 erodes it to a zero-width line. Standalone, floating point left a sliver the dilation grew back; through `use<>` it was exactly empty. The skirt (2.65 wide) was in the same state.
 - **Fix:** `lid_round = 1.0` with an assert against half the plate and skirt thickness.
 - **Already promoted to a rule?** not yet -- two candidates. An opening-pass radius must be asserted under half the thinnest section it runs through. And the positioned render must FAIL the bundle when it is empty, and a stale `build/positioned/*.stl` must never be adopted: this is the 2026-09-20 "render=PASS while a part produced no STL" entry again, one directory over.
+
+## Revision 7, the review -- what a green suite plus a dismissed advisory hid
+
+### 2026-09-22 -- the vault lifted hopper B's ramp end above the hopper divider's spring point, and the divider went to 0.2mm at its foot in every bay
+- **Where:** `params.scad` `hopwall_z0`; `parts/body.scad` VOID_A and VOID_B.
+- **Symptom:** none from the 13 gates. `contains()` along y at x = 104: wall 0.52 at z = 123, 0.22 at 124, 0.58 at 126, 1.40 at 130, 2.4 only from 135. Identical in bays 1 and 5. `check_printability.py` HAD said `THIN WALL: minimum measured thickness 0.002 mm < required 0.80 mm (52/1500 samples)` -- inside the ADVISORY whose overhang half fails every real part, so nobody read its other half.
+- **Root cause:** D26 moved the ramp's end to 122.9; the divider's lean still sprang from the chute ceiling at 115.9. VOID_B draws the leaning face from the ramp's end; VOID_A draws it from the spring point 7mm lower. Two faces of the same wall, drawn from two different origins, crossed. D16's invariant ("pivots where it springs off the chute ceiling, so hopper B's ramp below it is untouched") was never asserted.
+- **Fix:** `hopwall_z0 = max(chuteA_ceil(yA_hop0), rampB(yB_hop1))`, a vertex at that height in VOID_A so the wall is vertical up to it, and an assert on the WALL THICKNESS at the ramp's end (`hopwall_A(rampB(yB_hop1)) - yB_hop1 >= wall_div`). Lean 26.0, mouths 62.7 / 39.3. Found by the review's contains() sweep; confirmed 2.4mm at every probed height after the fix.
+- **Already promoted to a rule?** two candidates. When one wall's two faces are drawn from two different features (here a ramp end and a lean pivot), assert the wall's thickness at the feature that can move. And an ADVISORY with two halves must be read in full: the overhang half being noise does not make the thin-wall half noise.
+
+### 2026-09-22 -- the male rails' undersides were flat faces 10mm above the bed
+- **Where:** `parts/body.scad` `rail_male_one`, `rail_z0` = 10.
+- **Symptom:** face-normal scan of the print-oriented body, 85-95 band: 90 mm^2 at z = 10.0, x -3.3..-1.7, y 15-100 -- the two trapezoids' undersides, in mid-air. A drooped rail bottom is the first thing to enter the neighbour's groove.
+- **Fix:** the male is a hull of its full section from `rail_lead_bot` up with a sliver at the wall face at `rail_z0`, so its underside is a 45 degree chamfer. Probe: first solid at x = -0.5 / -2.5 / -4.5 is z 10.6 / 12.6 / 14.6.
+
+### 2026-09-22 -- the barb's return face was 25.7 degrees, not the 35 D23 states, and the assert checked the parameter
+- **Where:** `parts/fill_lid.scad` BARB.
+- **Symptom:** print-orientation scan: two faces at 64.3 from vertical (= 90 - 25.7), 23 mm^2 each. The polygon put the root at the barb-top height 0.5 inside the tab and spread the 1.1 * tan(35) drop over a 1.6 run.
+- **Fix:** the return face is the line through (tab outer face, barb top) at `fill_tab_return_deg`; the root is that line continued `fill_tab_root` into the tab. `barb_face_deg` is derived from the polygon and asserted equal to the parameter; the print scan now reads 55 from vertical (= 90 - 35). Same class as the `fill_ledge_t` assert of revision 5: right assert, wrong variable.
+
+### 2026-09-22 -- the fillet pass put shoulders back under the pick plane
+- **Where:** `parts/body.scad` VOID_A / VOID_B top edges, `void_top_over` = 1.
+- **Symptom:** print scan: 160 mm^2 at 62-73 degrees at y 29.3-29.8, z 67; 210 mm^2 at 56-79 at y 60.1-60.8, z 93 -- 1-2mm downward shelves in both trays, misattributed in calculations.md to the seat ledge.
+- **Root cause:** the voids' top corners are 50 degree corners (the plane meets a vertical wall); an opening pass with r = 2 rounds them over a 2 / tan(25) = 4.3mm tangent, so with the corner only 1mm above the plane the round put solid back below it.
+- **Fix:** `void_top_over` = 5. Rule: an opening pass's tangent length on the sharpest corner it touches, not its radius, is what an overstep must exceed.
+
+### 2026-09-22 -- smaller items from the same review, all fixed
+- `pick_notches()` started its polygon 2mm below the skirt with r = 4 rounding, leaving 0.5mm feathers at the skirt edge; it starts 6 below now (`pick_notch_under`).
+- `bores.json` `rail_groove_back` ended at z = 140, inside the groove (142); it ends at 144 now. The front groove's bore had been fixed for exactly this in revision 6; the back one was missed.
+- The back seat-ledge relief ended exactly on the back wall's inner face (the front one oversteps by `fill_notch_over`); it oversteps now.
+- Stale numbers in params.scad comments, the pick lid header's wrong-sign print rotation, joints.json's "38mm apart", the porch angle in a bore's `_why`, and D26's "rounded riser" (the fillet is at its foot; the top edge is a sharp convex edge).

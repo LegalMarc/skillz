@@ -25,9 +25,11 @@
 // instead of up the plane.
 //
 // Material: PLA or PETG.
-// Print orientation: rotate -pick_lid_slope about X so the
-//   plate lies flat on the bed, skirt upward. The skirt then
-//   rises at about 50 degrees and self-supports. NOT as modelled.
+// Print orientation: rotate [180 - pick_lid_slope, 0, 0] (see
+//   print_export.scad) so the plate's TOP face is on the bed and
+//   the skirt rises at about 50 degrees. -pick_lid_slope alone
+//   lays the plate flat with the skirt pointing DOWN (INCIDENTS).
+//   NOT as modelled.
 //
 // To remove: lift STRAIGHT UP by the two notches. Do not tilt
 //   it about its back edge -- that edge is 0.35mm from the wall
@@ -118,8 +120,8 @@ module pick_notches() {
         x0 = cx - lid_dx_local - pick_notch_w / 2;
         xz_extrude(hook_front - 1, hook_back + 1)
             offset(r = r) offset(delta = -r)
-                polygon([[x0,                pick_lid_skirt_bot - 2],
-                         [x0 + pick_notch_w, pick_lid_skirt_bot - 2],
+                polygon([[x0,                pick_lid_skirt_bot - pick_notch_under],
+                         [x0 + pick_notch_w, pick_lid_skirt_bot - pick_notch_under],
                          [x0 + pick_notch_w, pick_notch_top],
                          [x0,                pick_notch_top]]);
     }

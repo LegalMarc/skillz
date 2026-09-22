@@ -1,5 +1,5 @@
 // ============================================================
-// body.scad -- the organizer body, revision 6. Two pick trays
+// body.scad -- the organizer body, revision 7. Two pick trays
 // at the FRONT under one lid, two fill mouths at the BACK under
 // one lid.
 //
@@ -127,6 +127,7 @@ VOID_A = [
     // the same leaning wall from hopper A's side, straight down to where it
     // springs off the chute ceiling. Hopper A ends up with a mouth wider than
     // its own throat, which is the right way round for a hopper.
+    [yA_hop0,                    hopwall_z0],                 // vertical up to where the lean springs
     [yA_hop0,                    chuteA_ceil(yA_hop0)],
     // The vault (D26): between vault_y1 and vault_y0 the void's ceiling is
     // raised to the ridge and a little more; vault_roof() then puts the gabled
@@ -287,7 +288,8 @@ module fill_seat_cut() {
                    side == 0 ? hop_mouth_y0 - fill_notch_over
                              : hop_mouth_y1 - fill_ledge_w - 1,
                    fill_notch_bot_z])
-            cube([fill_tab_w + 2.0, fill_ledge_w + 1, fill_ledge_w + fill_notch_over + 1]);
+            cube([fill_tab_w + 2.0, fill_ledge_w + 1 + fill_notch_over,
+                  fill_ledge_w + fill_notch_over + 1]);
 
     // Pull-lip notch (D23): the wall in front of the lid comes down to the seat
     // plane across fill_grip_d, so the lid's lip can carry on forward over it.
@@ -328,8 +330,15 @@ module rail_trapezoid(root_w, tip_w, depth, clear = 0) {
 
 module rail_male_one(y, z1) {
     translate([0, y, rail_z0]) {
-        linear_extrude(height = z1 - rail_z0 - rail_lead)
-            rail_trapezoid(rail_root_w, rail_tip_w, rail_out);
+        // 45 degree underside: the full section from rail_lead_bot up, hulled
+        // with a sliver at the wall face at the bottom, so nothing flat hangs
+        // in mid-air. The sliver sits 0.5 inside the wall so no face coincides.
+        hull() {
+            translate([0, 0, rail_lead_bot])
+                linear_extrude(height = z1 - rail_z0 - rail_lead - rail_lead_bot)
+                    rail_trapezoid(rail_root_w, rail_tip_w, rail_out);
+            translate([0, -rail_root_w / 2, 0]) cube([0.5, rail_root_w, 0.01]);
+        }
         translate([0, 0, z1 - rail_z0 - rail_lead])
             linear_extrude(height = rail_lead, scale = 0.45)
                 rail_trapezoid(rail_root_w, rail_tip_w, rail_out);

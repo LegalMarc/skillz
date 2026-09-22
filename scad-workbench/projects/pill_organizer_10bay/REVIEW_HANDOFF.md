@@ -12,13 +12,13 @@ advisory, and that is exactly the condition under which a review is worth
 doing: every automated gate is already green, so anything still wrong is
 something no gate looks at.
 
-Revision 5 shipped with the same green suite. A review of it found four
-defects the suite could not see — a joining groove capped by the wall it was
-cut in, a snap catch 0.7 mm thick, label recesses 9 mm tall for a 12 mm tape,
-and a cubby ceiling past the overhang limit that a decision called
-self-supporting — plus a print-ready export standing on its skirt. They are the
-last eight entries in `INCIDENTS.md`, each with the probe that found it.
-Assume revision 6 has its own.
+Revision 5 shipped with the same green suite; a review found five defects
+the suite could not see. Revision 7 shipped with the same green suite; a
+review found the vault had thinned the hopper divider to 0.2 mm at its foot
+in every bay — and the suite HAD seen it, in the thin-wall half of the one
+ADVISORY everyone had learned to ignore for its overhang half. Read the
+advisory's full text. The entries are the last fourteen in `INCIDENTS.md`,
+each with the probe that found it. Assume this revision has its own.
 
 ## Bootstrap
 
@@ -65,7 +65,11 @@ python3 ~/.local/src/openscad-cad-skills/scad-modeler/scripts/check_rules.py --p
    30 mm stretch. The splitter rib's knife-edged upstream taper is the only
    thing stopping a capsule that arrives crosswise from stopping dead at it.
    Nothing verifies this.
-3. **The vault (D26) is new geometry with four numbers to distrust.** The
+3. **The hopper divider (D28)** now springs from the end of hopper B's ramp
+   (122.9) and leans 26 degrees. Probe it along y at x = 104 for z 123–140:
+   it must read 2.4 mm everywhere below the seat ledge. The assert guards the
+   thickness at the ramp's end only.
+4. **The vault (D26) is new geometry with four numbers to distrust.** The
    face is 44.8 degrees from vertical, 0.2 inside the rule. The chute is 30 mm
    clear at the dividers, 1.15x a pill. Hopper B's ramp foot is a 6 mm riser
    above tray B's floor. The deck between the ridge and hopper B's floor is
@@ -76,38 +80,38 @@ python3 ~/.local/src/openscad-cad-skills/scad-modeler/scripts/check_rules.py --p
    shared by more than two faces before believing the suite.
    The cubby ceiling is at 45 (D21); check the deck it leaves (3 mm at the
    back face, 14 at the front) and that `cubby_deck` is still in the deck.
-4. **The fill lid's snap is new geometry** (D23): 12 mm tabs, a 35-degree barb
+5. **The fill lid's snap is new geometry** (D23): 12 mm tabs, a 35-degree barb
    return, 0.8 mm of real engagement, a 2.7 mm catch, and a pull lip. The
    release force under a fingertip on the lip against two tabs is not
    calculated, only bounded by the strain assert. Print the coupon.
-5. **The pick lid's finger notches** (D22) open a 22 x 2 mm sliver of tray
+6. **The pick lid's finger notches** (D22) open a 22 x 2 mm sliver of tray
    above the scalloped wall. The pill line is 9 mm below the notch top. Judge
    whether that is enough with the lid being lifted while the tray is heaped.
-6. **The front joining groove now opens through the pick plane** under the
+7. **The front joining groove now opens through the pick plane** under the
    lid's right edge (D14, corrected). The male on a neighbour has to drop 132
    mm to seat both rails. Nothing verifies the assembly motion; there is no
    motion sweep in this revision.
-7. **The cubby deck is 3 mm at the back face** over a 224 mm span. Hand
+8. **The cubby deck is 3 mm at the back face** over a 224 mm span. Hand
    calculated deflection is under a millimetre at pill loads. Nobody has
    checked print-time behaviour or PLA creep under sustained load.
-8. **Bay width is 1.65x the longest pill** against a 2–3x arching rule of
+9. **Bay width is 1.65x the longest pill** against a 2–3x arching rule of
    thumb. Two capsules can in principle span a bay. Mitigated, not eliminated.
-9. **Capacity is a geometric maximum**, measured from the cavity meshes with
+10. **Capacity is a geometric maximum**, measured from the cavity meshes with
    the fill line at the underside of the lid. It is not a practical fill.
-10. **Tier 2 throughout.** `doctor.py` reports no calibration profile, so every
+11. **Tier 2 throughout.** `doctor.py` reports no calibration profile, so every
     clearance — rail 0.35, fill lid 0.30, snap 0.8 — is geometry only.
-11. **The label recesses are 0.5 mm deep** in walls 2.4 and 2.8 mm thick, and
+12. **The label recesses are 0.5 mm deep** in walls 2.4 and 2.8 mm thick, and
     the upper strip sits on the wall between the trays, which is also the wall
     doing the `trayB_front_retain` job. The retained wall was measured on the
     mesh at 1.9; `trayB_front_retain` itself is 14.6 against a 14.0 floor.
-12. **Every external edge is rounded or chamfered (D27)** with small cutters
+13. **Every external edge is rounded or chamfered (D27)** with small cutters
     and 2D opening passes. Each is a boolean against an existing face: the
     corner cutters overstep outward, the fill lid's lip ends inside the
     plate's chamfer band and sits 0.1 above its underside, the pick lid's
     chamfer cutters are centred on the edge lines. Check that the rounds are
     where the decision says and nowhere else — a 1.5 round on a 2.4 wall top
     leaves 0.9 of flat.
-13. **Coverage gaps are not passes.** Four checks are not-applicable and
+14. **Coverage gaps are not passes.** Four checks are not-applicable and
     `check_rules.py` reports three antecedents that never fired (R-01, R-09,
     R-12). Seven rules are MANUAL. Nothing moves in this revision, so there is
     no motion sweep at all.

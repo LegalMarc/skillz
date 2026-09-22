@@ -103,7 +103,8 @@ the centre of each bay — and the diagonal steepens:
 | Gable | `atan(12 / (bay_w / 2))` | 29.2 deg |
 | Face from vertical | formula above | **44.8 deg** (was 50) |
 | Chute clear at the ridge / at the dividers | `chute_clear ± 6` | 42 / **30** — 1.15x pill length, 2.7x diameter |
-| Hopper B ramp foot | `trayB_floor + vault_up` | 62.18 — a 6 mm riser at tray B's back wall |
+| Hopper B ramp foot | `trayB_floor + vault_up` | 62.18 — a 6 mm riser at tray B's back wall; the fillet is at its foot, its top edge is sharp |
+| Hopper divider spring point | `max(chuteA_ceil(yA_hop0), rampB(yB_hop1))` | 122.93 — the ramp's end; below it the wall is vertical and 2.4 thick (D28; 0.2 at revision 7 as first committed) |
 | Hopper B outlet top | `rampB_foot + outlet_h`, outlet_h 28 | 90.18 — 4 mm under tray B's rim |
 | Deck at the ridge | `chute_ceil` | 3.0, declared in `attachments.json` as `vault_deck` |
 | Row B capacity | measured | 182.4 → **166.1 mL**, 1.13x the charge, 101 days |
@@ -119,10 +120,18 @@ ceiling is 65 degrees from vertical and the splitter rib carries it.
 
 Face-normal scan of the body, downward faces 50–55 degrees from vertical,
 above the bed: 21,758 mm² before, about 2,200 after — and of that, 59 mm² is
-under hopper B. The rest is the underside of the fill-lid seat ledge where it
-runs along the leaning hopper divider (a 45-degree chamfer tilted a further
-19 degrees), which has been there since revision 4, bridges 1.1 mm, and was
-never the advisory's subject.
+under hopper B. The review of revision 7 traced the rest not to the seat
+ledge but to fillet shoulders the opening pass put back under the pick plane
+when the tray voids ran only 1 mm past it (the 4.3 mm tangent of a 2 mm round
+on a 50-degree corner); `void_top_over` is 5 now and they are gone. The two
+end lips of each vault ridge are 6 mm tall at the bay centre and at the
+edges respectively, facing the flow; watch bays 1 and 5 under a full charge.
+
+The thin-wall half of `check_printability.py` (0.8 mm threshold) reports 39
+of 1500 samples after the D28 fix, down from 52; a 20,000-sample ray-cast map
+puts every one of them on an acute edge — the splitter rib's knife taper at
+the bay centres, the dovetail lips of both rails, the seat-ledge noses, and
+grazing hits on the obtuse plane-to-wall edges. No wall reads under 0.8.
 
 ## Derived — the porch (D12, D20)
 
@@ -236,7 +245,7 @@ openings instead:
 |---|---|---|---|---|
 | 0 | 0 | 70.0 | 32.0 | 2.19 : 1 |
 | 6.0 | 12.0 deg | 64.6 | 37.4 | 1.73 : 1 |
-| **8.8** | **17.3 deg** (19.3 from revision 6, the spring point rose with the porch) | **62.1** (62.3) | **39.9** (39.7) | **1.56 : 1** |
+| **8.8** | **17.3 deg** (19.3 from revision 6, the spring point rose with the porch; **26.0** from revision 7's review fix, when it rose to the end of hopper B's ramp, D28) | **62.1** (62.3; **62.7**) | **39.9** (39.7; **39.3**) | **1.56 : 1** (1.59) |
 | 12.0 | 23.1 deg | 59.3 | 42.7 | 1.39 : 1 |
 
 The wall pivots where it springs off the chute ceiling, so hopper B's ramp below
@@ -273,7 +282,7 @@ fill; a pour stops when the pile reaches the mouth.
 | Retaining lip across the opening | `cubby_lip_h`, level with the shallow end | 30.0 |
 | Clear opening above the lip | | 73.1 |
 | Cubby volume | trapezoid x width | about 1.07 L |
-| Solid volume, body | rev 5 / rev 6 | 929.3 / **1049.4 cm3** |
+| Solid volume, body | rev 5 / rev 6 / rev 7 | 929.3 / 1049.4 / **1138.1 cm3** |
 
 Revision 5 ran the ceiling parallel to the chute floor and called it
 self-supporting. A 40 degree slope is a 50-degree-from-vertical overhang — the
@@ -354,7 +363,10 @@ needed, as with any gravity dispenser.
 | Edge | Treatment | Wall behind it |
 |---|---|---|
 | Body vertical corners (4) | round, r 3.0 | 2.8 walls; the inner corner stays sharp, 2.7 mm on the diagonal |
-| Body top edges (front of the pick plane, both edges of the step, back) | round, r 1.5 | 2.4 mm wall tops keep 0.9 mm of flat |
+| Body top edges in section (both edges of the step, back) | round, r 1.5 | 2.4 mm wall tops keep 0.9 mm of flat |
+| Front edge of the pick plane | the same pass, but the corner is obtuse (130°): a 0.16 mm easing | |
+| Side walls' long top edges (x = 0, 230) | left square: they run along the extrusion | |
+| Male rail undersides | 45° chamfer from the wall face, D28 | were flat, 10 mm above the bed |
 | Body base edges | left square | first layers |
 | Pick lid plate, front and back edges | chamfer 1.0, in section (under half the 3 mm plate; a 1.5 round collapsed it; a round of any size is a 90-degree overhang where this face meets the bed) | |
 | Pick lid plate, x-end top edges | chamfer 1.0 | |

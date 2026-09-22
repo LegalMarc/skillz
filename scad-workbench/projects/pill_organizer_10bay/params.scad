@@ -38,11 +38,14 @@ lid_t     = 3.0;
 weld_embed = 1.5;           // how far every added feature reaches INTO the
                             // solid it lands on; a coincident face is not
                             // reliably welded (INCIDENTS.md 2026-08-26)
-void_top_over = 1.0;        // how far every open-topped void runs PAST the
+void_top_over = 5.0;        // how far every open-topped void runs PAST the
                             // outer surface it opens through. A void whose top
                             // edge lies exactly on the shell's top face is a
                             // coplanar boolean; it held until a third cut broke
-                            // through that face (INCIDENTS.md, revision 6)
+                            // through that face (INCIDENTS.md, revision 6).
+                            // 5, not 1: the fillet pass rounds the void's top
+                            // corners with a 4.3mm tangent, and at 1 that put
+                            // solid shoulders back BELOW the pick plane.
 
 // ------------------------------------------------------------
 // 3. Bay grid
@@ -121,7 +124,7 @@ porch_run = yB_tray1 - yA_tray1;            //  30.4
 
 // Z stations
 base_z  = base_t;                                        //   3.0  tray A floor
-z_porch = base_z + porch_run * porch_tan;                //  14.06 chute floor at the porch end
+z_porch = base_z + porch_run * porch_tan;                //  17.18 chute floor at the porch end
 
 // Chute A's floor: 20 degrees under tray B, then 40 degrees all the way back.
 function chuteA_floor(y) = y <= yB_tray1
@@ -234,18 +237,28 @@ module_h   = hopper_rim;
 // throat, which is the right way round for a hopper.
 // ------------------------------------------------------------
 hopA_lean  = 8.8;                                        // forward offset at the rim
-hopwall_z0 = chuteA_ceil(yA_hop0);                       // 112.8, where the wall springs
+// Where the wall springs. It used to be the chute ceiling alone. The vault
+// (D26) lifted hopper B's ramp foot, so the ramp now ENDS 7mm above that
+// point -- and a wall that starts leaning below the ramp's end crosses the
+// ramp's own face: the review of revision 7 measured it 0.2-0.8mm thick over
+// its bottom 5mm in every bay. It now springs from whichever is higher, and
+// VOID_A carries a vertex there so the wall is vertical up to it.
+hopwall_z0 = max(chuteA_ceil(yA_hop0), rampB(yB_hop1));  // 122.9, the ramp's end
 function hopwall_A(z) = yA_hop0
                       - hopA_lean * max(0, z - hopwall_z0) / (hopper_rim - hopwall_z0);
 function hopwall_B(z) = hopwall_A(z) - wall_div;
 
-hop_lean_deg  = atan(hopA_lean / (hopper_rim - hopwall_z0));   // 17.3
+hop_lean_deg  = atan(hopA_lean / (hopper_rim - hopwall_z0));   // 26.0 (19.35 before the vault fix)
 mouthB_w      = hopwall_B(hopper_rim - lid_t) - yB_wall1;             // 62.1
 mouthA_w      = yA_hop1 - hopwall_A(hopper_rim - lid_t);              // 39.9
 mouth_ratio   = mouthB_w / mouthA_w;                           // 1.56, about 3:2
 
 assert(hop_lean_deg < 40,
        "the hopper divider leans past the FDM overhang band -- its front face would need support");
+assert(hopwall_A(rampB(yB_hop1)) - yB_hop1 >= wall_div - 1e-6,
+       "the hopper divider is thinner than wall_div where hopper B's ramp ends -- the lean starts below the ramp's end");
+assert(hopwall_z0 >= rampB(yB_hop1) - 1e-6,
+       "the hopper divider starts leaning below the end of hopper B's ramp");
 assert(mouth_ratio > 1.3 && mouth_ratio < 1.9,
        "the two fill mouths are no longer within the 3:2 band the lean exists to hit");
 assert(mouthA_w > pill_len + 8 && mouthB_w > pill_len + 8,
@@ -280,7 +293,7 @@ assert(porch_deg < ramp_deg,
 assert(module_d <= max_part_y && module_h <= max_part_z,
        "the module no longer fits the usable bed");
 
-tray_step = trayB_rim - trayA_rim;                       //  49.06
+tray_step = trayB_rim - trayA_rim;                       //  51.18
 
 // ------------------------------------------------------------
 // 4c. Scalloped front wall (D17)
@@ -431,7 +444,7 @@ bayB_vol_measured_ml = 0;
 // ------------------------------------------------------------
 pick_lid_w     = module_w - 1.0;
 pick_lid_clear = 0.35;
-pick_lid_slope = atan((trayB_rim - pickplane_front) / yB_tray1);   // 31.8 deg
+pick_lid_slope = atan((trayB_rim - pickplane_front) / yB_tray1);   // 39.9 deg
 pick_lid_len   = sqrt(pow(yB_tray1, 2) + pow(trayB_rim - pickplane_front, 2))
                  - pick_lid_clear;
 pick_lid_hook_t = 3.0;
@@ -443,7 +456,7 @@ pick_lid_gap    = 0.2;   // vertical float above the pick plane; keeps the pair 
 // cannot pass the front face.
 pick_lid_skirt_over = 6.0;                       // overlap onto the scalloped wall
 pick_lid_hook_h = pickplane_front + pick_lid_gap
-                - (trayA_front_h - pick_lid_skirt_over);       //  18.2
+                - (trayA_front_h - pick_lid_skirt_over);       //  19.2
 pick_lid_skirt_bot = pickplane_front + pick_lid_gap - pick_lid_hook_h;   //  24.0
 pick_lid_tv  = lid_t / cos(pick_lid_slope);
 
@@ -466,6 +479,9 @@ assert(pick_lid_skirt_bot > label_z_center + label_h / 2 + 2,
 pick_notch_w   = 22.0;
 pick_notch_h   = 8.0;
 pick_notch_r   = 4.0;
+pick_notch_under = 6.0;     // the notch polygon starts this far below the skirt's
+                            // bottom, past its own rounding, so the notch is full
+                            // width where it meets the edge (was 2: 0.5mm feathers)
 pick_notch_top = pick_lid_skirt_bot + pick_notch_h;              //  32.0
 pick_notch_x   = [bay_center_x(1), bay_center_x(bays - 2)];      // bays 2 and 4
 
@@ -511,6 +527,12 @@ fill_tab_ramp   = 3.0;
 // degrees the lid still needs a deliberate pull to release, but a pull
 // releases it, every refill, without fatiguing the tab.
 fill_tab_return_deg = 35;
+// The barb polygon's root sits fill_tab_root inside the tab so the union is
+// volumetric; the return face is defined by its SLOPE through the tab's outer
+// face, not by the root point, so the face a pull meets is at
+// fill_tab_return_deg (revision 7's was 25.7: the drop was spread over the
+// root's extra run -- INCIDENTS.md).
+fill_tab_root = 0.3;
 fill_tab_strain = 3 * fill_tab_t * (fill_tab_barb - fill_lid_clear) / (2 * pow(fill_tab_drop, 2));
 fill_tab_pocket_h = 6.0;
 fill_barb_top_z   = fill_seat_z - fill_tab_drop + 5.0;
@@ -591,6 +613,11 @@ assert(rail_tip_w > rail_root_w && rail_root_w > 0,
 assert(rail_clear * 2 < rail_root_w / 2, "rail clearance has eaten the rail root");
 
 rail_z0   = 10.0;
+// The male rail's underside is a 45 degree chamfer from the wall face at
+// rail_z0 out to full depth rail_out higher: a flat 5 x 9mm underside 10mm
+// above the bed drooped on the review's face scan, and a drooped rail bottom
+// is exactly what jams the neighbour's groove (revision 7 review, finding 2).
+rail_lead_bot = rail_out;
 rail_lead = 3.0;
 rail_boss = 5.0;
 rail_boss_w = rail_tip_w + 8;   // buttress footprint in Y
