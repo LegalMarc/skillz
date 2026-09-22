@@ -168,10 +168,32 @@ and its 1 mm top chamfer, which lies on the bed.
 
 Purchased: four stick-on rubber feet, 10 mm; 1/2 inch TZe label tape.
 
+Test print: `build/maquette/test_print_plate_256.3mf` (maquette body, both
+maquette lids and the coupon on one 256 mm plate), or the STLs one by one.
+
 ## Print this first
 
 `calibration_coupon.scad`. `doctor.py` reports no calibration profile on this
-machine, so the snap and rail fits are geometry-only.
+machine, so the snap and rail fits are geometry-only. The coupon is eight
+islands, 170 x 71 mm, no supports: a plate with five male rail stubs at
+−0.15 .. +0.15 mm and a loose groove block cut exactly as the body cuts its
+grooves (drop the block over each stub; the one that goes down with hand
+pressure and does not rock is your `rail_clear`), and five miniature fill
+lids with the real barb at the same offsets plus one miniature mouth with the
+real pocket geometry (press each in, lift it out by the notch; it should click
+both ways and hold a shake — that offset goes into `fill_tab_barb`). The
+revision 1 coupon had a hinge-rod gauge for a rod that no longer existed and no
+snap gauge at all; it had not rendered since revision 2.
+
+## One plate for the small test print
+
+`build/maquette/test_print_plate_256.3mf` lays the three maquette parts and
+the coupon out on a 256 x 256 mm plate, origin at the front-left corner, each
+in its print orientation with 15 mm or more between parts. It is a plain
+core-spec 3MF (four named objects, positioned), which Elegoo Slicer, Orca,
+Bambu Studio and PrusaSlicer all open as a multi-object plate; assign your own
+printer and filament profile after opening. Regenerate it with the script in
+`build/maquette/make_plate.py` after any re-export.
 
 ## The bench maquette
 
