@@ -13,7 +13,7 @@
       20.0
     ],
     "step_mm": 0.5,
-    "_why": "the 20 degree porch leg of the crossing chute, in the right-hand lane of bay 1. The porch is the one stretch where a splitter rib stands in the flow, so this line proves a lane is still open end to end. A blocked lane would leave the part watertight and single-bodied, which is exactly why no other check would notice."
+    "_why": "the 25 degree porch leg of the crossing chute, in the right-hand lane of bay 1. The porch is the one stretch where a splitter rib stands in the flow, so this line proves a lane is still open end to end. A blocked lane would leave the part watertight and single-bodied, which is exactly why no other check would notice."
   },
   {
     "name": "chute_ramp_bay1",
@@ -122,9 +122,9 @@
     "end": [
       227.3,
       98.6,
-      140.0
+      144.0
     ],
     "step_mm": 0.5,
-    "_why": "same for the back groove"
+    "_why": "same for the back groove: ends at 144, in open air above the rim (141) and the groove top (142), so the exit is what is tested"
   }
 ]
