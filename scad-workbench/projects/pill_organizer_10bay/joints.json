@@ -1,0 +1,4 @@
+{
+  "_comment": "No declared contacts and no motion. Nothing in this revision moves: the two tray rims are still 38mm apart, which makes a hinged shared lid impossible (an L-section lid's mass centre sits ~48mm below any back-top pivot, putting its over-centre angle near 144 degrees), so both lids now lift off. Both are clearance fits -- the pick lid floats 0.2mm above its plane and the fill lid 0.15mm above its seat -- so both report as NEAR MISS, which is correct. Modelling either as a coplanar resting contact is what made FCL report 66.9mm of penetration on a pair whose real boolean overlap measured 0.000 mm3.",
+  "contacts": []
+}
