@@ -1,0 +1,8 @@
+# Regenerable intermediates. The four printable STLs and the renders ARE
+# committed, so nobody needs OpenSCAD installed just to print this.
+build/positioned/
+build/subfeatures/
+build/prev_body/
+build/assembly.stl
+build/prev_asm/.*
+build/.validation_state.json

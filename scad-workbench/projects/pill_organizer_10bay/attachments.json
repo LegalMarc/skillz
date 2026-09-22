@@ -1,0 +1,79 @@
+[
+  {
+    "name": "fill_barb_wall_front",
+    "part": "body",
+    "at": [
+      115.0,
+      61.8,
+      136.0
+    ],
+    "feature": "hopper B's front wall above the front barb pocket -- what the fill lid's front snap tab pulls against",
+    "min_material_mm": 1.0
+  },
+  {
+    "name": "fill_barb_wall_back",
+    "part": "body",
+    "at": [
+      115.0,
+      169.4,
+      136.0
+    ],
+    "feature": "the module's back wall above the rear barb pocket",
+    "min_material_mm": 1.0
+  },
+  {
+    "name": "pick_lid_skirt_catch",
+    "part": "body",
+    "at": [
+      92.32,
+      1.4,
+      38.0
+    ],
+    "feature": "a bay divider's share of the front face, above the scallop line -- what the pick lid's skirt catches on, and the only thing stopping the lid sliding down its own 38.7 degree plane",
+    "min_material_mm": 1.2
+  },
+  {
+    "name": "rail_buttress_right_back",
+    "part": "body",
+    "at": [
+      223.4,
+      98.6,
+      100.0
+    ],
+    "feature": "buttress carrying the rear joining groove, which is cut deeper than the side wall is thick",
+    "min_material_mm": 2.0
+  },
+  {
+    "name": "cubby_deck",
+    "part": "body",
+    "at": [
+      115.0,
+      135.0,
+      74.7
+    ],
+    "feature": "the deck between the accessory cubby and the crossing chute above it -- 3mm at the back face, thickening to 14 at the cubby's front because the cubby ceiling runs at 45 degrees while the chute floor runs at 40 (D21); here, mid-cubby, it is about 8.8",
+    "min_material_mm": 6.0
+  },
+  {
+    "name": "fill_catch_front",
+    "part": "body",
+    "at": [
+      115.0,
+      63.1,
+      132.65
+    ],
+    "feature": "the catch the fill lid's front barb latches on: the wall between the top of the barb pocket and the bottom of the seat-ledge relief above it. 0.7mm in revision 5; fill_catch_t (2.7) in revision 6, asserted in params.scad",
+    "min_material_mm": 0.8
+  },
+  {
+    "name": "vault_deck",
+    "part": "body",
+    "at": [
+      115.0,
+      100.0,
+      93.2
+    ],
+    "feature": "the deck between the vault ridge of bay 3's chute ceiling and hopper B's floor above it, mid-leg: chute_ceil (3mm) at the ridge, the thinnest the deck under hopper B gets after the vault (D26)",
+    "min_material_mm": 2.5
+  }
+]
