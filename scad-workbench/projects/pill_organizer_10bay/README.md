@@ -29,7 +29,7 @@ has each one with the probe that found it.
 | Bays | 10, two rows of 5, 42.96 mm clear each |
 | Capacity | **291.1 mL/bay front row, 166.1 mL/bay back row** — 2.29 L total, geometric maximum |
 | Printed parts | **3 designs, 3 pieces**, no hardware |
-| Validation | **13 passed, 0 failed, 4 n/a, 0 inconclusive, 1 advisory** (the advisory is `check_printability.py`, which fails every real FDM part on overhang area; the face-normal scan below is the real reading) |
+| Validation | **13 passed, 0 failed, 4 n/a, 0 inconclusive, 1 advisory** (the advisory is `check_printability.py`; its overhang half fails every real FDM part on area, but its THIN-WALL half caught a real 0.2 mm wall in revision 7 that everyone had stopped reading it for — read both halves) |
 | Confidence | Tier 2 — geometry verified, fit uncalibrated |
 
 A 90-day once-daily size-00 charge is 147.4 mL, so the front row carries 177
@@ -87,9 +87,11 @@ the wedge to work.
   end — keeps the contents in when you slide the module about; 73 mm of clear
   opening remains above it. About 1.1 L of what was solid infill is usable
   space. (The lids do not fit in it: the fill lid is 113 mm deep.)
-- **The fill mouths are 62 and 40 mm, about 3:2.** The wall between them leans
-  8.8 mm forward at the rim (17.3 degrees from vertical), pivoting where it
-  springs off the chute ceiling so hopper B's ramp is untouched. Left vertical
+- **The fill mouths are 63 and 39 mm, about 3:2.** The wall between them leans
+  8.8 mm forward at the rim (26 degrees from vertical), pivoting at the end
+  of hopper B's ramp so the ramp is untouched and the wall below the pivot is
+  full thickness. (The revision 7 review found the pivot 7 mm below the ramp's
+  end, which thinned that wall to 0.2 mm at its foot; see D28.) Left vertical
   the split was 70 : 32, which is what you get from equalising the two rows'
   volumes rather than the openings you actually pour into.
 - **The vault.** The crossing chute's ceiling on its 40-degree leg is a
@@ -98,8 +100,8 @@ the wedge to work.
   this one is 44.8 degrees from vertical where the plain ceiling was 50 —
   inside the 45-degree no-support rule instead of past it. Hopper B's ramp
   rides one deck above the ridge, so it starts 6 mm above tray B's floor with
-  a rounded riser pills drop off. The chute is 42 mm clear at the ridge and
-  30 at the dividers.
+  a riser pills drop off (filleted at its foot; its top edge is sharp). The
+  chute is 42 mm clear at the ridge and 30 at the dividers.
 - **The splitter rib.** Tray B's floor is carried on the bay dividers alone —
   the chute runs underneath, so the tray's own walls never reach it. At 25
   degrees that underside is a shallow ceiling bridging the whole bay, so a
@@ -114,11 +116,14 @@ the wedge to work.
   lid on, nothing below it is open.
 - **Foot pads.** Four 10 mm recesses in the base take stick-on rubber feet, so
   a unit that is bumped while pouring does not skate.
-- **No sharp edges.** The body's vertical corners are rounded at 3 mm and its
-  top edges at 1.5; both lids have rounded corners, the fill lid a chamfered
-  top perimeter and the pick lid chamfered plate edges. Inside, every corner a
-  pill meets has carried a 2 mm fillet since revision 1.
-- **Ganging.** Two dovetail rails on the left face, two grooves on the right.
+- **Edges.** The body's vertical corners are rounded at 3 mm and the step and
+  back top edges at 1.5 (the front edge of the pick plane is obtuse and gets
+  only an easing; the side walls' long top edges are square); both lids have
+  rounded corners, the fill lid a chamfered top perimeter and the pick lid
+  chamfered plate edges. Inside, every corner a pill meets has carried a 2 mm
+  fillet since revision 1.
+- **Ganging.** Two dovetail rails on the left face, two grooves on the right,
+  the rails' undersides chamfered at 45 degrees so they print without droop.
   Lift the pick lid off the left-hand unit, lower the right-hand unit's rails
   in from above. Revisions 3 to 5 had the front groove capped by the side wall,
   so this could not be done; it is open through the pick plane now, and the lid
