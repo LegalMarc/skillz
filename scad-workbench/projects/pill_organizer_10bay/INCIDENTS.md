@@ -294,3 +294,10 @@ declarations against what they claimed to test and by probing the mesh with
 - `bores.json` `rail_groove_back` ended at z = 140, inside the groove (142); it ends at 144 now. The front groove's bore had been fixed for exactly this in revision 6; the back one was missed.
 - The back seat-ledge relief ended exactly on the back wall's inner face (the front one oversteps by `fill_notch_over`); it oversteps now.
 - Stale numbers in params.scad comments, the pick lid header's wrong-sign print rotation, joints.json's "38mm apart", the porch angle in a bore's `_why`, and D26's "rounded riser" (the fillet is at its foot; the top edge is a sharp convex edge).
+
+### 2026-09-22 -- the calibration coupon had not rendered since revision 2, and nobody noticed because it is outside every gate
+- **Where:** `calibration_coupon.scad`; `build/calibration_coupon.stl`.
+- **Symptom:** the file's header promised gauges for three fits including "the pick lid's C-clip on its 6.0mm hinge rod"; its `rod_gauge()` read `hinge_rod_d`, a parameter deleted with the hinged lid in revision 2, and there was no snap gauge at all. The STL in `build/` dated from revision 1 and was re-sent as "print this first" through revisions 5, 6 and 7.
+- **Root cause:** the coupon is deliberately outside `parts/` so the bundle ignores it -- which also means nothing re-renders it, nothing checks it against params, and its header's claims were never read against its modules.
+- **Fix:** rewritten for the two fits that exist: a groove block that drops over five offset rail stubs, and five miniature fill lids with the real barb (35 degree return, `fill_tab_inset`, `fill_tab_root`) in a miniature mouth with the real pocket, ledge and notch geometry. `EXPECTED_BODIES: 8` declared in the header. Rendered, 8 watertight islands, 170 x 71 x 22.
+- **Already promoted to a rule?** not yet -- candidate: any `.scad` at the project root that `include`s params.scad gets rendered by the bundle (render-only, no dimension gate) so a dead parameter reference fails loudly instead of shipping a revision-1 STL for six revisions.
