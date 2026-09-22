@@ -79,14 +79,26 @@ module fill_plate() { fill_plate_slab(); fill_lip_slab(); }
 // (D23), so a pull on the lid cams the tab inward instead of tearing the
 // pocket; below it a shallow ramp lets the tab cam in as the lid is pressed
 // home.
+// The return face is the line through (tab outer face, barb top) at
+// fill_tab_return_deg; the root point is that line continued fill_tab_root
+// into the tab, so the visible face is at the decision's angle. Revision 7 put
+// the root at the barb-top height and spread the drop over the extra run,
+// which made the face 25.7 degrees (INCIDENTS.md).
+barb_top   = fill_barb_top_z - fill_seat_z;
+barb_slope = tan(fill_tab_return_deg);
 BARB = [
-    [fill_tab_inset + 0.3, fill_barb_top_z - fill_seat_z],
-    [-fill_tab_barb, fill_barb_top_z - fill_seat_z - fill_tab_barb * tan(fill_tab_return_deg)],
-    [fill_tab_inset + 0.3, fill_barb_bot_z - fill_seat_z]
+    [fill_tab_inset + fill_tab_root, barb_top + fill_tab_root * barb_slope],
+    [-fill_tab_barb, barb_top - (fill_tab_barb + fill_tab_inset) * barb_slope],
+    [fill_tab_inset + fill_tab_root, fill_barb_bot_z - fill_seat_z]
 ];
+barb_face_deg = atan((BARB[0][1] - BARB[1][1]) / (BARB[0][0] - BARB[1][0]));
 
-assert(fill_barb_top_z - fill_tab_barb * tan(fill_tab_return_deg) > fill_barb_bot_z + 0.5,
+assert(abs(barb_face_deg - fill_tab_return_deg) < 0.01,
+       "the barb's return face is not at fill_tab_return_deg");
+assert(BARB[1][1] > fill_barb_bot_z - fill_seat_z + 0.5,
        "the barb's return face runs down into its own entry ramp");
+assert(barb_top + fill_tab_root * barb_slope < 1.0 + (fill_barb_top_z - fill_seat_z),
+       "the barb's root rises above the pocket ceiling inside the tab");
 
 module fill_tabs() {
     x0 = fill_lid_x / 2 - fill_tab_w / 2;
