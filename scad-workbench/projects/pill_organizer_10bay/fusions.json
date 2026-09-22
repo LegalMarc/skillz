@@ -26,5 +26,12 @@
       "fill_tabs"
     ],
     "reason": "both cantilever tabs are rooted in the plate's underside; the overlap is the built-in end of the beam."
+  },
+  {
+    "pair": [
+      "body_shell",
+      "vault_roof"
+    ],
+    "reason": "each half of the vault roof reaches weld_embed into its bay divider, vault_top_over up into the deck under hopper B's floor, and 1mm past the bay centre into its partner half; the void polygon is cut to the ridge and the roof puts the gabled solid back, so the overlap IS the feature (D26)"
   }
 ]
