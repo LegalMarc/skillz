@@ -1,5 +1,5 @@
 // ============================================================
-// body.scad -- the organizer body, revision 5. Two pick trays
+// body.scad -- the organizer body, revision 6. Two pick trays
 // at the FRONT under one lid, two fill mouths at the BACK under
 // one lid.
 //
@@ -10,7 +10,7 @@
 // of it -- a plain ramp. Hopper A is the BACK mouth and feeds
 // the FRONT tray, so its chute ducks under tray B and under
 // hopper B. See params.scad section 4 for why the chute runs at
-// 20 degrees under tray B and 40 degrees everywhere else.
+// porch_deg under tray B and ramp_deg everywhere else.
 //
 // Local origin: front-bottom-left outer corner. +X right,
 // +Y back, +Z up. This is the assembly datum.
@@ -55,6 +55,17 @@ OUTER = [
     [yB_tray1,  trayB_rim],
     [0,         pickplane_front]
 ];
+// The silhouette with its top edges rounded (D27): an opening pass rounds
+// every convex corner, then a plain band puts the two base corners back so the
+// first layers stay square on the bed. The step's inside corner is concave and
+// is untouched.
+module outer_2d() {
+    union() {
+        offset(r = edge_r_top) offset(r = -edge_r_top) polygon(OUTER);
+        polygon([[0, 0], [module_d, 0],
+                 [module_d, edge_r_top + 0.5], [0, edge_r_top + 0.5]]);
+    }
+}
 
 // ------------------------------------------------------------
 // VOID_B -- tray B, its outlet, and hopper B. The simple row:
@@ -63,6 +74,10 @@ OUTER = [
 VOID_B = [
     [yB_tray0,                   trayB_floor],
     [yB_tray1,                   trayB_floor],
+    // Hopper B's ramp rides a deck above the vault RIDGE, so it starts vault_up
+    // above the tray floor: a riser at the tray's back wall that the opening
+    // pass rounds at the top (D26).
+    [yB_tray1,                   rampB_foot],
     [yB_hop1,                    rampB(yB_hop1)],
     // Hopper B's back wall leans forward at the top (params.scad 4b), which is
     // what evens the two fill mouths up to about 3:2. It pivots here, at its
@@ -75,8 +90,8 @@ VOID_B = [
     [yB_wall1,                   fill_seat_z - fill_ledge_w],
     [yB_wall1,                   outletB_top],
     [yB_tray1,                   outletB_top + wall_div],
-    [yB_tray1,                   trayB_rim],
-    [yB_tray0,                   pickplane(yB_tray0)]
+    [yB_tray1,                   trayB_rim + void_top_over],
+    [yB_tray0,                   pickplane(yB_tray0) + void_top_over]
 ];
 
 // The mouth both hoppers share, full width at the rim so the lid can pass
@@ -92,8 +107,8 @@ MOUTH = [
 // VOID_A -- tray A, the crossing chute, and hopper A. One
 // continuous void: the chute IS hopper A's lower half, so the
 // volume the crossing costs in height it gives back in capacity.
-// The floor breaks once, at tray B's back wall, from the 20
-// degree porch onto the 40 degree climb. The ceiling runs
+// The floor breaks once, at tray B's back wall, from the
+// porch_deg porch onto the ramp_deg climb. The ceiling runs
 // parallel to it the whole way, holding a constant section --
 // following a flat underside instead left 7197 mm^2 of bridged
 // ceiling in revision 2.
@@ -113,32 +128,44 @@ VOID_A = [
     // springs off the chute ceiling. Hopper A ends up with a mouth wider than
     // its own throat, which is the right way round for a hopper.
     [yA_hop0,                    chuteA_ceil(yA_hop0)],
+    // The vault (D26): between vault_y1 and vault_y0 the void's ceiling is
+    // raised to the ridge and a little more; vault_roof() then puts the gabled
+    // solid back under it. The ridge void starts strictly INSIDE the roof's
+    // span at both ends, so no face of the two coincides.
+    [vault_y1,                   chuteA_ceil(vault_y1)],
+    [vault_y1,                   chuteA_ceil(vault_y1) + vault_up + 1],
+    [vault_y0,                   chuteA_ceil(vault_y0) + vault_up + 1],
+    [vault_y0,                   chuteA_ceil(vault_y0)],
     [yB_tray1,                   chuteA_ceil(yB_tray1)],       // parallel to the 40 deg floor
-    [yA_tray1,                   chuteA_ceil(yA_tray1)],       // parallel to the 20 deg porch
-    [yA_tray1,                   pickplane(yA_tray1)],
-    [yA_tray0,                   pickplane(yA_tray0)]
+    [yA_tray1,                   chuteA_ceil(yA_tray1)],       // parallel to the porch
+    [yA_tray1,                   pickplane(yA_tray1) + void_top_over],
+    [yA_tray0,                   pickplane(yA_tray0) + void_top_over]
 ];
 
 // Opening rounds the cavity's convex corners, which fillets every internal
 // corner of the solid -- tray floors and the chute foot, where a pill would
 // otherwise wedge. Applied to the flow voids only, never to OUTER, so the
-// part's bounding box stays exact.
+// part's bounding box stays exact. Both tray voids run void_top_over PAST the
+// pick plane (as MOUTH runs past the rim): a void top lying exactly on the
+// shell's top face is a coplanar boolean, and it left a zero-area face pair
+// on the plane once the rail-1 groove was cut out through it.
 module void_a_2d() { offset(r = fillet_r) offset(r = -fillet_r) polygon(VOID_A); }
 module void_b_2d() { offset(r = fillet_r) offset(r = -fillet_r) polygon(VOID_B); }
 module mouth_2d()  { polygon(MOUTH); }
 
 // The accessory cubby (params.scad 4d): one void the full inner width, opening
-// through the BACK face only, so both side walls stay solid. Its ceiling runs
-// parallel to the chute floor above it, which means it self-supports on the
-// way up instead of bridging. Cut here rather than in body_geometry so the
-// rail buttresses, which are unioned afterwards, are not eaten by it.
+// through the BACK face only, so both side walls stay solid. Its ceiling is a
+// 45 degree plane -- the conservative FDM overhang limit -- anchored cubby_ceil
+// under the chute floor at the back face and thickening forward (D21). Cut
+// here rather than in body_geometry so the rail buttresses, which are unioned
+// afterwards, are not eaten by it.
 CUBBY = [
     [cubby_y0,     base_t],
     [cubby_back,   base_t],                      // inside face of the retaining lip
     [cubby_back,   base_t + cubby_lip_h],        // up and over it
     [module_d + 1, base_t + cubby_lip_h],        // out through the back wall above it
-    [module_d + 1, chuteA_floor(module_d + 1) - cubby_ceil],
-    [cubby_y0,     chuteA_floor(cubby_y0)     - cubby_ceil]
+    [module_d + 1, cubby_ceil_z(module_d + 1)],  // 45 degree ceiling (D21)
+    [cubby_y0,     cubby_ceil_z(cubby_y0)]
 ];
 // No fillet pass here: nothing flows through the cubby, and the closing
 // operation the flow voids use would round the lip's own top edge away.
@@ -146,7 +173,7 @@ module cubby_2d() { polygon(CUBBY); }
 
 module body_shell() {
     difference() {
-        yz_extrude(0, module_w) polygon(OUTER);
+        yz_extrude(0, module_w) outer_2d();
         for (i = [0 : bays - 1]) {
             x0 = wall_x1(i);
             yz_extrude(x0, x0 + bay_w) void_a_2d();
@@ -159,7 +186,7 @@ module body_shell() {
 
 // ------------------------------------------------------------
 // Porch splitter rib (params.scad 4a). Tray B's floor is carried
-// on the bay dividers alone, so at 20 degrees its underside is a
+// on the bay dividers alone, so at porch_deg its underside is a
 // near-flat ceiling bridging the whole bay. One fin down the
 // middle halves that span and carries the slab directly. The
 // upstream (back) edge is a knife so a pill coming down the 40
@@ -188,6 +215,50 @@ module porch_rib(cx) {
 module porch_ribs() { for (i = [0 : bays - 1]) porch_rib(bay_center_x(i)); }
 
 // ------------------------------------------------------------
+// The vault (params.scad 4e, D26). Each bay's chute ceiling on the 40 degree
+// leg becomes a shallow gable: a ridge vault_up above the plain ceiling at the
+// bay centre, vault_down below it at the dividers. The void polygon is cut to
+// the ridge; this puts the two sloping halves of the roof back. Each half is
+// one polygon in (x, z) extruded along Y and sheared to follow the 40 degree
+// leg, reaching vault_embed into its divider, 1mm past the bay centre into its
+// partner, and vault_top_over up into the deck -- every union volumetric.
+// ------------------------------------------------------------
+module vault_roof_half(x0, cx) {
+    s = vault_slope;
+    multmatrix([[1, 0, 0, 0],
+                [0, 1, 0, 0],
+                [0, ramp_tan, 1, chuteA_ceil(vault_roof_y0) - vault_roof_y0 * ramp_tan],
+                [0, 0, 0, 1]])
+        xz_extrude(vault_roof_y0, vault_roof_y1)
+            polygon([[x0 - vault_embed, -vault_down - vault_embed * s],
+                     [cx + 1.0,         vault_up + s],
+                     [cx + 1.0,         vault_up + vault_top_over],
+                     [x0 - vault_embed, vault_up + vault_top_over]]);
+}
+
+module vault_roof() {
+    for (i = [0 : bays - 1]) {
+        x0 = wall_x1(i); cx = bay_center_x(i);
+        vault_roof_half(x0, cx);
+        translate([2 * cx, 0, 0]) mirror([1, 0, 0]) vault_roof_half(x0, cx);
+    }
+}
+
+// Round the body's four vertical corners (D27). Each cutter is the square
+// corner block minus the corner cylinder, overstepping OUTWARD into air so no
+// cut face lands on the body's own faces.
+module corner_cuts() {
+    r = corner_r;
+    for (c = [[0, 0, 0], [module_w, 0, 90], [module_w, module_d, 180], [0, module_d, 270]])
+        translate([c[0], c[1], -1]) rotate([0, 0, c[2]])
+            linear_extrude(height = module_h + 2)
+                difference() {
+                    translate([-1, -1]) square([r + 1, r + 1]);
+                    translate([r, r]) circle(r = r, $fn = 64);
+                }
+}
+
+// ------------------------------------------------------------
 // Fill-lid seat. One lid spans BOTH mouths, so everything
 // standing above the seat plane between them comes down to it.
 // ------------------------------------------------------------
@@ -208,12 +279,18 @@ module fill_seat_cut() {
                    fill_tab_pocket_z])
             cube([fill_tab_w + 1.0, fill_tab_barb + 0.01, fill_tab_pocket_h]);
 
+    // Seat-ledge relief for each tab. Oversteps fill_notch_over INTO the wall
+    // (front) so its face never lands on the wall's own face. What is left
+    // between this cut and the barb pocket below it is fill_catch_t, asserted.
     for (side = [0, 1])
         translate([module_w / 2 - fill_tab_w / 2 - 1.0,
-                   side == 0 ? hop_mouth_y0 - 1 : hop_mouth_y1 - fill_ledge_w - 1,
-                   fill_seat_z - fill_ledge_w - 1])
-            cube([fill_tab_w + 2.0, fill_ledge_w + 1, fill_ledge_w + 2]);
+                   side == 0 ? hop_mouth_y0 - fill_notch_over
+                             : hop_mouth_y1 - fill_ledge_w - 1,
+                   fill_notch_bot_z])
+            cube([fill_tab_w + 2.0, fill_ledge_w + 1, fill_ledge_w + fill_notch_over + 1]);
 
+    // Pull-lip notch (D23): the wall in front of the lid comes down to the seat
+    // plane across fill_grip_d, so the lid's lip can carry on forward over it.
     translate([module_w / 2 - fill_grip_d / 2, hop_mouth_y0 - wall_div - 1, fill_seat_z])
         cube([fill_grip_d, wall_div + 3, lid_t + 2]);
 }
@@ -314,33 +391,49 @@ module rail_socket_cut() {
 // front face, below the lid skirt so it reads with the lid on; the upper strip
 // on the wall between the trays, which faces forward over tray A and is read at
 // a glance once the lid is off.
+// Both cuts start label_cut_over OUTSIDE the face and go label_z into it. The
+// upper cut used to start label_z in front of the wall and run label_z + 1
+// deep, i.e. 1.0mm into a 2.4mm wall instead of 0.6 (INCIDENTS.md, rev 6).
 module label_cuts() {
     for (i = [0 : bays - 1]) {
         cx = bay_center_x(i);
-        translate([cx - label_w / 2, -1, label_z_center - label_h / 2])
-            cube([label_w, 1 + label_z, label_h]);
-        translate([cx - label_w / 2, yA_tray1 - label_z,
+        translate([cx - label_w / 2, -label_cut_over, label_z_center - label_h / 2])
+            cube([label_w, label_cut_over + label_z, label_h]);
+        translate([cx - label_w / 2, yA_tray1 - label_cut_over,
                    label_b_center - label_h / 2])
-            cube([label_w, label_z + 1, label_h]);
+            cube([label_w, label_cut_over + label_z, label_h]);
     }
+}
+
+// Recesses for four stick-on rubber feet (D24), cut up into the base.
+module foot_pad_cuts() {
+    for (p = [[foot_pad_inset, foot_pad_inset],
+              [module_w - foot_pad_inset, foot_pad_inset],
+              [foot_pad_inset, module_d - foot_pad_inset],
+              [module_w - foot_pad_inset, module_d - foot_pad_inset]])
+        translate([p[0], p[1], -1])
+            cylinder(h = 1 + foot_pad_depth, d = foot_pad_d, $fn = 48);
 }
 
 // ------------------------------------------------------------
 module body_geometry() {
     difference() {
-        union() { body_shell(); porch_ribs(); rail_male(); rail_bosses(); }
+        union() { body_shell(); porch_ribs(); vault_roof(); rail_male(); rail_bosses(); }
         fill_seat_cut();
         front_scallop_cut();
         rail_socket_cut();
         label_cuts();
+        foot_pad_cuts();
+        corner_cuts();
     }
 }
 
-// SUBFEATURES: body_shell, porch_ribs, rail_male
+// SUBFEATURES: body_shell, porch_ribs, vault_roof, rail_male
 SUBFEATURE = is_undef(SUBFEATURE) ? "" : SUBFEATURE;
 module subfeature_by_name(name) {
     if (name == "body_shell") body_shell();
     else if (name == "porch_ribs") porch_ribs();
+    else if (name == "vault_roof") vault_roof();
     else if (name == "rail_male") rail_male();
     else assert(false, str("Unknown sub-feature '", name, "' in body.scad"));
 }

@@ -169,3 +169,97 @@ which takes a sliver off each divider's front tip above the scallop line and
 nothing else. Three fixes, three names, one root cause: any cut whose boundary
 is derived from the same expression as the face it lands on needs an explicit
 overstep or drop. It is worth a lint rule.
+
+## Revision 6 -- the independent review, and what it found
+
+Revision 5 shipped with every gate green: 13 passed / 0 failed / 4 n/a / 1
+advisory. A fresh session was asked to review it without trusting those
+numbers. It reproduced them, then found the following by reading the
+declarations against what they claimed to test and by probing the mesh with
+`trimesh.contains()` along lines nothing in the suite walks.
+
+### 2026-09-20 -- the front joining groove was a blind pocket, and the assert that guaranteed it was written on purpose
+- **Where:** `params.scad` section 9, `rail1_soc_z1`; `bores.json` `rail_groove_front`.
+- **Symptom:** none from the suite. `contains()` along x = 227.3 found solid from z = 48 up to the pick plane (52-60) over the groove's whole Y span. A dovetail is entered from above; this one had 4-11mm of wall over it. Two modules could never be ganged, which is the one thing the rails exist for.
+- **Root cause:** revision 3 (D14) capped the groove at `pickplane(rail1_y - rail_boss_w/2)` -- the plane's LOWEST point across the buttress -- and added an assert that the groove must not run past the wall. Revision 2 had `rail1_soc_z1 = trayB_rim + 1.0; // groove OPEN at the body top`. The bore declared to prove the groove was "open ... out of the top of the side wall" ended at z = 47, inside the socket, so it proved only that the pocket existed.
+- **Fix:** `rail1_soc_z1 = pickplane(rail1_y + rail_tip_w/2 + rail_clear) + 1.0` (out through the plane at the groove's own back edge, its highest point); the assert flipped to `>=`; the bore's end raised to z = 66, in open air above the plane. The male stays 4mm under its own wall's lowest point.
+- **Already promoted to a rule?** not yet -- candidate: a bore declaration whose `_why` says "open to the outside" must END outside the part's surface, or it tests nothing about the exit. And: an assert written to keep a feature INSIDE a surface is exactly the wrong assert for a feature whose job is to break through one; state the physical requirement (enterable), not the geometric one (tidy).
+
+### 2026-09-20 -- the fill lid's front snap latched on a 0.7mm sliver, and the assert protecting it measured a different cut
+- **Where:** `parts/body.scad` `fill_seat_cut()`; `params.scad` section 8.
+- **Symptom:** none from the suite; `attachments.json` probed the wall BEHIND the pocket (1.4mm, PASS). `contains()` at y = 63.1-63.5 found solid at z 133.4-133.9 only: the barb pocket's ceiling (133.3) and the seat-ledge relief for the same tab (from 134.0) were 0.7mm apart, over the 1.0mm the barb actually engaged.
+- **Root cause:** the relief is cut `fill_ledge_w + 1` tall from `fill_seat_z - fill_ledge_w - 1`; the assert guarding the pocket used `fill_ledge_t` = 2.0, a variable the cut never reads. Same shape as the 2026-09-02 `nas_deck_v3` entry: the right assert on the wrong variable.
+- **Fix:** `fill_tab_drop` 10 -> 12 (pocket 2mm lower), `fill_notch_over` named, `fill_catch_t` derived from the cut's own numbers and asserted >= 2.0 (it is 2.7); a second attachment point on the catch itself.
+- **Already promoted to a rule?** R-15's second mode is meant for this and did not fire: `fill_ledge_t` and `fill_ledge_w` are not name-family siblings by its heuristic. Candidate: an assert whose formula uses a variable no part file reads is suspect on its own.
+
+### 2026-09-20 -- D19's label recesses were documented, committed, and never written into params.scad
+- **Where:** `params.scad` section 10 (revision 5); commit `b2de005`.
+- **Symptom:** the commit message, plan D19, calculations.md and README all say 12.6 x 36 x 0.5 for 1/2 inch TZe tape, with `label_tape_w` and `label_clear`. The file had `label_w = 32, label_h = 9, label_z = 0.6` and neither variable. A 12mm tape does not fit a 9mm recess. The diff added only the centring and four asserts.
+- **Also:** the upper cut started `label_z` in FRONT of the wall and ran `label_z + 1` deep -- the 1mm overstep on the wrong side -- so it went 1.0mm into a 2.4mm wall, leaving 1.4 where the docs said 1.9. The assert checked the parameter, not the cut.
+- **Fix:** `label_tape_w`, `label_clear`, `label_h` derived, 36 x 12.6 x 0.5; both cuts start `label_cut_over` OUTSIDE the face and go `label_z` in; the assert now bounds the wall LEFT (>= 1.8). Moved to section 4c so nothing reads them from above.
+- **Already promoted to a rule?** not yet -- candidate: a commit that names dimensions must diff `params.scad` for them; and a recess cut's overstep goes on the air side, which is worth a lint on any `translate([.., face - depth, ..]) cube([.., depth + over, ..])` shape.
+
+### 2026-09-20 -- the cubby ceiling was called self-supporting; it was the same 50 degree overhang as the ADVISORY, five times wider
+- **Where:** `params.scad` 4d, plan D18, calculations.md.
+- **Symptom:** the face-normal scan (the one that found the 7197 mm^2 bridge in revision 2) put 29,972 mm^2 of downward face at exactly 50 degrees from vertical in the cubby, spanning x 4.5-225.5 with nothing between the side walls. The chute ceiling carried as ADVISORY is 30,889 mm^2 at the same angle, anchored every 43mm.
+- **Root cause:** "parallel to the chute floor so it self-supports rather than bridging" conflated not-bridging with self-supporting. A 40 degree slope IS a 50 degree overhang whichever way it is described.
+- **Fix:** the ceiling is its own plane at `cubby_ceil_deg = 45`, anchored 3mm under the chute floor at the back face and thickening forward (14 at the cubby's front). Cost: the shallow end drops from 41 to 33; the lip comes down to 30 to match, so the front is a shelf, not a well.
+- **Already promoted to a rule?** not yet -- candidate: any claim of "self-supports" in a decision must cite the overhang angle from vertical, and the scan by angle band is cheap enough to run on every revision.
+
+### 2026-09-20 -- the "forward reference" rule in this file was half right: it is assignments that are order-sensitive, not asserts
+- **Where:** the revision 3-5 entry "params.scad is evaluated top to bottom"; section 7's skirt assert, which read `label_h` from section 10.
+- **Symptom:** the review flagged that assert as the same defect class and expected it to fire. It does not, and the real render emits no warning for it.
+- **Root cause:** verified with a minimal file: `assert(b > 1); c = b > 1; b = 5;` -- the assert passes and `c` is `undef` with "Ignoring unknown variable". A top-level `assert()` is a statement, and statements run after every assignment has been evaluated; an assignment that reads a later assignment gets `undef`. The three asserts that fired in the original incident did so because the VALUES they compared were forward-referencing assignments.
+- **Fix:** rule restated. Only an assignment must follow what it reads; an assert may sit anywhere. The label block was moved anyway, for legibility.
+- **Already promoted to a rule?** this entry is the correction.
+
+### 2026-09-20 -- the "print-ready" pick lid stood on its skirt edge with the plate 14mm in the air
+- **Where:** `test_model.scad` `print_pick_lid()`, `build/print_ready/pick_lid.stl`.
+- **Symptom:** `rotate([-pick_lid_slope, 0, 0])` does lay the plate flat -- with the skirt pointing DOWN. Dropped to z = 0, the exported lid rested on the skirt's bottom edge and the 229 x 64mm plate hung 14mm above the bed. Revision 5's bbox for it, `[229, 94.12, 16.98]`, was consistent with exactly that. No gate looks at `build/print_ready/`.
+- **Root cause:** one rotation, wrong sign -- the class the revision 2 entry "two rotations whose signs had to agree" warned about, on a single rotation.
+- **Fix:** `print_export.scad`: `rotate([180 - pick_lid_slope, 0, 0])` puts the plate's top face on the bed and the skirt up at 40 degrees from vertical; the drop to z = 0 is analytic from params. Verified by scanning the exported mesh: 0 mm^2 of downward face past 45 degrees off the bed, worst 39.9.
+- **Already promoted to a rule?** not yet -- candidate: a print-orientation export gets the same face-normal scan as the modelled part, since the orientation is the whole point of the file.
+
+### 2026-09-20 -- opening the groove through the pick plane left a zero-area face pair on the plane
+- **Where:** `parts/body.scad`, VOID_A / VOID_B top edges.
+- **Symptom:** body not watertight, 0 boundary edges, 2 edges shared by 4 faces, one extra "body" of 2 faces and zero volume lying ON the pick plane between the groove's inner face (x = 224.6) and the side wall (x = 227.2).
+- **Root cause:** both tray voids' top edges were defined on exactly the plane OUTER's top face lies on -- a coplanar difference that had held through five revisions until a third cut (the groove) broke through the same face. MOUTH already ran `hopper_rim + 1` for the same reason.
+- **Fix:** `void_top_over = 1.0`; both tray voids now run past the plane. Fourth instance of the coplanar class on this project, and the first where the coincidence was pre-existing and only became live when a new cut touched it.
+- **Already promoted to a rule?** the candidate from `scallop_over` stands, with one addition: an open-topped void must run PAST the surface it opens through, not TO it, even when the render happens to come out clean.
+
+### 2026-09-20 -- the maquette exported at full size because an included file's default overwrote the wrapper's value
+- **Where:** `test_model.scad` including `print_export.scad`.
+- **Symptom:** `SCALE = TEST_SCALE;` in the wrapper, `SCALE = is_undef(SCALE) ? 1.0 : SCALE;` in the include; OpenSCAD warned "assigned ... but was overwritten" and the maquette came out 230mm wide.
+- **Root cause:** OpenSCAD evaluates a re-assigned top-level variable at its FIRST position with its LAST expression; at that point `SCALE` was undefined, so the default won.
+- **Fix:** the wrapper sets `TEST_SCALE` only, and the include reads it as a fallback.
+- **Already promoted to a rule?** not yet -- same family as the revision 3-5 hoisting entry: never assign the same top-level name in both an includer and its include.
+
+## Revision 7 -- the vault and the edges
+
+### 2026-09-20 -- reaching a snap tab 1mm up into its plate put the tab's outer face on the plate's edge face
+- **Where:** `parts/fill_lid.scad`, the back tab.
+- **Symptom:** fill lid not watertight, 3 edges shared by 4-6 faces, all on the line x 103.9-119.9, y = 103.8 (the plate's back edge), z 0-1.
+- **Root cause:** revision 6 extended each tab 1mm up into the plate for a volumetric weld (the tab had ended exactly on the plate's underside). The tab is flush with the plate's edge, so that 1mm put the tab's outer face ON the plate's back face. The front tab survived only because the pull lip covers it.
+- **Fix:** `fill_tab_inset = 0.2`: each tab's outer face sits 0.2mm inside the plate's edge. The barb still projects `fill_tab_barb` past the edge, so the engagement is unchanged.
+- **Already promoted to a rule?** the coplanar candidate from `scallop_over` again, in its union form: a feature that overlaps its host must not be flush with any face of the host in the overlap.
+
+### 2026-09-20 -- a Minkowski chamfer left zero-area slivers at a concave corner, and the hull that replaced it floated the lip off the bed
+- **Where:** `parts/fill_lid.scad`, `fill_plate()`, the top chamfer (D27).
+- **Symptom:** first, 4 edges shared by 4-6 faces and four zero-volume "bodies", all within 0.1mm of (97.9, 0, 3.0) -- the concave corner where the pull lip meets the plate, on the chamfer's top plane. Then, with the lip built as its own hulled piece 0.1mm inside the plate's faces, the print-orientation scan showed 267 mm^2 of 90 degree overhang: the lip's top face, 0.1mm above the bed.
+- **Root cause:** `minkowski()` of a non-convex outline with a cone sweeps the near-apex ring through the concave corner and emits degenerate faces there; `hull()` cannot take the whole outline because it is not convex. Keeping the lip 0.1 inside the plate on BOTH faces avoided coplanar faces but moved the face that goes on the bed.
+- **Fix:** plate and lip are each a convex rounded rectangle hulled with its own inset. The lip's top is flush with the plate's; its solid ends at `lip_back` = 0.95, inside the plate's 1mm chamfer band, where the plate's top is already below lid_t, so the two top faces lie on one plane without overlapping. Its underside sits 0.1 above the plate's. Its own chamfer runs along its front and sides only.
+- **Already promoted to a rule?** not yet -- candidate: chamfer a non-convex outline as a union of convex pieces hulled separately; and a face that goes on the bed is never the one to offset.
+
+### 2026-09-20 -- the vault roof and a rail root both reached weld_embed into the same 2.8mm side wall
+- **Where:** `parts/body.scad`, `vault_roof()` at bay 1's left edge and bay 5's right edge, `check_subfeature_overlap.py`.
+- **Symptom:** UNINTENDED SUB-FEATURE OVERLAP body__rail_male.stl <-> body__vault_roof.stl, 20.69 mm^3.
+- **Root cause:** the roof halves reached `weld_embed` = 1.5 into whatever wall bounds their bay; the rail roots reach 1.5 into the side walls from outside. 1.5 + 1.5 in a 2.8 wall.
+- **Fix:** `vault_embed` = 1.0 for the roof, with an assert that the two embeds leave 0.2 of wall between them.
+- **Already promoted to a rule?** not yet -- candidate: any two features welding into the same wall from opposite sides need an assert on the sum of their embeds against the wall.
+
+### 2026-09-20 -- rounding a 3mm plate with a 1.5mm opening pass erased the pick lid, but only when the assembly asked for it
+- **Where:** `parts/pick_lid.scad`, `pick_plate()` / `pick_hook()`, first attempt at D27.
+- **Symptom:** the part file rendered, passed its bbox and was watertight. `assembly.scad -D MODE="part" -D PART="pick_lid"` produced "Current top level object is empty" with no warning, `build/positioned/pick_lid.stl` was left over from revision 6, and the collision check passed against that stale file. The six-view renders of the open assembly simply had no pick lid in them, which is how it was noticed.
+- **Root cause:** `offset(r = 1.5) offset(r = -1.5)` on a section whose perpendicular thickness is exactly 3.0 erodes it to a zero-width line. Standalone, floating point left a sliver the dilation grew back; through `use<>` it was exactly empty. The skirt (2.65 wide) was in the same state.
+- **Fix:** `lid_round = 1.0` with an assert against half the plate and skirt thickness.
+- **Already promoted to a rule?** not yet -- two candidates. An opening-pass radius must be asserted under half the thinnest section it runs through. And the positioned render must FAIL the bundle when it is empty, and a stale `build/positioned/*.stl` must never be adopted: this is the 2026-09-20 "render=PASS while a part produced no STL" entry again, one directory over.

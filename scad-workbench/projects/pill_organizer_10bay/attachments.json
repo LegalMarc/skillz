@@ -49,9 +49,31 @@
     "at": [
       115.0,
       135.0,
-      74.5
+      74.7
     ],
-    "feature": "the deck between the accessory cubby and the crossing chute above it -- the chute floor's only support over the cubby's 224mm span",
+    "feature": "the deck between the accessory cubby and the crossing chute above it -- 3mm at the back face, thickening to 14 at the cubby's front because the cubby ceiling runs at 45 degrees while the chute floor runs at 40 (D21); here, mid-cubby, it is about 8.8",
+    "min_material_mm": 6.0
+  },
+  {
+    "name": "fill_catch_front",
+    "part": "body",
+    "at": [
+      115.0,
+      63.1,
+      132.65
+    ],
+    "feature": "the catch the fill lid's front barb latches on: the wall between the top of the barb pocket and the bottom of the seat-ledge relief above it. 0.7mm in revision 5; fill_catch_t (2.7) in revision 6, asserted in params.scad",
+    "min_material_mm": 0.8
+  },
+  {
+    "name": "vault_deck",
+    "part": "body",
+    "at": [
+      115.0,
+      100.0,
+      93.2
+    ],
+    "feature": "the deck between the vault ridge of bay 3's chute ceiling and hopper B's floor above it, mid-leg: chute_ceil (3mm) at the ridge, the thinnest the deck under hopper B gets after the vault (D26)",
     "min_material_mm": 2.5
   }
 ]

@@ -6,11 +6,13 @@
 // gives the two rows genuinely different sections, so each is written once.
 include <params.scad>
 
-lid_dx = 0.5;
+lid_dx = (module_w - pick_lid_w) / 2;   // 0.5; pick_lid.scad derives the same
+                                       // offset to centre its notches on the bays
+assert(abs(lid_dx - 0.5) < 1e-9, "lid_dx moved -- pick_lid.scad's lid_dx_local must move with it");
 
 LAYOUT = [
     ["body",     [0, 0, 0], [0, 0, 0]],
-    // Modelled already tilted onto the 31.9 degree pick plane, so it only
+    // Modelled already tilted onto the pick plane (pick_lid_slope), so it only
     // needs offsetting in X. Its own pick_lid_gap keeps the pair a near miss
     // rather than a coplanar resting contact, which FCL cannot measure a
     // penetration depth for.
