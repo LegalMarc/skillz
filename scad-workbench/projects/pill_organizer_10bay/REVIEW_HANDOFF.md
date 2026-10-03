@@ -1,4 +1,4 @@
-# Review handoff — pill_organizer_10bay, revision 7
+# Review handoff — pill_organizer_10bay, revision 8
 
 For a fresh session asked to review this design critically. It is written to be
 pasted as that session's opening prompt, or read from the repo.
@@ -6,7 +6,8 @@ pasted as that session's opening prompt, or read from the repo.
 ## Your task
 
 Independently review `scad-workbench/projects/pill_organizer_10bay` at
-revision 7 and report what is wrong with it. Do not rubber-stamp it. The suite
+revision 8 and report what is wrong with it. Revision 8 is the first one
+informed by a physical print: read `TEST_PRINTS.md` before anything else. Do not rubber-stamp it. The suite
 it ships with reports 13 passed / 0 failed / 4 n/a / 0 inconclusive / 1
 advisory, and that is exactly the condition under which a review is worth
 doing: every automated gate is already green, so anything still wrong is
@@ -61,10 +62,10 @@ python3 ~/.local/src/openscad-cad-skills/scad-modeler/scripts/check_rules.py --p
    at about 38. Revision 6 moved the porch from 20 to 25 for that reason
    (D20). Is a straight repose line from the chute mouth the right model for
    the pile in tray A, and is 30 defensible for gelatin capsules on PLA?
-2. **The porch lanes are 20.28 mm.** Pills must run single file through a
-   30 mm stretch. The splitter rib's knife-edged upstream taper is the only
-   thing stopping a capsule that arrives crosswise from stopping dead at it.
-   Nothing verifies this.
+2. **The porch ceiling is now a flat 43 x 28 mm bridge in every bay** (D29),
+   with no rib. Check the pocket it leaves behind the mouth into tray A, the
+   join with the 40-degree leg at tray B's back wall, and the 45-degree outlet
+   corner chamfers, which are separate prisms unioned onto the shell.
 3. **The hopper divider (D28)** now springs from the end of hopper B's ramp
    (122.9) and leans 26 degrees. Probe it along y at x = 104 for z 123–140:
    it must read 2.4 mm everywhere below the seat ledge. The assert guards the
@@ -80,10 +81,10 @@ python3 ~/.local/src/openscad-cad-skills/scad-modeler/scripts/check_rules.py --p
    shared by more than two faces before believing the suite.
    The cubby ceiling is at 45 (D21); check the deck it leaves (3 mm at the
    back face, 14 at the front) and that `cubby_deck` is still in the deck.
-5. **The fill lid's snap is new geometry** (D23): 12 mm tabs, a 35-degree barb
-   return, 0.8 mm of real engagement, a 2.7 mm catch, and a pull lip. The
-   release force under a fingertip on the lip against two tabs is not
-   calculated, only bounded by the strain assert. Print the coupon.
+5. **The fill lid has no snap** (D30): it nests by gravity on 2.1 mm of
+   ledge. The pick lid now has two locating lugs (D32) built in the plate's
+   own rotated frame; check their position against the side walls and that
+   nothing else in tray B's end bays meets them.
 6. **The pick lid's finger notches** (D22) open a 22 x 2 mm sliver of tray
    above the scalloped wall. The pill line is 9 mm below the notch top. Judge
    whether that is enough with the lid being lifted while the tray is heaped.
@@ -99,7 +100,8 @@ python3 ~/.local/src/openscad-cad-skills/scad-modeler/scripts/check_rules.py --p
 10. **Capacity is a geometric maximum**, measured from the cavity meshes with
    the fill line at the underside of the lid. It is not a practical fill.
 11. **Tier 2 throughout.** `doctor.py` reports no calibration profile, so every
-    clearance — rail 0.35, fill lid 0.30, snap 0.8 — is geometry only.
+    clearance is geometry only, except rail 0.50 and fill lid 0.30, which
+    test print 1 measured.
 12. **The label recesses are 0.5 mm deep** in walls 2.4 and 2.8 mm thick, and
     the upper strip sits on the wall between the trays, which is also the wall
     doing the `trayB_front_retain` job. The retained wall was measured on the

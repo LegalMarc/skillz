@@ -351,26 +351,37 @@ assert(trayA_scallop_r < (bay_w - 2 * trayA_scallop_r) / 2,
        "the scallop radius has eaten the flat part of the scallop");
 
 // ------------------------------------------------------------
-// 4a. Porch splitter rib (D13)
+// 4a. The porch ceiling (D29, replacing the splitter rib of D13)
 //
 // Tray B's floor is carried on the bay dividers alone -- the chute runs
-// underneath, so its front and back walls do not reach the floor. At 40
-// degrees that underside self-supported. At 20 degrees it does not: it is a
-// near-flat ceiling bridging the full bay width, which is the exact defect
-// logged on 2026-09-20 and the one gate in the suite that never catches it.
+// underneath. Revisions 3-7 ran the chute ceiling under it parallel to the
+// 25 degree porch floor, which is a near-flat overhang across the whole bay,
+// and held it up with a splitter rib down the middle of each porch. The first
+// test print showed both costs: the ceiling printed as a ragged, stringy edge
+// at the back of every front bin anyway, and the rib stood as an unexplained
+// fin in each bin that split the pill flow into two 20mm lanes.
 //
-// A single fin down the middle of the porch halves the bridge and carries the
-// slab directly. Its upstream edge is knife-tapered so a pill arriving from
-// the 40 degree chute is deflected into a lane rather than stopped by a step.
+// The ceiling under tray B is now FLAT, one deck below tray B's floor -- the
+// height it already reached at tray B's back wall, so the 40 degree leg meets
+// it with no step. A flat 43mm span is a bridge every slicer recognises and
+// prints with bridge settings; a 25 degree ceiling is the worst case, each
+// layer an unsupported overhang. The mouth into tray A is still the bottom of
+// the wall between the trays at outletA_top, so the pile in tray A is
+// unchanged; behind that wall the chute simply has a taller pocket.
 // ------------------------------------------------------------
-rib_t     = 2.4;
-rib_lead  = 12.0;           // length of the 45-degree upstream taper
-rib_lane  = (bay_w - rib_t) / 2;                         //  20.28
+porch_ceil_z = chuteA_ceil(yB_tray1);                    //  53.18, flat
+// Both outlet openings get 45 degree chamfers in their top corners, so the
+// unsupported span across the top of each opening is shorter than the bay.
+outlet_chamfer = 8.0;
 
-assert(rib_lane > pill_dia * 1.5,
-       "a porch lane is under 1.5x pill_dia -- pills would not run single file");
-assert(rib_lane < 30.0,
-       "the porch bridge is still too wide to print without support");
+assert(porch_ceil_z + chute_ceil <= trayB_floor + 1e-6,
+       "the flat porch ceiling leaves less than a deck under tray B's floor");
+assert(porch_ceil_z - z_porch >= chute_clear - 1e-6,
+       "the flat porch ceiling is lower than chute_clear over the end of the porch");
+assert(porch_ceil_z > outletA_top + pill_dia,
+       "the pocket behind the mouth into tray A is too shallow to matter");
+assert(bay_w - 2 * outlet_chamfer > pill_len,
+       "the outlet corner chamfers narrow the top of the opening below one pill length -- a capsule lying crosswise would catch");
 
 // ------------------------------------------------------------
 // 4d. Accessory cubby (D18)
@@ -489,14 +500,42 @@ assert(pick_notch_top > trayA_pile_front + 5,
        "a skirt notch opens the front below the pill line -- pills would roll out through it");
 assert(pick_notch_top < trayA_front_h + 3,
        "a skirt notch runs so far above the scalloped wall that it stops closing the scallop");
+// Locating lugs (D32). Test print 1: with nothing on its underside the lid
+// gave no clue how it goes on, and nothing stopped it sliding sideways. Two
+// lugs hang from its underside into the END bays of tray B, each just inside
+// a side wall, so the lid can only go on one way and cannot shift in X. They
+// sit in tray B's span, clear of the wall between the trays and of the rail-1
+// buttress, which is in tray A.
+pick_lug_t     = 2.4;       // thickness in X
+pick_lug_d     = 5.0;       // depth below the plate's underside, perpendicular to it
+pick_lug_clear = 0.5;       // to the side wall's inner face
+pick_lug_y0    = yB_tray0 + 3.0;                    // along the plane, in body Y
+pick_lug_y1    = yB_tray1 - 6.0;   // its tip sits pick_lug_d * sin(slope) further back
+pick_lug_lead  = 1.2;       // the tip tapers inward this much over its last 1.5mm
+
+assert(pick_lug_y0 > yA_wall1 + 1 && pick_lug_y1 + pick_lug_d * sin(pick_lid_slope) < yB_tray1 - 1,
+       "a pick-lid lug reaches over a wall of tray B");
+assert(pick_lug_y0 > rail1_y + rail_boss_w / 2 + 2,
+       "a pick-lid lug lands on the rail-1 buttress");
+assert(pick_lug_t + pick_lug_clear < bay_w / 4,
+       "a pick-lid lug takes too much of its bay");
+
 assert(pick_notch_w < bay_w - 6 && pick_notch_r * 2 < pick_notch_w,
        "a skirt notch is wider than a bay's share of the skirt, or its rounding has eaten it");
 
 // ------------------------------------------------------------
-// 8. Fill lid (drops into the hopper mouth, flush with the rim,
-//    retained by two cantilever snap tabs)
+// 8. Fill lid (drops into the hopper mouth, flush with the rim, held by
+//    gravity in its recess -- D30)
+//
+// Revisions 5-7 retained it with two cantilever snap tabs. The first test print
+// broke every tab, on the lid and on all ten coupon lids: a tab printed
+// standing up bends ACROSS its layer lines, the weakest direction of any FDM
+// part, and no engagement value fixes that. The brief only needs the lid to
+// stay put when it is set down, so it now simply nests: it drops into the
+// recess above the seat ledges with fill_lid_clear all round and rests on
+// them, and a lead-in chamfer on its underside finds the recess.
 // ------------------------------------------------------------
-fill_lid_clear  = 0.30;
+fill_lid_clear  = 0.30;     // confirmed by test print 1: "a pretty good fit"
 fill_ledge_w    = 3.0;
 fill_ledge_t    = 2.0;
 fill_seat_z     = hopper_rim - lid_t;         // 138.0
@@ -506,77 +545,28 @@ fill_lid_seat_gap = 0.15;                     // modelled at mid-slop; a coplana
                                               // (INCIDENTS.md 2026-08-19)
 fill_lid_x      = inner_w     - 2 * fill_lid_clear;
 fill_lid_y      = hop_mouth_d - 2 * fill_lid_clear;
-fill_tab_w      = 16.0;
-fill_tab_t      = 1.2;
-// 12, not 10 (D23). The tab's barb pocket and the seat-ledge relief for the
-// same tab are two separate cuts in the same 2.4mm wall; in revision 5 they
-// were 0.7mm apart, so the barb latched on a 0.7 x 1.0mm sliver of PLA. The
-// pocket now sits a full fill_catch_t below the relief -- see the assert.
-fill_tab_drop   = 12.0;
-fill_tab_barb   = 1.1;
-// Each tab's outer face sits this far INSIDE the plate's edge. The tab reaches
-// 1mm up into the plate for a volumetric weld; flush with the edge, that 1mm
-// put the tab's outer face on the plate's own edge face, and the union came
-// out non-manifold (revision 7). The barb still projects fill_tab_barb past
-// the plate edge, so the engagement is unchanged.
-fill_tab_inset  = 0.2;
-fill_tab_engage = fill_tab_barb - fill_lid_clear;
-fill_tab_ramp   = 3.0;
-// The barb's retaining face is no longer flat (D23). A flat face against a
-// flat pocket ceiling is a permanent snap: it comes out by breaking. At 35
-// degrees the lid still needs a deliberate pull to release, but a pull
-// releases it, every refill, without fatiguing the tab.
-fill_tab_return_deg = 35;
-// The barb polygon's root sits fill_tab_root inside the tab so the union is
-// volumetric; the return face is defined by its SLOPE through the tab's outer
-// face, not by the root point, so the face a pull meets is at
-// fill_tab_return_deg (revision 7's was 25.7: the drop was spread over the
-// root's extra run -- INCIDENTS.md).
-fill_tab_root = 0.3;
-fill_tab_strain = 3 * fill_tab_t * (fill_tab_barb - fill_lid_clear) / (2 * pow(fill_tab_drop, 2));
-fill_tab_pocket_h = 6.0;
-fill_barb_top_z   = fill_seat_z - fill_tab_drop + 5.0;
-fill_barb_bot_z   = fill_barb_top_z - fill_tab_ramp * fill_tab_barb;
-fill_tab_pocket_z = fill_barb_top_z - fill_tab_pocket_h + 0.3;
-fill_tab_tip_z  = fill_seat_z - fill_tab_drop;
+fill_lead_in    = 0.6;      // 45 degree chamfer on the lid's underside perimeter
 ramp_at_back    = max(rampB(yB_hop1), chuteA_floor(yA_hop1));
-
-assert(fill_tab_tip_z > ramp_at_back + 1.0,
-       "the fill lid's back snap tab reaches below the ramp at the back of the hopper");
-assert(fill_tab_strain < 0.015,
-       "snap-tab bending strain over 1.5% -- lengthen the tab or thin it");
-assert(fill_tab_return_deg >= 30 && fill_tab_return_deg <= 50,
-       "the barb return angle is outside the releasable-but-retained band");
 
 // A pull lip on the lid's front edge and a matching notch in the wall in
 // front of it (D23). The lid sits flush, so without these the only purchase
-// was a fingernail on a 3mm edge through an 18mm slot. The wall between tray
-// B and hopper B is cut down to the seat plane across fill_grip_d, and the
-// lid's plate carries on forward across that cut and out over tray B's air,
-// where a fingertip hooks under it. The cut stops at the seat plane, so it
-// opens nothing below the lid: the hopper stays closed with the lid on.
+// was a fingernail on a 3mm edge. The wall between tray B and hopper B is cut
+// down to the seat plane across fill_grip_d, and the lid's plate carries on
+// forward across that cut and out over tray B's air, where a fingertip hooks
+// under it. The cut stops at the seat plane, so it opens nothing below the
+// lid: the hopper stays closed with the lid on.
 fill_lip_w      = 30.0;
 fill_lip_len    = 8.0;
 fill_grip_d     = fill_lip_w + 4.0;                  //  34.0, the wall notch
 seat_cut_over   = 0.4;
 seat_lip_drop   = 0.2;
-// The seat-ledge relief for each tab oversteps INTO the wall by this much in
-// Y so its face never lands on the wall's own face (the coplanar-touch class).
-fill_notch_over = 1.0;
-fill_notch_bot_z = fill_seat_z - fill_ledge_w - fill_notch_over;    // 134.0
-// What the front barb actually latches on: the material between the top of
-// its pocket and the bottom of the relief notch above it.
-fill_catch_t    = fill_notch_bot_z - (fill_tab_pocket_z + fill_tab_pocket_h);  // 2.7
 
-assert(fill_catch_t >= 2.0,
-       "under 2mm of wall between the barb pocket and the seat-ledge relief -- the snap latches on a sliver");
 assert(fill_lip_len > wall_div + fill_lid_clear + 3.0,
        "the pull lip does not reach past the wall in front of the lid far enough to get a finger under");
 assert(fill_lip_w + 2 * fill_lid_clear < fill_grip_d - 2.0,
        "the pull lip is wider than the notch cut for it");
 assert(fill_grip_d < bay_w,
        "the grip notch is wider than one bay");
-
 assert(seat_lip_drop > 0 && seat_lip_drop < 0.5,
        "seat_lip_drop must be a small positive offset");
 min_rim_w = 1.8;
@@ -584,17 +574,9 @@ assert(wall_out - seat_cut_over >= min_rim_w && wall_div - seat_cut_over >= min_
        "the seat cut oversteps so far it leaves a rim thinner than min_rim_w");
 assert(fill_lid_x < inner_w && fill_lid_y < hop_mouth_d,
        "the fill lid is not smaller than the mouth it drops into");
-assert(fill_tab_engage >= 0.6,
-       "under 0.6mm of real barb engagement once the lid's own clearance is taken off");
 assert(fill_ledge_w >= 2.5, "the fill-lid seat ledge is too narrow to carry the lid edge");
-assert(fill_tab_barb < wall_div - 0.8, "the snap barb is too deep for the wall it latches into");
-assert(fill_tab_pocket_z + fill_tab_pocket_h < fill_seat_z - fill_ledge_t,
-       "the barb pocket runs up into the seat ledge");
-assert(fill_barb_top_z < fill_tab_pocket_z + fill_tab_pocket_h
-       && fill_barb_bot_z > fill_tab_pocket_z,
-       "the barb does not land inside its own pocket");
-assert(fill_seat_z - fill_tab_drop < fill_barb_bot_z,
-       "the snap tab tip is above its own barb");
+assert(fill_ledge_w - fill_lid_clear - fill_lead_in >= 1.5,
+       "the lead-in chamfer leaves under 1.5mm of the lid bearing on its seat ledge");
 assert(fill_seat_z - fill_ledge_t > rampB(yB_hop1)
        && fill_seat_z - fill_ledge_t > chuteA_floor(yA_hop1),
        "the seat ledge hangs below a hopper floor -- it would be in the pill path");
@@ -605,7 +587,7 @@ assert(fill_seat_z - fill_ledge_t > rampB(yB_hop1)
 rail_root_w = 7.0;
 rail_tip_w  = 11.0;
 rail_out    = 5.0;
-rail_clear  = 0.35;
+rail_clear  = 0.50;        // test print 1: the -0.15 stub fit best, so 0.35 + 0.15 (D31)
 rail_depth_clear = 0.40;
 
 assert(rail_tip_w > rail_root_w && rail_root_w > 0,
@@ -727,7 +709,7 @@ echo(str("fill mouths: hopper B ", mouthB_w, " x hopper A ", mouthA_w,
 echo(str("tray A reach below the lid plane: ", pickplane(yA_tray0) - outletA_top
          + (yA_tray1 - yA_tray0) * tan(repose_deg), " front .. ",
          pickplane(yA_tray1) - outletA_top, " back"));
-echo(str("90-day size-00 charge = ", charge_ml, " mL; porch lane ", rib_lane, " mm"));
+echo(str("90-day size-00 charge = ", charge_ml, " mL; porch ceiling flat at ", porch_ceil_z));
 echo(str("cubby: ", inner_w, " wide x ", cubby_d, " deep x ",
          cubby_h_front, " .. ", cubby_h_back, " tall; lip ", cubby_lip_h,
          " leaves ", cubby_h_back - cubby_lip_h,
@@ -735,7 +717,7 @@ echo(str("cubby: ", inner_w, " wide x ", cubby_d, " deep x ",
          chuteA_floor(cubby_y0) - cubby_ceil_z(cubby_y0), " at the front"));
 echo(str("rail 1 groove: open from z ", rail_z0, " to ", rail1_soc_z1,
          " through the plane at ", pickplane(rail1_groove_y1),
-         "; fill catch ", fill_catch_t, " mm; porch throat at repose ",
+         "; porch throat at repose ",
          chute_clear - porch_run * (tan(repose_deg) - porch_tan), " / at 35 deg ",
          chute_clear - porch_run * (tan(35) - porch_tan)));
 echo(str("vault: gable ", vault_deg, " deg, face ", vault_face_from_vertical,

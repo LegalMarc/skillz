@@ -16,6 +16,9 @@
 //
 // Two finger notches in the skirt's bottom edge (D22) are what
 // you lift by: a fingertip hooks under each notch's ceiling.
+// They are grips, not alignment features. What locates the lid
+// is the pair of lugs under its ends (D32), which drop into the
+// end bays of the back row just inside the side walls.
 //
 // Local origin: the module's front-bottom-left outer corner,
 // offset in X only. This part is modelled IN ASSEMBLED
@@ -131,19 +134,44 @@ module pick_notches() {
 // assert in layout.scad.
 lid_dx_local = (module_w - pick_lid_w) / 2;                 // 0.5
 
+// Locating lugs (D32): one under each end of the plate, hanging into the end
+// bay of tray B just inside the side wall, so the lid can only go on one way
+// and cannot slide sideways. Built in the plate's own frame -- s along the
+// slope, n normal to it, negative below the underside -- and placed by the
+// ONE rotation that lays that frame on the plane. Each lug reaches 1mm up into
+// the plate and its tip tapers on the side-wall face, so it leads itself in.
+function lug_s(y) = y / cos(pick_lid_slope);
+module pick_lug(x_outer, dir) {
+    // dir = +1: the outer (side-wall) face is at the low-x side; -1: high-x
+    t = pick_lug_t; d = pick_lug_d; L = lug_s(pick_lug_y1) - lug_s(pick_lug_y0);
+    xa = dir > 0 ? x_outer : x_outer - t;
+    translate([0, 0, zu(0)]) rotate([pick_lid_slope, 0, 0])
+        translate([0, lug_s(pick_lug_y0), 0])
+            hull() {
+                translate([xa, 0, -d + 1.5]) cube([t, L, d - 1.5 + 1]);
+                translate([dir > 0 ? xa + pick_lug_lead : xa, 0, -d])
+                    cube([t - pick_lug_lead, L, 0.01]);
+            }
+}
+module pick_lugs() {
+    pick_lug(wall_out + pick_lug_clear - lid_dx_local, 1);
+    pick_lug(module_w - wall_out - pick_lug_clear - lid_dx_local, -1);
+}
+
 module pick_lid_geometry() {
     difference() {
-        union() { pick_plate(); pick_hook(); }
+        union() { pick_plate(); pick_hook(); pick_lugs(); }
         pick_notches();
         pick_end_chamfers();
     }
 }
 
-// SUBFEATURES: pick_plate, pick_hook
+// SUBFEATURES: pick_plate, pick_hook, pick_lugs
 SUBFEATURE = is_undef(SUBFEATURE) ? "" : SUBFEATURE;
 module subfeature_by_name(name) {
     if (name == "pick_plate") pick_plate();
     else if (name == "pick_hook") pick_hook();
+    else if (name == "pick_lugs") pick_lugs();
     else assert(false, str("Unknown sub-feature '", name, "' in pick_lid.scad"));
 }
 if (SUBFEATURE != "") subfeature_by_name(SUBFEATURE);
