@@ -27,13 +27,13 @@ has each one with the probe that found it.
 |---|---|
 | Overall | 235 x 170.8 x 141 mm (the 235 includes the 5 mm joining rail) |
 | Bays | 10, two rows of 5, 42.96 mm clear each |
-| Capacity | **291.1 mL/bay front row, 166.1 mL/bay back row** — 2.29 L total, geometric maximum |
+| Capacity | **304.3 mL/bay front row, 170.9 mL/bay back row** — 2.38 L total, geometric maximum |
 | Printed parts | **3 designs, 3 pieces**, no hardware |
 | Validation | **13 passed, 0 failed, 4 n/a, 0 inconclusive, 1 advisory** (the advisory is `check_printability.py`; its overhang half fails every real FDM part on area, but its THIN-WALL half caught a real 0.2 mm wall in revision 7 that everyone had stopped reading it for — read both halves) |
 | Confidence | Tier 2 — geometry verified, fit uncalibrated |
 
-A 90-day once-daily size-00 charge is 147.4 mL, so the front row carries 177
-days and the back row 101.
+A 90-day once-daily size-00 charge is 147.4 mL, so the front row carries 185
+days and the back row 104.
 
 ## The one thing to understand before printing
 
@@ -102,18 +102,27 @@ the wedge to work.
   rides one deck above the ridge, so it starts 6 mm above tray B's floor with
   a riser pills drop off (filleted at its foot; its top edge is sharp). The
   chute is 42 mm clear at the ridge and 30 at the dividers.
-- **The splitter rib.** Tray B's floor is carried on the bay dividers alone —
-  the chute runs underneath, so the tray's own walls never reach it. At 25
-  degrees that underside is a shallow ceiling bridging the whole bay, so a
-  2.4 mm fin runs down the middle of each porch and halves the span to 20.3 mm.
-  Its upstream edge is knife-tapered. Pills run single file through the porch.
-- **The fill lid snaps in and pulls out.** Two cantilever tabs latch behind a
-  2.7 mm catch in the front and back walls. Their barbs have a 35-degree return
-  face, so a deliberate pull releases the lid every refill instead of breaking
-  the catch, and a knock does not. A 30 mm pull lip on the lid's front edge
-  stands out over tray B, through a notch in the wall in front of the mouth,
-  so there is something to pull. The notch stops at the seat plane: with the
-  lid on, nothing below it is open.
+- **A flat ceiling under the back row.** Tray B's floor is carried on the bay
+  dividers alone; the chute runs underneath it. That ceiling is flat, one
+  deck under tray B's floor: a 43 mm bridge, which slicers print with bridge
+  settings. Until revision 8 it sloped at 25 degrees and needed a fin down the
+  middle of each porch to hold it up; test print 1 showed the slope printing
+  ragged anyway and the fin reading as an unexplained divider in every front
+  bin, so both are gone. The wall between the rows still forms the opening
+  into each front bin at 39 mm, so the pile height there is unchanged.
+- **Chamfered openings.** The top corners of the opening into each front bin
+  and into each back-row hopper are 45-degree chamfers, so the unsupported
+  span across the top of each opening is 27 mm, not 43.
+- **The fill lid nests.** It drops into the recess above the seat ledges with
+  0.3 mm all round, rests on them, and stays put by gravity. A chamfer on its
+  underside edge leads it in. A 30 mm pull lip on its front edge stands out
+  over tray B, through a notch in the wall in front of the mouth, so there is
+  something to lift by. The notch stops at the seat plane: with the lid on,
+  nothing below it is open. (Revisions 5 to 7 had snap tabs; test print 1
+  broke every one, because a tab printed standing up bends across its layers.)
+- **The pick lid locates itself.** Two lugs under its ends drop into the end
+  bays of the back row, just inside the side walls, so it goes on only one way
+  and cannot slide sideways. The two notches in its skirt are finger grips.
 - **Foot pads.** Four 10 mm recesses in the base take stick-on rubber feet, so
   a unit that is bumped while pouring does not skate.
 - **Edges.** The body's vertical corners are rounded at 3 mm and the step and
@@ -160,30 +169,32 @@ it is laid. Every wall over both trays dies on that plane.
 
 Print-ready STLs are in `build/print_ready/`, exported by `print_export.scad`,
 already rotated and dropped to z = 0. Each was scanned face by face in that
-orientation: the body's only downward faces past 45 degrees from vertical are
-the porch ceiling the rib carries, the 1 mm lips at the ends of each vault
-ridge, and the seat ledge's underside along the leaning divider; the pick lid
-has a 1 mm strip at the tip of its skirt; the fill lid has the two barbs' 1.1 mm return faces, which bridge,
-and its 1 mm top chamfer, which lies on the bed.
+orientation: the body's downward faces past 45 degrees from vertical are the
+flat bridges (the porch ceiling and the chamfered tops of the openings), the
+1 mm lips at the ends of each vault ridge, and the seat ledge's underside along
+the leaning divider; the pick lid has a 1 mm strip at the tip of its skirt;
+the fill lid has only its 1 mm top chamfer, which lies on the bed.
+
+Slicer: **no brim** (Elegoo Slicer: Others, Skirt and brim, Brim type,
+No-brim). Test print 1 used one and it fused into the walls. Enable bridge
+detection, which is on by default in Orca-based slicers.
 
 Purchased: four stick-on rubber feet, 10 mm; 1/2 inch TZe label tape.
 
 Test print: `build/maquette/test_print_plate_256.3mf` (maquette body, both
 maquette lids and the coupon on one 256 mm plate), or the STLs one by one.
+`TEST_PRINTS.md` records what each test print showed.
 
 ## Print this first
 
-`calibration_coupon.scad`. `doctor.py` reports no calibration profile on this
-machine, so the snap and rail fits are geometry-only. The coupon is eight
-islands, 170 x 71 mm, no supports: a plate with five male rail stubs at
-−0.15 .. +0.15 mm and a loose groove block cut exactly as the body cuts its
-grooves (drop the block over each stub; the one that goes down with hand
-pressure and does not rock is your `rail_clear`), and five miniature fill
-lids with the real barb at the same offsets plus one miniature mouth with the
-real pocket geometry (press each in, lift it out by the notch; it should click
-both ways and hold a shake — that offset goes into `fill_tab_barb`). The
-revision 1 coupon had a hinge-rod gauge for a rod that no longer existed and no
-snap gauge at all; it had not rendered since revision 2.
+`calibration_coupon.scad`. One fit depends on your printer rather than the
+geometry: the joining rail in its groove. Test print 1 put it at 0.50 mm per
+side, the end of that coupon's range, so this coupon re-centres there: five
+male rail stubs labelled −100 .. +100 (clearances 0.60 .. 0.40) and a loose
+groove block cut exactly as the body cuts its grooves. Drop the block over
+each stub; the one that goes down with hand pressure and does not rock is
+your fit. If it is not "0", that label moves `rail_clear`. Two islands,
+124 x 30 mm, no supports, no brim.
 
 ## One plate for the small test print
 
@@ -203,10 +214,10 @@ printer and filament profile after opening. Regenerate it with the script in
 
 It is a **form model, not a function model**. Proportions, the flush
 rim-to-floor line, the crossing chute and both lid planes all read true, but a
-size-00 capsule does not fit any bay and the fill lid's snap tabs come out
-around 0.5 mm thick. Print it to judge the shape and to see whether the porch
-ceiling and the 50-degree chute ceiling come out clean; do not judge the flow
-from it.
+size-00 capsule does not fit any bay, and at 0.42 scale every wall is about
+1 mm thick and every bridge is printed with a full-size nozzle, so ragged
+bridges and thin edges look worse than they will at full size. Print it to
+judge the shape and the lid fits; do not judge the flow from it.
 
 ## Reviewer's attention
 
@@ -220,14 +231,16 @@ from it.
   matters is the throat over the stagnant wedge, 32.6 mm at the 30-degree
   estimate and 28.9 at 35. Below about 38 degrees of repose it stays over one
   pill length.
-- **Porch lanes are 20.3 mm.** Pills run single file. The rib's knife edge is
-  what keeps a capsule arriving crosswise from stopping at it.
+- **The porch ceiling is a flat 43 x 28 mm bridge in every bay** (D29). It
+  replaced a 25-degree ceiling and its support fin. Check it on the first
+  full-size print for sag; the chute under it is 36 mm clear at its lowest.
 - Bay width is **1.65x the longest pill** against a 2–3x mass-flow rule of
   thumb. Mitigated, not eliminated; an occasional tap may be needed.
 - The two `NEAR MISS` notes (0.150 mm, 0.153 mm) are both lids' intended
   clearance, explained in `joints.json`.
-- The snap's 35-degree return, the 0.8 mm engagement and both rail clearances
-  are geometry only (Tier 2). Print `calibration_coupon.scad` first.
+- The rail clearance (0.50) is from test print 1's coupon and the fill lid's
+  (0.30) from its fill lid; the pick lid's lug clearance (0.5) is geometry
+  only. Print `calibration_coupon.scad` first to confirm the rail.
 
 ## Build and verify
 
@@ -247,8 +260,9 @@ Tier 2 — geometry verified, fit uncalibrated. Every assert in `params.scad`
 passes, all three parts render as single watertight bodies at their declared
 bounding boxes, both chute legs are walked end to end by `bores.json` in both
 end bays, the front groove is walked out through the top of its wall, and the
-static assembly is collision-free. Beyond the suite, revision 6 was probed by
-hand: `trimesh.contains()` lines through the groove, the label recesses and the
-snap catch, and a face-normal scan of every part in its print orientation. What
-is *not* verified: any clearance as a real printed fit, and any claim about how
-pills actually flow.
+static assembly is collision-free. Beyond the suite, every revision since 6
+was probed by hand: `trimesh.contains()` lines through each changed feature
+and a face-normal scan of every part in its print orientation. Test print 1
+(the 0.42 maquette and the coupon) confirmed the fill lid's fit and the rail
+clearance, and found the four problems revision 8 fixes. What is *not*
+verified: a full-size print, and any claim about how pills actually flow.

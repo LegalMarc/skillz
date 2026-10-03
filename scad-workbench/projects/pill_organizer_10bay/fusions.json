@@ -8,13 +8,6 @@
   },
   {
     "pair": [
-      "body_shell",
-      "porch_ribs"
-    ],
-    "reason": "each porch rib reaches weld_embed=1.5mm up into tray B's floor slab, the thing it exists to carry. Meeting the slab on a coincident face instead is what left a whole sub-feature detached in an earlier revision."
-  },
-  {
-    "pair": [
       "pick_plate",
       "pick_hook"
     ],
@@ -22,16 +15,30 @@
   },
   {
     "pair": [
-      "fill_plate",
-      "fill_tabs"
-    ],
-    "reason": "both cantilever tabs are rooted in the plate's underside; the overlap is the built-in end of the beam."
-  },
-  {
-    "pair": [
       "body_shell",
       "vault_roof"
     ],
     "reason": "each half of the vault roof reaches weld_embed into its bay divider, vault_top_over up into the deck under hopper B's floor, and 1mm past the bay centre into its partner half; the void polygon is cut to the ridge and the roof puts the gabled solid back, so the overlap IS the feature (D26)"
+  },
+  {
+    "pair": [
+      "body_shell",
+      "outlet_chamfers"
+    ],
+    "reason": "each 45 degree corner prism reaches 1mm into its divider and up into the wall above the outlet, and 0.3mm past both faces of that wall in Y, so it welds volumetrically and no face of it lands on a face of the shell (D29)"
+  },
+  {
+    "pair": [
+      "fill_plate_slab",
+      "fill_lip_slab"
+    ],
+    "reason": "the pull lip's solid runs back into the plate's front chamfer band (lip_back) so the two weld volumetrically; its top is flush with the plate's top, which is the bed face, and its underside sits lip_in above the plate's, so no two faces coincide"
+  },
+  {
+    "pair": [
+      "pick_plate",
+      "pick_lugs"
+    ],
+    "reason": "each locating lug reaches 1mm up into the plate along its full length, so it welds volumetrically instead of meeting the underside on a plane (D32)"
   }
 ]
