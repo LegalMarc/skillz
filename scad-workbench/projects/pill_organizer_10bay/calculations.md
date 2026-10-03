@@ -3,7 +3,10 @@
 All lengths mm, all angles degrees. `tan(40) = 0.839100`, `tan(25) = 0.466308`,
 `tan(30) = 0.577350`, `tan(35) = 0.700208`.
 
-**Revision 8.** See `plan.md` for the revision table and the full decision log.
+**Revision 9.** See `plan.md` for the revision table and the full decision log.
+Revision 9 is the review of revision 8: tray B's pile kept below the wall in
+front of it (D33), the pick lid's lugs moved to tray A (D34), and edge and
+corner fixes (D35).
 Revision 7 vaulted the crossing chute's ceiling (D26) and rounded the external
 edges (D27). Revision 8 is test print 1: the porch ceiling flat and its rib
 gone (D29), the fill lid nesting by gravity (D30), rail clearance from the
@@ -104,12 +107,12 @@ the centre of each bay — and the diagonal steepens:
 | Rise, edge to ridge | `vault_up + vault_down` | 12.0 |
 | Gable | `atan(12 / (bay_w / 2))` | 29.2 deg |
 | Face from vertical | formula above | **44.8 deg** (was 50) |
-| Chute clear at the ridge / at the dividers | `chute_clear ± 6` | 42 / **30** — 1.15x pill length, 2.7x diameter |
-| Hopper B ramp foot | `trayB_floor + vault_up` | 62.18 — a 6 mm riser at tray B's back wall; the fillet is at its foot, its top edge is sharp |
+| Chute clear at the ridge / at the dividers | `chute_clear + 4` / `− 8` | 40 / **28** — 1.08x pill length, 2.5x diameter (42 / 30 at 6 / 6 until D33) |
+| Hopper B ramp foot | `trayB_floor + vault_up` | 60.18 — a 4 mm riser at tray B's back wall (6 until D33); the fillet is at its foot, its top edge is sharp |
 | Hopper divider spring point | `max(chuteA_ceil(yA_hop0), rampB(yB_hop1))` | 122.93 — the ramp's end; below it the wall is vertical and 2.4 thick (D28; 0.2 at revision 7 as first committed) |
-| Hopper B outlet top | `rampB_foot + outlet_h`, outlet_h 28 | 90.18 — 4 mm under tray B's rim |
+| Hopper B outlet top | `rampB_foot + outlet_h`, outlet_h 27 | 87.18 — flat across the wall's thickness (D35), 16 mm under tray B's rim |
 | Deck at the ridge | `chute_ceil` | 3.0, declared in `attachments.json` as `vault_deck` |
-| Row B capacity | measured | 182.4 → **166.1 mL**, 1.13x the charge, 101 days |
+| Row B capacity | measured | 182.4 → 166.1 mL at revision 7; **179.2 mL** at revision 9 (D33), 1.22x the charge, 109 days |
 
 Where the rise goes is the whole decision. All of it up (ridge +12) lifts
 hopper B's floor 12 mm and leaves 0.4 mm of freeboard under the rim; all of it
@@ -118,7 +121,8 @@ Split, neither limit is approached. The ridge void starts 1 mm inside each end
 of the added roof solid (`vault_roof_y0 < vault_y0`, `vault_y1 < vault_roof_y1`)
 so the two never share a face; the 1 mm lips this leaves at each end of the
 ridge are internal and vertical. The porch under tray B is not vaulted: its
-ceiling is 65 degrees from vertical and the splitter rib carries it.
+ceiling is a flat bridge (D29). Since D35 the ridge rises over its first
+vault_ramp (8 mm) behind the porch instead of in one vertical step.
 
 Face-normal scan of the body, downward faces 50–55 degrees from vertical,
 above the bed: 21,758 mm² before, about 2,200 after — and of that, 59 mm² is
@@ -132,8 +136,29 @@ edges respectively, facing the flow; watch bays 1 and 5 under a full charge.
 The thin-wall half of `check_printability.py` (0.8 mm threshold) reports 39
 of 1500 samples after the D28 fix, down from 52; a 20,000-sample ray-cast map
 puts every one of them on an acute edge — the splitter rib's knife taper at
-the bay centres, the dovetail lips of both rails, the seat-ledge noses, and
+the bay centres (rib removed, D29), the dovetail lips of both rails, the seat-ledge noses, and
 grazing hits on the obtuse plane-to-wall edges. No wall reads under 0.8.
+
+## Derived — tray B's pile (D33)
+
+Tray B is fed from hopper B through the outlet under the wall at its back, so
+its pill surface peaks at that outlet's top and falls forward at repose — the
+same model D17 applies to tray A. What the wall between the trays has to hold
+back is that surface where it meets the wall, not tray B's depth.
+
+| Quantity | Formula | Revision 8 | Revision 9 |
+|---|---|---|---|
+| Outlet top | `trayB_floor + vault_up + outlet_h` | 56.18 + 6 + 28 = 90.18 | 56.18 + 4 + 27 = **87.18** |
+| Pile at the wall | `outletB_top − tray_d × tan(30)` | 74.01 | **71.01** |
+| Wall top | `pickplane(yB_tray0)` | 70.76 | **76.10** |
+| Margin at 30° / 25° / 35° | | **−3.25** / −6.36 / +0.19 | **5.09** / 1.98 / 8.53 |
+
+Revision 8 would have spilled row B into row A with the lid off. The fix takes
+from three places: vault_up 6 → 4 (vault_down 6 → 8 keeps the gable, and the
+chute's 28 at the dividers still clears a pill length), outlet_h 28 → 27 (the
+floor is `> pill_len`, so a capsule arriving end-on still passes), and the
+wall's top raised by tray B 38 → 47 deep and tray A's rim 43 → 44. The plane
+steepens to 44.0 degrees; the pick lid's skirt then prints at 46 degrees.
 
 ## Derived — the porch (D12, D20)
 
@@ -196,8 +221,8 @@ Verified by `bores.json`: `porch_centre_bay3` runs down the old rib line;
 | **Overall** | | **235.0 x 170.8 x 141.0** (235 includes the 5 mm rail) |
 
 Both mouths finish at `hopper_rim = 141`, which is what lets one flat lid cover
-both. Both trays finish on one 39.9-degree plane from 43.0 at the front face to
-94.18 at tray B's rim, which is what lets one flat lid cover both.
+both. Both trays finish on one 44.0-degree plane from 44.0 at the front face to
+103.18 at tray B's rim (39.9 degrees, 43.0 to 94.18 until D33), which is what lets one flat lid cover both.
 
 ## Derived — the reach into tray A (D15)
 
@@ -219,7 +244,8 @@ B's rim.
 | 48.0 | 35.1 deg | 27.1 | 30.7 | 18.3 |
 | 42.0 | 38.7 deg | 21.4 | 27.7 | 15.6 |
 | 38.0 | 40.9 deg | 17.6 | 25.7 | 13.7 — fails `trayB_front_retain` |
-| **43.0, porch 25 (rev 6)** | **39.9 deg** | **22.5** | **29.8** | **14.6** |
+| 43.0, porch 25 (rev 6) | 39.9 deg | 22.5 | 29.8 | 14.6 |
+| **44.0, tray B 47 deep (rev 9, D33)** | **44.0 deg** | **23.9** | **34.8** | **19.9** |
 
 The floor on this is `trayB_front_retain > pill_dia + 3`: below it the wall
 between the trays is cut so low by the plane that tray B spills forward into
@@ -265,8 +291,8 @@ inside the FDM band. Hopper B loses about 5 mL/bay and hopper A gains the same.
 
 | Row | Per bay | vs 147.4 mL charge | Days at one/day |
 |---|---|---|---|
-| Row A — front tray, back mouth, crossing chute | **304.3 mL** | 2.06x | 185 |
-| Row B — back tray, front mouth, plain ramp | **170.9 mL** | 1.16x | 104 |
+| Row A — front tray, back mouth, crossing chute | **286.9 mL** | 1.95x | 175 |
+| Row B — back tray, front mouth, plain ramp | **179.2 mL** | 1.22x | 109 |
 
 Measured with the fill line at the underside of the lid (`fill_seat_z`), the
 porch ribs subtracted and the fillets included — not from the idealised section,
@@ -324,7 +350,7 @@ them (32 x 9 x 0.6, and the upper cut 1.0 deep). Revision 6 writes them.
 
 | Quantity | Formula | Value |
 |---|---|---|
-| Clearance all round | `fill_lid_clear` | 0.30 — confirmed by test print 1 |
+| Clearance all round | `fill_lid_clear` | 0.30 — NOT yet confirmed: test print 1's lid was at 0.42 scale (0.13); the full-size section print checks it |
 | Seat ledge | `fill_ledge_w` | 3.0 |
 | Underside lead-in chamfer | `fill_lead_in` at 45° | 0.6 |
 | Lid bearing on the ledge | `fill_ledge_w − fill_lid_clear − fill_lead_in` | 2.1 |
@@ -337,17 +363,18 @@ them (32 x 9 x 0.6, and the upper cut 1.0 deep). Revision 6 writes them.
 |---|---|---|
 | Chute ridge section | 36.0, constant | OK — 1.38x pill length |
 | Row A outlet (the chute's own section at tray A) | 36.0 | OK |
-| Row B outlet | 28.0 | OK — 1.08x pill length, 2.5x pill diameter |
+| Row B outlet | 27.0 | OK — 1.04x pill length, 2.5x pill diameter; asserted > pill_len |
 | Ramp angle vs repose | 40 - 30 = 10 margin | OK, reduced from 18 |
 | Porch angle vs repose | 25 - 30 = **-5** | BY DESIGN — the flow over the wedge is at repose; throat 32.6 / 28.9 at 30 / 35 deg repose |
 | Chute ceiling overhang, 40 deg leg | **44.8 from vertical**, vaulted (D26) | OK — was 50 and ADVISORY through revision 6 |
 | Chute clear under the vault's low side | 30 at the dividers | OK — 1.15x pill length, 2.7x pill diameter |
-| Hopper B outlet vs tray B rim | 4.0 | OK — asserted >= 3 |
+| Hopper B outlet vs tray B rim | 16.0 | OK — asserted >= 3 |
+| Tray B pile vs the wall in front of it | 5.1 at 30° repose, 2.0 at 25° | OK — D33; asserted >= 5 and > 0 |
 | Porch ceiling | flat bridge, 42.96 x 28 per bay | OK — slicer bridge; D29 (was a 25° overhang with a rib) |
 | Outlet tops | 45° corner chamfers, 27 mm span | OK — D29 |
 | Cubby ceiling overhang | 45 from vertical, 22,100 mm^2 across 224 mm | OK — at the limit, D21 (was 50) |
-| Front joining groove | open from z 10 to 62.9, through the plane at 61.9 | OK — blind in revisions 3-5 |
-| Wall between trays, above tray B's floor | 14.6 | OK — 1.3x pill diameter, bounded by D15 |
+| Front joining groove | open from z 10 to 67.0, through the plane at 66.0 | OK — blind in revisions 3-5 |
+| Wall between trays, above tray B's floor | 19.9 | OK — but what it must hold back is the pile, not the floor: see D33 |
 | Front wall over tray A's pill crest | 7.2 | OK — scalloped, D17 |
 | Bay width vs pill length | 1.65x | PATIKRINTI — see note |
 

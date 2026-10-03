@@ -1,4 +1,4 @@
-# Review handoff — pill_organizer_10bay, revision 8
+# Review handoff — pill_organizer_10bay, revision 9
 
 For a fresh session asked to review this design critically. It is written to be
 pasted as that session's opening prompt, or read from the repo.
@@ -6,8 +6,9 @@ pasted as that session's opening prompt, or read from the repo.
 ## Your task
 
 Independently review `scad-workbench/projects/pill_organizer_10bay` at
-revision 8 and report what is wrong with it. Revision 8 is the first one
-informed by a physical print: read `TEST_PRINTS.md` before anything else. Do not rubber-stamp it. The suite
+revision 9 and report what is wrong with it. Revision 8 was the first one
+informed by a physical print, and revision 9 fixes what the review of
+revision 8 found (D33-D35): read `TEST_PRINTS.md` before anything else. Do not rubber-stamp it. The suite
 it ships with reports 13 passed / 0 failed / 4 n/a / 0 inconclusive / 1
 advisory, and that is exactly the condition under which a review is worth
 doing: every automated gate is already green, so anything still wrong is
@@ -17,7 +18,7 @@ Revision 5 shipped with the same green suite; a review found five defects
 the suite could not see. Revision 7 shipped with the same green suite; a
 review found the vault had thinned the hopper divider to 0.2 mm at its foot
 in every bay — and the suite HAD seen it, in the thin-wall half of the one
-ADVISORY everyone had learned to ignore for its overhang half. Read the
+ADVISORY everyone had learned to ignore for its overhang half. Revision 8 shipped green too; its review found tray B's pile standing 3.25 mm above the wall meant to retain it, because the one check on that wall measured from the floor. Read the
 advisory's full text. The entries are the last fourteen in `INCIDENTS.md`,
 each with the probe that found it. Assume this revision has its own.
 

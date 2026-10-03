@@ -6,9 +6,10 @@
 // true.
 //
 // It is a FORM model, not a function model. At this scale a
-// size-00 capsule does not fit any bay, and the fill lid's snap
-// tabs come out around 0.5mm thick -- present, but token. Print
-// it to judge the shape and the lid fit, not the flow.
+// size-00 capsule does not fit any bay, and every clearance and
+// wall shrinks with it (the fill lid's 0.30 becomes 0.13). Print
+// it to judge the shape, not the fit or the flow -- for those,
+// fit_section.scad prints a full-size end bay.
 //
 // TEST_SCALE 0.42 puts the module at roughly 99 x 72 x 59 mm.
 //

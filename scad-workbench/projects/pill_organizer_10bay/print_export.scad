@@ -9,13 +9,13 @@
 // Orientations (README.md, Bill of materials):
 //   body      as modelled, flat on its base.
 //   pick_lid  plate TOP face on the bed, skirt rising at about
-//             50 degrees. That is rotate([180 - pick_lid_slope,
+//             46 degrees (90 - pick_lid_slope). That is rotate([180 - pick_lid_slope,
 //             0, 0]): revision 5 used -pick_lid_slope, which
 //             also lays the plate flat but leaves the skirt
 //             pointing DOWN, so the "print-ready" lid stood on
 //             its skirt edge with the plate 14mm in the air
 //             (INCIDENTS.md, revision 6).
-//   fill_lid  flipped, plate top face on the bed, tabs up.
+//   fill_lid  flipped, plate top face on the bed.
 //
 // The drop to z = 0 is analytic, from the same params the parts
 // are built from -- OpenSCAD cannot measure its own mesh.

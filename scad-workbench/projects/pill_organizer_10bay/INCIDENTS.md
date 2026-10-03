@@ -324,3 +324,26 @@ declarations against what they claimed to test and by probing the mesh with
 - **Root cause:** the lid was a plate resting on a slope, located only by its skirt; the notches added in revision 6 were the only features on it and so were read as the alignment.
 - **Fix:** D32 -- two locating lugs under its ends.
 - **Already promoted to a rule?** not yet -- candidate: every loose part needs a feature that makes its one correct position obvious, checked by asking how a first-time user would try to fit it.
+
+## Revision 9 -- the review of revision 8
+
+### 2026-10-03 -- tray B's pile stood above the wall that retains it, and the check measured the wrong thing
+- **Where:** `params.scad` 4b/4c; `trayB_front_retain`.
+- **Symptom:** the independent review of revision 8 put tray B's pill surface 3.25 mm above the top of the wall between the trays at a 30 degree repose: with the pick lid off, row B would spill into row A. Every gate passed.
+- **Root cause:** `trayB_front_retain` measured the wall from tray B's FLOOR. The pile is fed from the outlet at the back and peaks at its top; D26's vault lifted that outlet 6 mm and nothing re-asked where the pile was. D17 had already modelled tray A this way; tray B was never given the same model.
+- **Fix:** D33 -- asserts on the pile line at 30 and 25 degrees, vault_up 6 → 4, outlet 28 → 27, tray B 38 → 47, tray A rim 43 → 44. The review's own proposed fix (outlet 22) broke the pill-passage assert, which caught it.
+- **Already promoted to a rule?** not yet -- candidate: a wall that retains a pile is checked against the pile line from its source, never against the floor.
+
+### 2026-10-03 -- a docs patch truncated plan.md and the suite result reported for it predated the patch
+- **Where:** `plan.md`, revision 8 commit.
+- **Symptom:** the "Parts and dependency order" table was gone after the revision 8 patch (it replaced everything after D32), and `check_plan` would have failed -- but revision 8 was reported 13/0 because the suite was run before the docs were edited.
+- **Root cause:** a whole-tail replacement in a script, and a suite run treated as final before the last edits.
+- **Fix:** table restored and updated (D30, D34); revision 9's suite was re-run after every docs edit.
+- **Already promoted to a rule?** not yet -- candidate: the suite run that is reported is the one run after the last edit to any file, docs included.
+
+### 2026-10-03 -- equal corner and edge radii left zero-area slivers
+- **Where:** `parts/body.scad` corner_cuts; `corner_r`, `edge_r_top`.
+- **Symptom:** with corner_r cut to 1.5 (equal to edge_r_top) the body came out non-watertight: three bodies, two of zero volume, at the back-top corners.
+- **Root cause:** the vertical corner round and the top-edge round met on one tangent line -- a coincident edge, the same class as a coplanar face.
+- **Fix:** corner_r 1.2, and an assert that the two differ by more than 0.1.
+- **Already promoted to a rule?** not yet -- candidate: two rounds that meet at a corner must have different radii.

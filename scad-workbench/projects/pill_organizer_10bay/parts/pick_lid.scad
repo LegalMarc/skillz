@@ -6,10 +6,10 @@
 // both as two flat steps would be a Z in section -- unprintable
 // without support whichever way it is laid, because one arm is
 // always cantilevered. So the body's whole pick surface is a
-// single plane at pick_lid_slope (about 40 degrees) and this is
+// single plane at pick_lid_slope (44 degrees since D33) and this is
 // a flat plate lying on it, with a skirt down its front edge.
 // The skirt is what holds it: PLA on PLA grips to about 17
-// degrees and this slope is twice that, so the plate would
+// degrees and this slope is two and a half times that, so the plate would
 // otherwise slide straight off. The skirt also closes the
 // scalloped front wall, which is cut 13mm below the plane so
 // the front tray is open to the front once the lid is lifted.
@@ -17,8 +17,8 @@
 // Two finger notches in the skirt's bottom edge (D22) are what
 // you lift by: a fingertip hooks under each notch's ceiling.
 // They are grips, not alignment features. What locates the lid
-// is the pair of lugs under its ends (D32), which drop into the
-// end bays of the back row just inside the side walls.
+// is the pair of lugs under its ends (D32/D34), which drop into
+// the end bays of the front row just inside the side walls.
 //
 // Local origin: the module's front-bottom-left outer corner,
 // offset in X only. This part is modelled IN ASSEMBLED
@@ -30,7 +30,7 @@
 // Material: PLA or PETG.
 // Print orientation: rotate [180 - pick_lid_slope, 0, 0] (see
 //   print_export.scad) so the plate's TOP face is on the bed and
-//   the skirt rises at about 50 degrees. -pick_lid_slope alone
+//   the skirt rises at about 46 degrees. -pick_lid_slope alone
 //   lays the plate flat with the skirt pointing DOWN (INCIDENTS).
 //   NOT as modelled.
 //
@@ -39,7 +39,7 @@
 //   behind tray B and the top-back corner meets the wall after
 //   about 5 degrees. Nothing to unclip.
 //
-// EXPECTED_BBOX: [229.0, 63.85, 73.03]
+// EXPECTED_BBOX: [229.0, 63.85, 82.03]
 // ============================================================
 
 include <../params.scad>
@@ -134,8 +134,9 @@ module pick_notches() {
 // assert in layout.scad.
 lid_dx_local = (module_w - pick_lid_w) / 2;                 // 0.5
 
-// Locating lugs (D32): one under each end of the plate, hanging into the end
-// bay of tray B just inside the side wall, so the lid can only go on one way
+// Locating lugs (D32, moved D34): one under each end of the plate, hanging into
+// the end bay of tray A just inside the rail boss -- not tray B, where they
+// stood in the pile -- so the lid can only go on one way
 // and cannot slide sideways. Built in the plate's own frame -- s along the
 // slope, n normal to it, negative below the underside -- and placed by the
 // ONE rotation that lays that frame on the plane. Each lug reaches 1mm up into
@@ -154,8 +155,8 @@ module pick_lug(x_outer, dir) {
             }
 }
 module pick_lugs() {
-    pick_lug(wall_out + pick_lug_clear - lid_dx_local, 1);
-    pick_lug(module_w - wall_out - pick_lug_clear - lid_dx_local, -1);
+    pick_lug(pick_lug_x_left  - lid_dx_local,  1);
+    pick_lug(pick_lug_x_right - lid_dx_local, -1);
 }
 
 module pick_lid_geometry() {
