@@ -1,5 +1,8 @@
 #!/usr/bin/env python3
-"""Lay the small test print out on one 256 x 256 plate as a core-spec 3MF.
+"""Lay a test print out on one 256 x 256 plate as a core-spec 3MF.
+
+    python3 build/maquette/make_plate.py maquette   # the 0.42 model
+    python3 build/maquette/make_plate.py section    # full-size corner section
 
 Run from the project directory after re-exporting build/maquette/*.stl and
 build/calibration_coupon.stl. Positions are the part's minimum corner; each STL
@@ -9,14 +12,30 @@ import itertools, os, zipfile
 from xml.sax.saxutils import escape
 import trimesh
 
-PARTS = [
-    ("pill_organizer_body_x0.42",     "build/maquette/body.stl",      (15.0, 15.0)),
-    ("pill_organizer_pick_lid_x0.42", "build/maquette/pick_lid.stl",  (130.0, 15.0)),
-    ("pill_organizer_fill_lid_x0.42", "build/maquette/fill_lid.stl",  (130.0, 70.0)),
-    ("calibration_coupon",            "build/calibration_coupon.stl", (15.0, 135.0)),
-]
+import sys
+PLATES = {
+    # the 0.42 maquette: shape only -- it scales every clearance and wall too
+    "maquette": ("build/maquette/test_print_plate_256.3mf",
+                 "0.42 maquette + calibration coupon", [
+        ("pill_organizer_body_x0.42",     "build/maquette/body.stl",      (15.0, 15.0)),
+        ("pill_organizer_pick_lid_x0.42", "build/maquette/pick_lid.stl",  (130.0, 15.0)),
+        ("pill_organizer_fill_lid_x0.42", "build/maquette/fill_lid.stl",  (130.0, 70.0)),
+        ("calibration_coupon",            "build/calibration_coupon.stl", (15.0, 135.0)),
+    ]),
+    # full size: one end bay of the real body back to hopper B's ramp, the end
+    # of the real pick lid, a corner of the fill mouth and of the fill lid
+    "section": ("build/section/test_print_section_256.3mf",
+                "full-size end bay + pick lid end + fill mouth and lid corners + calibration coupon", [
+        ("body_section_bay5_full_size",   "build/section/body.stl",       (20.0, 20.0)),
+        ("pick_lid_end_full_size",        "build/section/pick_lid.stl",   (90.0, 20.0)),
+        ("fill_mouth_corner_full_size",   "build/section/mouth.stl",      (160.0, 20.0)),
+        ("fill_lid_corner_full_size",     "build/section/fill_lid.stl",   (160.0, 65.0)),
+        ("calibration_coupon",            "build/calibration_coupon.stl", (20.0, 145.0)),
+    ]),
+}
+WHICH = sys.argv[1] if len(sys.argv) > 1 else "maquette"
+OUT, TITLE, PARTS = PLATES[WHICH]
 PLATE, MARGIN, MIN_GAP = 256.0, 10.0, 10.0
-OUT = "build/maquette/test_print_plate_256.3mf"
 
 objs, items, bb = [], [], {}
 for i, (name, path, (px, py)) in enumerate(PARTS, start=1):
@@ -36,7 +55,7 @@ for a, b in itertools.combinations(bb, 2):
 
 model = f'''<?xml version="1.0" encoding="UTF-8"?>
 <model unit="millimeter" xml:lang="en-US" xmlns="http://schemas.microsoft.com/3dmanufacturing/core/2015/02">
-<metadata name="Title">pill_organizer_10bay test print plate: 0.42 maquette + calibration coupon, 256 x 256</metadata>
+<metadata name="Title">pill_organizer_10bay test print plate: {TITLE}, 256 x 256</metadata>
 <metadata name="Designer">LegalMarc/skillz scad-workbench</metadata>
 <metadata name="Description">Four objects in print orientation on a 256 x 256 plate, origin at the front-left corner. No supports. PLA or PETG, 0.2 mm layers, 3 perimeters.</metadata>
 <resources>

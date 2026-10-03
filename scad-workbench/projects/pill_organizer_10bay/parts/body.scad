@@ -89,7 +89,7 @@ VOID_B = [
     [yB_wall1 + fill_ledge_w,    fill_seat_z],
     [yB_wall1,                   fill_seat_z - fill_ledge_w],
     [yB_wall1,                   outletB_top],
-    [yB_tray1,                   outletB_top + wall_div],
+    [yB_tray1,                   outletB_top],
     [yB_tray1,                   trayB_rim + void_top_over],
     [yB_tray0,                   pickplane(yB_tray0) + void_top_over]
 ];
@@ -134,7 +134,7 @@ VOID_A = [
     // span at both ends, so no face of the two coincides.
     [vault_y1,                   chuteA_ceil(vault_y1)],
     [vault_y1,                   chuteA_ceil(vault_y1) + vault_up + 1],
-    [vault_y0,                   chuteA_ceil(vault_y0) + vault_up + 1],
+    [vault_y0 + vault_ramp,      chuteA_ceil(vault_y0 + vault_ramp) + vault_up + 1],   // ramped, not stepped (D35)
     [vault_y0,                   chuteA_ceil(vault_y0)],
     [yB_tray1,                   porch_ceil_z],                // where the 40 deg leg meets the porch
     // The porch ceiling is FLAT (D29): a bridge across the bay, not a 25 degree
@@ -195,8 +195,9 @@ module body_shell() {
 // wall, into tray B -- spans the whole bay with nothing under it, and test
 // print 1 printed both ragged. A 45 degree triangle in each top corner, one
 // per divider face, shortens that span by 2 x outlet_chamfer. Each prism
-// reaches 1mm into its divider and up into the wall, and runs 0.3mm past both
-// faces of the wall in Y, so no face lands on a face of the shell.
+// reaches 1mm into its divider and up into the wall, and stops 0.05mm inside
+// both faces of the wall in Y (D35): running it past them left a fin in the
+// air on each side, and flush would put a face on a face of the shell.
 // ------------------------------------------------------------
 module outlet_corner(x_wall, dir, z_edge, z_top, y0, y1) {
     c = outlet_chamfer;
@@ -213,9 +214,9 @@ module outlet_chamfers() {
         x0 = wall_x1(i); x1 = x0 + bay_w;
         for (side = [[x0, 1], [x1, -1]]) {
             outlet_corner(side[0], side[1], outletA_top, outletA_top,
-                          yA_tray1 - 0.3, yA_wall1 + 0.3);
-            outlet_corner(side[0], side[1], outletB_top, outletB_top + wall_div,
-                          yB_tray1 - 0.3, yB_wall1 + 0.3);
+                          yA_tray1 + 0.05, yA_wall1 - 0.05);
+            outlet_corner(side[0], side[1], outletB_top, outletB_top,
+                          yB_tray1 + 0.05, yB_wall1 - 0.05);
         }
     }
 }

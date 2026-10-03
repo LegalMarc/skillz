@@ -164,8 +164,8 @@ it is laid. Every wall over both trays dies on that plane.
 | Part | Qty | Print orientation |
 |---|---|---|
 | `body` | 1 | as modelled, flat on its base, no supports |
-| `pick_lid` | 1 | plate TOP face on the bed, skirt rising at 50 degrees (`rotate([180 - pick_lid_slope, 0, 0])` — revision 5's export had the sign wrong and stood the lid on its skirt) |
-| `fill_lid` | 1 | flipped, plate top face on the bed, tabs up; the pull lip is in the plate's plane |
+| `pick_lid` | 1 | plate TOP face on the bed, skirt rising at about 46 degrees (`rotate([180 - pick_lid_slope, 0, 0])` — revision 5's export had the sign wrong and stood the lid on its skirt) |
+| `fill_lid` | 1 | flipped, plate top face on the bed; the pull lip is in the plate's plane |
 
 Print-ready STLs are in `build/print_ready/`, exported by `print_export.scad`,
 already rotated and dropped to z = 0. Each was scanned face by face in that
@@ -181,20 +181,44 @@ detection, which is on by default in Orca-based slicers.
 
 Purchased: four stick-on rubber feet, 10 mm; 1/2 inch TZe label tape.
 
-Test print: `build/maquette/test_print_plate_256.3mf` (maquette body, both
-maquette lids and the coupon on one 256 mm plate), or the STLs one by one.
+Test print: `build/section/test_print_section_256.3mf` -- full size, on one
+256 mm plate: the right-hand end bay of the body (to z 100, back to where
+hopper B's ramp leaves the top), the matching end of the pick lid, a corner
+of the fill mouth and of the fill lid, and the coupon. This is the one to
+print; see "The full-size section" below. The 0.42 maquette plate
+(`build/maquette/test_print_plate_256.3mf`) judges shape only.
 `TEST_PRINTS.md` records what each test print showed.
 
 ## Print this first
 
 `calibration_coupon.scad`. One fit depends on your printer rather than the
 geometry: the joining rail in its groove. Test print 1 put it at 0.50 mm per
-side, the end of that coupon's range, so this coupon re-centres there: five
-male rail stubs labelled −100 .. +100 (clearances 0.60 .. 0.40) and a loose
-groove block cut exactly as the body cuts its grooves. Drop the block over
-each stub; the one that goes down with hand pressure and does not rock is
-your fit. If it is not "0", that label moves `rail_clear`. Two islands,
+side, the end of that coupon's range, so this coupon brackets it: five
+male rail stubs labelled −100, −50, 0, +100, +200 (clearances 0.60, 0.55,
+0.50, 0.40, 0.30) and a loose groove block cut exactly as the body cuts its
+grooves. Turn the block over so the face that was on the bed is UP, and drop
+it over each stub; the one that goes down with hand pressure and does not
+rock is your fit. If it is not "0", that label moves `rail_clear`. Two islands,
 124 x 30 mm, no supports, no brim.
+
+## The full-size section
+
+`fit_section.scad` (`PART` = body, pick_lid, mouth, fill_lid) cuts the real
+parts, so every clearance, wall and bridge is the real one. What to do with it:
+
+1. **Tray B's pile (D33).** Pour real capsules into hopper B through the open
+   top. They run down the ramp, out under the outlet and pile in tray B. The
+   pile must stay below the top of the wall in front of it, with room to spare.
+2. **Tray A's feed.** Drop capsules into the chute's open back end: they run
+   down the 40-degree leg and the porch and pile in tray A, under the mouth.
+3. **Pick lid.** Lay the lid end on the section: the lug drops in beside the
+   rail buttress in the front bay, the plate sits flat on the plane, the skirt
+   covers the scalloped front.
+4. **Fill lid.** Drop the lid corner into the mouth corner: it should go in
+   without forcing, sit flat on the half divider without rocking, and lift
+   out cleanly.
+5. **Bridges.** The porch ceiling (under tray B's floor) and both outlet tops.
+6. **The coupon** as above.
 
 ## One plate for the small test print
 
@@ -225,8 +249,11 @@ judge the shape and the lid fits; do not judge the flow from it.
 - The chute ceiling on the 40-degree leg **was** a 50-degree-from-vertical
   overhang through revision 6. It is vaulted now (D26): 44.8 degrees from
   vertical. What that bought is bounded by two numbers worth checking on a
-  print: 30 mm clear at the dividers under the vault's low side, and a 6 mm
+  print: 28 mm clear at the dividers under the vault's low side, and a 4 mm
   riser at hopper B's ramp foot that pills drop off onto tray B.
+- **Tray B's pile** is the number revision 9 moved (D33): 5.1 mm below the
+  wall in front of it at a 30-degree repose, 2.0 at 25. If real capsules
+  repose flatter than 25 degrees, row B would creep over into row A.
 - **The porch feeds at the repose angle**, as any pile does; the number that
   matters is the throat over the stagnant wedge, 32.6 mm at the 30-degree
   estimate and 28.9 at 35. Below about 38 degrees of repose it stays over one
@@ -238,9 +265,9 @@ judge the shape and the lid fits; do not judge the flow from it.
   thumb. Mitigated, not eliminated; an occasional tap may be needed.
 - The two `NEAR MISS` notes (0.150 mm, 0.153 mm) are both lids' intended
   clearance, explained in `joints.json`.
-- The rail clearance (0.50) is from test print 1's coupon and the fill lid's
-  (0.30) from its fill lid; the pick lid's lug clearance (0.5) is geometry
-  only. Print `calibration_coupon.scad` first to confirm the rail.
+- The rail clearance (0.50) is from test print 1's coupon. The fill lid's
+  (0.30) and the pick lid's lug clearance (0.5) are geometry only: test print
+  1's lids were at 0.42 scale. The full-size section checks all three.
 
 ## Build and verify
 
@@ -263,6 +290,9 @@ end bays, the front groove is walked out through the top of its wall, and the
 static assembly is collision-free. Beyond the suite, every revision since 6
 was probed by hand: `trimesh.contains()` lines through each changed feature
 and a face-normal scan of every part in its print orientation. Test print 1
-(the 0.42 maquette and the coupon) confirmed the fill lid's fit and the rail
-clearance, and found the four problems revision 8 fixes. What is *not*
-verified: a full-size print, and any claim about how pills actually flow.
+(the 0.42 maquette and the coupon) set the rail clearance and found the four
+problems revision 8 fixes; its lids were at 0.42 scale, so they confirmed no
+fit. The independent review of revision 8 found tray B's pile above its wall,
+which revision 9 fixes (D33). What is *not* verified: a full-size print, and
+any claim about how pills actually flow -- the full-size section print is
+built to check both.
