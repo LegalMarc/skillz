@@ -32,19 +32,38 @@ with a full-size 0.4 mm nozzle, so ragged edges and thin features look worse
 than they will at full size. The rib, the tabs and the pick lid's lack of
 location do not depend on scale.
 
-## Test print 2 — planned, revision 9
+## Test print 2 — 2026-10-03, revision 9
 
-**Print:** `build/section/test_print_section_256.3mf` — full size: the right
-end bay of the body to z 100 (hopper B closed by its own ramp, the chute open
-at the back), the matching pick-lid end, a fill-mouth corner and a fill-lid
-corner, and the coupon. **No brim.**
+**Printer:** Elegoo Centauri Carbon 2, 0.4 nozzle, Elegoo PLA, 0.20 mm
+Standard, 15% infill, **no brim**, no supports. Slicer estimate 3 h 7 min,
+114 g.
+**Printed:** `build/section/test_print_section_256.3mf` — full size: the right
+end bay of the body to z 100, the matching pick-lid end, a fill-mouth corner
+and a fill-lid corner, and the coupon.
 
-| Check | Pass |
-|---|---|
-| Capsules poured into hopper B pile in tray B | The pile stays clearly below the top of the wall in front of it (D33: 5 mm at 30° repose) |
-| Capsules dropped into the chute's back end reach tray A | They run without bridging and pile under the mouth |
-| Pick-lid end on the section | Lug drops in beside the rail buttress; plate flat; skirt over the scallop |
-| Fill-lid corner in the mouth corner | Drops in unforced, no rocking, lifts out (0.30 at full size, first time) |
-| Porch ceiling and both outlet tops | Bridges clean, no sag into the chute |
-| Rail groove corner (torn on test print 1) | Intact at full size |
-| Coupon, block bed-face up | The stub that slides on with hand pressure and does not rock |
+| Check | Result | Change, revision 10 |
+|---|---|---|
+| Tray B fed from hopper B | Fed well, pile stayed in its tray. "A much better job of gravity feeding" than row A | None |
+| Tray A fed through the chute | Filled at first, but as pills were taken out the next ones did not slide in; they had to be grabbed at | Porch 25° → 40° and tray A floor tilted toward the front (D36) |
+| Bay size | "A little bit small" | Deeper trays, slightly wider bays, same 10 bays, still on one 256 mm plate (D37) |
+| Pick lid | Slides straight off the slope. Placed reversed it also rides up on its own lug | Retention redesigned (D38), see below |
+| Fill-lid corner | Drops in, sits, lifts out cleanly at 0.30 | Fit confirmed, `fill_lid_clear` stays 0.30 |
+| Porch ceiling, outlet tops | Bridged. Light stringing across the top of tray B's opening | Cosmetic, none |
+| Rail groove corner | Torn again at full size where the front groove breaks out through the top of the front wall; a thin flap inside tray A there cracked | Corner reinforced (D39) |
+| Coupon, block bed-face up | Loose on every stub, including +200 (0.30 per side) | New coupon 0.30 → 0.10 (D40) |
+| Pick-lid top face | A diagonal travel scar across the last layer | Cosmetic; slicer setting, none |
+
+**Why the pick lid slides off.** The plate lies on a 44° plane and PLA on PLA
+holds to about 17°, so something has to bear against a body face that faces
+*back*. The skirt hangs outside the front face, 0.35 mm clear. Sliding down
+the plane moves the lid forward and down, which takes the skirt *away* from
+the face, so it never touches anything. The design note that it "cannot pass
+the front face" was true and irrelevant: that only stops it sliding backward,
+up the slope. The locating lug, in tray A, clears the scalloped front wall by
+about 19 mm, so it slides over that too. Nothing in the suite tested the
+direction of the stop; revision 10 adds a probe that does.
+
+**Why the coupon read loose.** Test print 1 read 0.50 per side as the best
+fit, on a coupon printed with a brim that fused into the walls. The brim and
+its elephant foot narrowed the groove, so the loosest stub felt right. With
+no brim the true fit is below 0.30.
