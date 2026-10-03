@@ -87,9 +87,11 @@ assert(bay_w >= pill_len * 1.5,
 // stagnant wedge (calculations.md). That is the whole price of the change.
 // ------------------------------------------------------------
 tray_d      = 28.0;         // pick tray depth in Y, both rows
-trayB_h     = 38.0;         // tray B interior height, floor to rim
-outlet_h    = 28.0;         // gap under tray B's feed wall (row B's outlet);
-                            // 30 before the vault (D26) lifted the ramp foot
+trayB_h     = 47.0;         // tray B interior height, floor to rim (38 until D33)
+outlet_h    = 27.0;         // gap under tray B's feed wall (row B's outlet): just
+                            // over one pill length, so a capsule arriving end-on
+                            // still passes. 30, then 28 after D26; 27 by D33, which
+                            // is as low as that rule allows
 ramp_deg    = 40;           // ramp and chute angle from horizontal (D11)
 // The porch was 20 degrees (D12). Pills reach tray A by flowing OVER the
 // stagnant wedge the porch carries, and that wedge's surface is by
@@ -147,11 +149,13 @@ function chuteA_ceil(y) = chuteA_floor(y) + chute_clear;
 // The rise is split: the ridge goes up vault_up into the deck, so hopper B's
 // floor and outlet rise with it; the edges come down vault_down, which the
 // chute can spare (30 clear at the edges, 42 at the ridge). Costs row B about
-// 18 mL per bay. The porch under tray B is not vaulted -- the rib carries it.
+// 18 mL per bay. The porch under tray B is not vaulted -- its ceiling is flat
+// and bridges the bay (D29).
 // ------------------------------------------------------------
-vault_up    = 6.0;
-vault_down  = 6.0;
+vault_up    = 4.0;         // 6 / 6 until D33: every mm of vault_up lifts hopper B's
+vault_down  = 8.0;         // ramp foot and outlet, and with them tray B's pile
 vault_lead  = 2.0;          // the ridge starts this far behind the porch end
+vault_ramp  = 8.0;          // and rises over this run, not in a vertical step (D35)
 vault_slope = (vault_up + vault_down) / (bay_w / 2);            // tan of the gable
 vault_deg   = atan(vault_slope);                                //  29.2
 vault_face_from_vertical = 90 - atan(sqrt(pow(vault_slope, 2) + pow(ramp_tan, 2)));  // 44.8
@@ -164,11 +168,12 @@ vault_y0    = yB_tray1 + vault_lead;                            //  63.2, ridge 
 vault_y1    = yB_hop1 - 0.6;                                    // 133.0, ridge ends
 vault_roof_y0 = yB_tray1 + vault_lead / 2;                      //  62.2, the added solid starts
 vault_roof_y1 = yB_hop1;                                        // 133.6, and ends, inside the wall between the hoppers
-function chuteA_ridge(y) = chuteA_ceil(y) + (y > vault_y0 && y < vault_y1 ? vault_up : 0);
+function chuteA_ridge(y) = chuteA_ceil(y)
+    + (y > vault_y0 && y < vault_y1 ? vault_up * min(1, (y - vault_y0) / vault_ramp) : 0);
 
 assert(vault_face_from_vertical <= 45.0,
        "the vaulted chute ceiling is still past the 45 degree overhang limit -- raise vault_up + vault_down");
-assert(chute_clear - vault_down > pill_len + 2 && chute_clear - vault_down >= 2 * pill_dia,
+assert(chute_clear - vault_down >= pill_len + 2 && chute_clear - vault_down >= 2 * pill_dia,
        "the chute at the bay edges, under the vault's low side, is too low for a pill");
 assert(vault_top_over < chute_ceil,
        "the vault's solid reaches through the deck into hopper B's floor");
@@ -180,16 +185,13 @@ assert(vault_roof_y0 > yB_tray1 && vault_roof_y0 < vault_y0 && vault_y1 < vault_
 // Tray B sits one slab above the chute ceiling at the porch's end -- which is
 // the whole point of the porch, because that is where the ceiling is lowest.
 trayB_floor = chuteA_ceil(yB_tray1) + chute_ceil;        //  56.18
-trayB_rim   = trayB_floor + trayB_h;                     //  94.18
+trayB_rim   = trayB_floor + trayB_h;                     // 103.18
 // Hopper B's ramp rides one deck above the vault's RIDGE, so it starts
-// vault_up above tray B's floor: a 6mm riser at the tray's back wall that
+// vault_up above tray B's floor: a 4mm riser at the tray's back wall that
 // pills drop off (D26). The outlet top rises with it.
-rampB_foot  = trayB_floor + vault_up;                    //  62.18
-outletB_top = rampB_foot + outlet_h;                     //  90.18
+rampB_foot  = trayB_floor + vault_up;                    //  60.18
+outletB_top = rampB_foot + outlet_h;                     //  87.18
 function rampB(y) = rampB_foot + (y - yB_tray1) * ramp_tan;
-
-assert(trayB_rim - outletB_top >= 3.0,
-       "hopper B's outlet top is within 3mm of tray B's rim -- pills could ride out under the lid");
 
 // Tray A's rim is set INDEPENDENTLY of tray B's floor (D15). It started life
 // level with it, which looked right in section, but pills only pile to the
@@ -206,10 +208,26 @@ assert(trayB_rim - outletB_top >= 3.0,
 // 3.1mm, and the wall between the trays only keeps its pill_dia + 3 retaining
 // height if the plane's front end comes up with it. The front WALL is
 // scalloped to trayA_front_h regardless, so the reach over the wall is unchanged.
-trayA_rim       = 43.0;
+trayA_rim       = 44.0;   // 43 until D33, which lifts the wall between the trays
 pickplane_front = trayA_rim;
 function pickplane(y) = pickplane_front
                       + (y / yB_tray1) * (trayB_rim - pickplane_front);
+
+// Tray B's pile (D33). Pills leave hopper B under the flat bottom of its front
+// wall at outletB_top and fall forward at repose from that wall's front face.
+// That surface, not tray B's depth, is what the wall between the trays has to
+// hold back -- the same model D17 applies to tray A. Revision 7's vault lifted
+// the outlet 6mm and put this pile 1.9-3.3mm ABOVE the wall at the 30 degree
+// estimate: with the lid off, row B would have spilled into row A. Found by the
+// revision 8 review; trayB_front_retain measured from the floor and never saw it.
+trayB_pile_front = outletB_top - (yB_tray1 - yB_tray0) * tan(repose_deg);
+trayB_pile_margin = pickplane(yB_tray0) - trayB_pile_front;
+assert(trayB_pile_margin >= 5.0,
+       "tray B's pill pile stands within 5mm of the top of the wall between the trays -- row B would spill into row A");
+assert(pickplane(yB_tray0) - (outletB_top - (yB_tray1 - yB_tray0) * tan(25)) > 0,
+       "at a 25 degree repose tray B's pile would overtop the wall between the trays");
+assert(trayB_rim - outletB_top >= 3.0,
+       "hopper B's outlet top is within 3mm of tray B's rim -- pills could ride out under the lid");
 
 // Row A's outlet is the chute's own section: at tray A the ridge stands
 // chute_clear above the floor and the ceiling is already a chamfer.
@@ -249,8 +267,8 @@ function hopwall_A(z) = yA_hop0
 function hopwall_B(z) = hopwall_A(z) - wall_div;
 
 hop_lean_deg  = atan(hopA_lean / (hopper_rim - hopwall_z0));   // 26.0 (19.35 before the vault fix)
-mouthB_w      = hopwall_B(hopper_rim - lid_t) - yB_wall1;             // 62.1
-mouthA_w      = yA_hop1 - hopwall_A(hopper_rim - lid_t);              // 39.9
+mouthB_w      = hopwall_B(hopper_rim - lid_t) - yB_wall1;             // 62.5
+mouthA_w      = yA_hop1 - hopwall_A(hopper_rim - lid_t);              // 39.5
 mouth_ratio   = mouthB_w / mouthA_w;                           // 1.56, about 3:2
 
 assert(hop_lean_deg < 40,
@@ -374,12 +392,6 @@ porch_ceil_z = chuteA_ceil(yB_tray1);                    //  53.18, flat
 // unsupported span across the top of each opening is shorter than the bay.
 outlet_chamfer = 8.0;
 
-assert(porch_ceil_z + chute_ceil <= trayB_floor + 1e-6,
-       "the flat porch ceiling leaves less than a deck under tray B's floor");
-assert(porch_ceil_z - z_porch >= chute_clear - 1e-6,
-       "the flat porch ceiling is lower than chute_clear over the end of the porch");
-assert(porch_ceil_z > outletA_top + pill_dia,
-       "the pocket behind the mouth into tray A is too shallow to matter");
 assert(bay_w - 2 * outlet_chamfer > pill_len,
        "the outlet corner chamfers narrow the top of the opening below one pill length -- a capsule lying crosswise would catch");
 
@@ -455,7 +467,7 @@ bayB_vol_measured_ml = 0;
 // ------------------------------------------------------------
 pick_lid_w     = module_w - 1.0;
 pick_lid_clear = 0.35;
-pick_lid_slope = atan((trayB_rim - pickplane_front) / yB_tray1);   // 39.9 deg
+pick_lid_slope = atan((trayB_rim - pickplane_front) / yB_tray1);   // 44.0 deg
 pick_lid_len   = sqrt(pow(yB_tray1, 2) + pow(trayB_rim - pickplane_front, 2))
                  - pick_lid_clear;
 pick_lid_hook_t = 3.0;
@@ -500,26 +512,6 @@ assert(pick_notch_top > trayA_pile_front + 5,
        "a skirt notch opens the front below the pill line -- pills would roll out through it");
 assert(pick_notch_top < trayA_front_h + 3,
        "a skirt notch runs so far above the scalloped wall that it stops closing the scallop");
-// Locating lugs (D32). Test print 1: with nothing on its underside the lid
-// gave no clue how it goes on, and nothing stopped it sliding sideways. Two
-// lugs hang from its underside into the END bays of tray B, each just inside
-// a side wall, so the lid can only go on one way and cannot shift in X. They
-// sit in tray B's span, clear of the wall between the trays and of the rail-1
-// buttress, which is in tray A.
-pick_lug_t     = 2.4;       // thickness in X
-pick_lug_d     = 5.0;       // depth below the plate's underside, perpendicular to it
-pick_lug_clear = 0.5;       // to the side wall's inner face
-pick_lug_y0    = yB_tray0 + 3.0;                    // along the plane, in body Y
-pick_lug_y1    = yB_tray1 - 6.0;   // its tip sits pick_lug_d * sin(slope) further back
-pick_lug_lead  = 1.2;       // the tip tapers inward this much over its last 1.5mm
-
-assert(pick_lug_y0 > yA_wall1 + 1 && pick_lug_y1 + pick_lug_d * sin(pick_lid_slope) < yB_tray1 - 1,
-       "a pick-lid lug reaches over a wall of tray B");
-assert(pick_lug_y0 > rail1_y + rail_boss_w / 2 + 2,
-       "a pick-lid lug lands on the rail-1 buttress");
-assert(pick_lug_t + pick_lug_clear < bay_w / 4,
-       "a pick-lid lug takes too much of its bay");
-
 assert(pick_notch_w < bay_w - 6 && pick_notch_r * 2 < pick_notch_w,
        "a skirt notch is wider than a bay's share of the skirt, or its rounding has eaten it");
 
@@ -535,7 +527,8 @@ assert(pick_notch_w < bay_w - 6 && pick_notch_r * 2 < pick_notch_w,
 // recess above the seat ledges with fill_lid_clear all round and rests on
 // them, and a lead-in chamfer on its underside finds the recess.
 // ------------------------------------------------------------
-fill_lid_clear  = 0.30;     // confirmed by test print 1: "a pretty good fit"
+fill_lid_clear  = 0.30;     // NOT confirmed: test print 1 was a 0.42 maquette (0.13);
+                            // fit_section.scad's fill-lid corner checks it full size
 fill_ledge_w    = 3.0;
 fill_ledge_t    = 2.0;
 fill_seat_z     = hopper_rim - lid_t;         // 138.0
@@ -575,8 +568,14 @@ assert(wall_out - seat_cut_over >= min_rim_w && wall_div - seat_cut_over >= min_
 assert(fill_lid_x < inner_w && fill_lid_y < hop_mouth_d,
        "the fill lid is not smaller than the mouth it drops into");
 assert(fill_ledge_w >= 2.5, "the fill-lid seat ledge is too narrow to carry the lid edge");
+// What the lid actually bears on: the four bay dividers and the hopper divider,
+// cut to fill_seat_z. The perimeter ledges sit seat_lip_drop lower, so the lid
+// floats over them and they only catch it if it is dropped in tilted (the
+// revision 8 review measured the dividers at 137.99 and the ledges at 137.79).
+assert(fill_lid_x > inner_w - 2 * fill_lid_clear - 1e-6,
+       "the fill lid does not span the dividers it rests on");
 assert(fill_ledge_w - fill_lid_clear - fill_lead_in >= 1.5,
-       "the lead-in chamfer leaves under 1.5mm of the lid bearing on its seat ledge");
+       "the lead-in chamfer leaves under 1.5mm of lid over the perimeter ledge");
 assert(fill_seat_z - fill_ledge_t > rampB(yB_hop1)
        && fill_seat_z - fill_ledge_t > chuteA_floor(yA_hop1),
        "the seat ledge hangs below a hopper floor -- it would be in the pill path");
@@ -625,8 +624,8 @@ rail1_y      = (yA_tray0 + yA_tray1) / 2;                  //  16.8, mid tray A
 // length, that no neighbouring module could ever enter (INCIDENTS.md,
 // revision 6). The groove now runs 1mm clear of the plane at its own back
 // edge; the pick lid covers the opening in use.
-rail1_groove_y1 = rail1_y + rail_tip_w / 2 + rail_clear;   //  22.65, groove back edge
-rail1_soc_z1 = pickplane(rail1_groove_y1) + 1.0;           //  62.9, out through the plane
+rail1_groove_y1 = rail1_y + rail_tip_w / 2 + rail_clear;   //  22.8, groove back edge
+rail1_soc_z1 = pickplane(rail1_groove_y1) + 1.0;           //  67.0, out through the plane
 // The male on the neighbour stays below ITS OWN wall's lowest point across
 // the male's footprint, so it never stands proud of the plane it is under.
 rail1_z1     = pickplane(rail1_y - rail_tip_w / 2) - 4.0;  //  48.5
@@ -651,6 +650,32 @@ assert(bay_w - rail_boss >= pill_len,
        "the rail buttress narrows an end bay below one pill length");
 assert(rail_sep > 50, "the two rails are too close together to resist yaw");
 
+// Locating lugs (D32, moved by D34). Test print 1: with nothing on its
+// underside the lid gave no clue how it goes on, and nothing stopped it sliding
+// sideways. Two lugs hang from its underside into the END bays of tray A, each
+// beside the inner face of a rail-1 buttress. Revision 8 put them in tray B,
+// where the review found them buried in tray B's pile: the taper pushed
+// capsules into the gap and the lid rode up on them. Tray A has 20mm or more of
+// air between its pill line and the plane over the buttress span.
+pick_lug_t     = 2.4;       // thickness in X
+pick_lug_d     = 5.0;       // depth below the plate's underside, perpendicular to it
+pick_lug_clear = 0.5;       // to the buttress's inner face
+pick_lug_x_left  = wall_out + rail_boss + pick_lug_clear;              //   8.3, outer face
+pick_lug_x_right = module_w - wall_out - rail_boss - pick_lug_clear;   // 221.7
+pick_lug_y0    = rail1_y - rail_boss_w / 2 + 1.5;                      // along the plane, in body Y
+pick_lug_y1    = rail1_y + rail_boss_w / 2 - 1.5 - pick_lug_d * sin(pick_lid_slope);
+pick_lug_lead  = 1.2;       // the tip tapers inward this much over its last 1.5mm
+pick_lug_air   = (pickplane(pick_lug_y1) + pick_lid_gap - pick_lug_d * cos(pick_lid_slope))
+               - (trayA_pile_front + (pick_lug_y1 + pick_lug_d * sin(pick_lid_slope) - yA_tray0) * tan(repose_deg));
+
+assert(pick_lug_y0 > rail1_y - rail_boss_w / 2
+       && pick_lug_y1 + pick_lug_d * sin(pick_lid_slope) < rail1_y + rail_boss_w / 2,
+       "a pick-lid lug runs past the end of the buttress that locates it");
+assert(pick_lug_air > 10,
+       "a pick-lid lug hangs within 10mm of tray A's pill line");
+assert(pick_lug_t + pick_lug_clear < bay_w / 4,
+       "a pick-lid lug takes too much of its bay");
+
 // ------------------------------------------------------------
 // 10. Cosmetic / ergonomic
 // ------------------------------------------------------------
@@ -662,7 +687,12 @@ fillet_r  = 2.0;            // internal: every flow-void corner (opening pass)
 // four vertical corners of the body, its top edges, both lids' plan corners
 // and the fill lid's top perimeter. Chosen small enough that no wall thins
 // past its own thickness: 1.5 on a 2.4 wall top leaves 0.9 of flat.
-corner_r   = 3.0;           // body's vertical outer corners
+corner_r   = 1.2;           // body's vertical outer corners (3.0 until D35: where the
+                            // adjoining wall is cut away -- above the scallops, beside
+                            // the cubby opening -- a round larger than the wall feathered
+                            // the side wall's end to 0.01mm). NOT equal to edge_r_top:
+                            // equal radii put both rounds' tangent lines on one line at
+                            // the back-top corners and left zero-area slivers there
 edge_r_top = 1.5;           // body's top edges (OUTER's convex corners)
 lid_edge_r = 2.0;           // lids' plan-view corners
 lid_chamfer = 1.0;          // fill lid top perimeter; pick lid plate x-end edges
@@ -678,8 +708,10 @@ assert(lid_round < lid_t / 2 - 0.3 && lid_round < (pick_lid_hook_t - pick_lid_cl
 
 assert(edge_r_top < wall_div - 0.5,
        "the top-edge round is deeper than the thinnest wall it runs along");
-assert(corner_r > wall_out && corner_r < 6,
-       "the corner round should be a little larger than the wall so the inner corner stays sharp, and not so large it eats the rail zone");
+assert(abs(corner_r - edge_r_top) > 0.1,
+       "corner_r and edge_r_top must differ -- equal rounds meet on one tangent line and leave slivers");
+assert(corner_r <= wall_out - 1.0,
+       "the corner round is too large for the wall: where the adjoining wall is cut away it feathers the side wall's end");
 assert(lid_chamfer < lid_t - 1.0, "the lid chamfer leaves under 1mm of plate");
 
 // Recesses in the base for stick-on rubber feet (D24): a bench unit that is
@@ -723,7 +755,9 @@ echo(str("rail 1 groove: open from z ", rail_z0, " to ", rail1_soc_z1,
 echo(str("vault: gable ", vault_deg, " deg, face ", vault_face_from_vertical,
          " from vertical; chute clear ", chute_clear - vault_down, " at the edges, ",
          chute_clear + vault_up, " at the ridge; hopper B foot ", rampB_foot,
-         ", outlet top ", outletB_top, ", rim margin ", trayB_rim - outletB_top));
+         ", outlet top ", outletB_top, ", rim margin ", trayB_rim - outletB_top,
+         "; tray B pile at the wall ", trayB_pile_front, " vs wall top ", pickplane(yB_tray0),
+         " (margin ", trayB_pile_margin, "); lug air ", pick_lug_air));
 echo(str("tray A front wall ", trayA_front_h, " over a pill line of ", trayA_pile_front,
          " -> reach over the wall ", trayA_front_h - trayA_pile_front,
          " mm; lid skirt ", pick_lid_hook_h, " mm down to ", pick_lid_skirt_bot));

@@ -31,3 +31,20 @@ which is also why the snap coupon's reading could not be used.
 with a full-size 0.4 mm nozzle, so ragged edges and thin features look worse
 than they will at full size. The rib, the tabs and the pick lid's lack of
 location do not depend on scale.
+
+## Test print 2 — planned, revision 9
+
+**Print:** `build/section/test_print_section_256.3mf` — full size: the right
+end bay of the body to z 100 (hopper B closed by its own ramp, the chute open
+at the back), the matching pick-lid end, a fill-mouth corner and a fill-lid
+corner, and the coupon. **No brim.**
+
+| Check | Pass |
+|---|---|
+| Capsules poured into hopper B pile in tray B | The pile stays clearly below the top of the wall in front of it (D33: 5 mm at 30° repose) |
+| Capsules dropped into the chute's back end reach tray A | They run without bridging and pile under the mouth |
+| Pick-lid end on the section | Lug drops in beside the rail buttress; plate flat; skirt over the scallop |
+| Fill-lid corner in the mouth corner | Drops in unforced, no rocking, lifts out (0.30 at full size, first time) |
+| Porch ceiling and both outlet tops | Bridges clean, no sag into the chute |
+| Rail groove corner (torn on test print 1) | Intact at full size |
+| Coupon, block bed-face up | The stub that slides on with hand pressure and does not rock |

@@ -8,19 +8,25 @@
 // filament come out rather than on the geometry: the joining
 // rail in its groove. Test print 1's coupon put the best fit at
 // its -0.15 stub, the end of its range, so rail_clear went from
-// 0.35 to 0.50 (D31). This coupon re-centres on 0.50 with finer
-// steps, to confirm it or move it once more.
+// 0.35 to 0.50 (D31). This coupon brackets 0.50 from 0.30 to
+// 0.60 per side, to confirm it or move it once more.
 //
 //   RAIL   a plate with five male rail stubs, widths offset by
-//          -0.10 .. +0.10, and a loose groove block cut exactly
-//          as the body cuts its grooves (rail_clear per side).
-//          Drop the block over each stub: the one that goes down
-//          with hand pressure and does not rock is your fit. If
-//          it is not "0", tell the designer the label.
+//          -100 .. +200 (microns per side; clearance 0.60 .. 0.30),
+//          and a loose groove block cut exactly as the body cuts
+//          its grooves (rail_clear per side). Turn the block
+//          bed-face UP and drop it over each stub: the one that
+//          goes down with hand pressure and does not rock is your
+//          fit. If it is not "0", tell the designer the label.
+//          The groove's bed-face mouth is chamfered 0.5mm so the
+//          first layers' squash (elephant's foot) does not read
+//          as a tight fit -- but enter from the other face anyway.
 //
 // The fill lid's snap test is gone with the snap tabs (D30):
-// the lid now rests in its recess by gravity, and test print 1
-// already confirmed its 0.30mm clearance.
+// the lid now rests in its recess by gravity. Its 0.30mm
+// clearance is checked full size by fit_section.scad's fill-lid
+// corner -- test print 1's lid was a 0.42 maquette, where every
+// clearance shrank with it, so it confirmed nothing.
 //
 // Print with NO brim: a brim's first layers squeeze the groove
 // block's opening and read as a tighter fit than it is.
@@ -32,7 +38,7 @@ include <params.scad>
 
 plate_t   = 4.0;
 pitch     = 18.0;
-steps     = [-0.10, -0.05, 0.0, 0.05, 0.10];    // offset applied to the male's half-width
+steps     = [-0.10, -0.05, 0.0, 0.10, 0.20];    // offset applied to the male's half-width
 label_d   = 0.6;
 gap       = 6.0;
 
@@ -69,6 +75,15 @@ module groove_block() {
         cube([18, 16, 18]);
         translate([18, 8, -1]) linear_extrude(height = 20)
             rail_trapezoid(rail_root_w, rail_tip_w, rail_out + rail_depth_clear, rail_clear);
+        // elephant's-foot relief: the groove's outline grown 0.5 at the bed,
+        // tapering to nothing 0.5 up -- a 45 degree chamfer round the mouth
+        translate([18, 8, 0]) hull() {
+            translate([0, 0, -1]) linear_extrude(height = 1.01)
+                offset(delta = 0.5)
+                    rail_trapezoid(rail_root_w, rail_tip_w, rail_out + rail_depth_clear, rail_clear);
+            linear_extrude(height = 0.5)
+                rail_trapezoid(rail_root_w, rail_tip_w, rail_out + rail_depth_clear, rail_clear);
+        }
     }
 }
 

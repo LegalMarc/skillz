@@ -22,12 +22,15 @@ PLATES = {
         ("pill_organizer_fill_lid_x0.42", "build/maquette/fill_lid.stl",  (130.0, 70.0)),
         ("calibration_coupon",            "build/calibration_coupon.stl", (15.0, 135.0)),
     ]),
-    # full size: a corner of the real body and the end of the real pick lid
+    # full size: one end bay of the real body back to hopper B's ramp, the end
+    # of the real pick lid, a corner of the fill mouth and of the fill lid
     "section": ("build/section/test_print_section_256.3mf",
-                "full-size body corner + pick lid end + calibration coupon", [
+                "full-size end bay + pick lid end + fill mouth and lid corners + calibration coupon", [
         ("body_section_bay5_full_size",   "build/section/body.stl",       (20.0, 20.0)),
         ("pick_lid_end_full_size",        "build/section/pick_lid.stl",   (90.0, 20.0)),
-        ("calibration_coupon",            "build/calibration_coupon.stl", (20.0, 135.0)),
+        ("fill_mouth_corner_full_size",   "build/section/mouth.stl",      (160.0, 20.0)),
+        ("fill_lid_corner_full_size",     "build/section/fill_lid.stl",   (160.0, 65.0)),
+        ("calibration_coupon",            "build/calibration_coupon.stl", (20.0, 145.0)),
     ]),
 }
 WHICH = sys.argv[1] if len(sys.argv) > 1 else "maquette"
