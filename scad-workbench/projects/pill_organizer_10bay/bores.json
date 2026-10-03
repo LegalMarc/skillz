@@ -126,5 +126,21 @@
     ],
     "step_mm": 0.5,
     "_why": "same for the back groove: ends at 144, in open air above the rim (141) and the groove top (142), so the exit is what is tested"
+  },
+  {
+    "name": "porch_centre_bay3",
+    "part": "body",
+    "start": [
+      115.0,
+      32.0,
+      20.0
+    ],
+    "end": [
+      115.0,
+      60.0,
+      30.0
+    ],
+    "step_mm": 0.5,
+    "_why": "down the centre line of bay 3's porch, where the splitter rib stood until revision 8 (D29). A rib put back, or a porch ceiling sagging to the floor, would block this line while leaving the part watertight and single-bodied."
   }
 ]

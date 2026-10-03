@@ -301,3 +301,26 @@ declarations against what they claimed to test and by probing the mesh with
 - **Root cause:** the coupon is deliberately outside `parts/` so the bundle ignores it -- which also means nothing re-renders it, nothing checks it against params, and its header's claims were never read against its modules.
 - **Fix:** rewritten for the two fits that exist: a groove block that drops over five offset rail stubs, and five miniature fill lids with the real barb (35 degree return, `fill_tab_inset`, `fill_tab_root`) in a miniature mouth with the real pocket, ledge and notch geometry. `EXPECTED_BODIES: 8` declared in the header. Rendered, 8 watertight islands, 170 x 71 x 22.
 - **Already promoted to a rule?** not yet -- candidate: any `.scad` at the project root that `include`s params.scad gets rendered by the bundle (render-only, no dimension gate) so a dead parameter reference fails loudly instead of shipping a revision-1 STL for six revisions.
+
+## Revision 8 -- test print 1
+
+### 2026-10-03 -- every snap tab broke on the first print, because a cantilever printed standing up bends across its layers
+- **Where:** `parts/fill_lid.scad` tabs; the ten mini lids on the revision 7 coupon.
+- **Symptom:** all snap tabs broke off with light use, on the maquette fill lid and every coupon lid. No gate could have seen it: the geometry was right, the strain assert passed (1.0%), the barb angle was asserted.
+- **Root cause:** the tabs were 1.2 x 12mm vertical cantilevers in print orientation, so flexing them bends across the layer lines. Interlayer strength in PLA is a fraction of in-plane strength. Five revisions tuned the barb, the catch and the return angle without asking which way the layers ran.
+- **Fix:** D30 -- no tabs; the lid nests by gravity, which is all the brief needs.
+- **Already promoted to a rule?** not yet -- candidate: any flexing feature (snap, clip, living hinge) must state the direction its layers run relative to its bending, and a cantilever whose bending axis is perpendicular to the build plate is a defect, not a tolerance question.
+
+### 2026-10-03 -- a support rib shipped as a visible feature nobody could explain
+- **Where:** `parts/body.scad` porch_ribs (D13, revision 3).
+- **Symptom:** the user saw "a vertical divider halfway down each bin" in the front row and could not see why it was there. It also printed ragged around it.
+- **Root cause:** the rib existed only to make a 25 degree ceiling printable, and that ceiling existed only because the chute ceiling was drawn parallel to its floor. Every review checked the rib's lanes and bridges; none asked whether a user looking into the tray would see it.
+- **Fix:** D29 -- flat porch ceiling (a real bridge), rib removed.
+- **Already promoted to a rule?** not yet -- candidate: a feature added for printability that a user can see must be justified to a user, not only to a slicer; look at the render from where the user looks.
+
+### 2026-10-03 -- a lid with no locating features, and grips that read as alignment marks
+- **Where:** `parts/pick_lid.scad` (D10, D22).
+- **Symptom:** the user could not work out how the pick lid goes on; the two skirt notches "don't line up with anything".
+- **Root cause:** the lid was a plate resting on a slope, located only by its skirt; the notches added in revision 6 were the only features on it and so were read as the alignment.
+- **Fix:** D32 -- two locating lugs under its ends.
+- **Already promoted to a rule?** not yet -- candidate: every loose part needs a feature that makes its one correct position obvious, checked by asking how a first-time user would try to fit it.

@@ -8,25 +8,22 @@
 //   extends to -Y from that corner.
 //
 // Material: PLA or PETG.
-// Print orientation: FLIPPED -- plate top face on the bed, the
-//   two snap tabs pointing up. Each barb then tapers inward as
-//   it rises, so nothing overhangs but the barb's own 1.1mm
-//   ledge, which bridges. The pull lip is in the plate's own
-//   plane, so it prints as part of the first layers.
+// Print orientation: FLIPPED -- plate top face on the bed. The
+//   pull lip is in the plate's own plane; the underside lead-in
+//   chamfer is a 45 degree face at the top of the print.
 //
-// Assembly: drop into the mouth and press; both tabs flex
-//   inward over the wall and snap into their pockets. To lift:
-//   hook a fingertip under the pull lip, which stands out over
-//   tray B's air in front of the mouth, and pull up. The barbs'
-//   35 degree return faces cam the tabs inward and release (D23).
+// Fit (D30): the lid drops into the recess above the seat
+//   ledges with fill_lid_clear all round and rests on them. It
+//   is held by gravity, which is all the brief needs -- it stays
+//   put when set down. Revisions 5-7 had two snap tabs; test
+//   print 1 broke every one, because a tab printed standing up
+//   bends across its layer lines. To lift: hook a fingertip under
+//   the pull lip, which stands out over tray B's air.
 //
-// EXPECTED_BBOX: [223.8, 112.9, 15.0]
+// EXPECTED_BBOX: [223.8, 111.8, 3.0]
 // ============================================================
 
 include <../params.scad>
-
-assert(fill_tab_drop > fill_seat_z - fill_barb_bot_z,
-       "the snap tab cannot reach its barb pocket");
 
 module yz_extrude(x0, x1) {
     rotate([90, 0, 90]) translate([0, 0, x0])
@@ -52,9 +49,16 @@ module yz_extrude(x0, x1) {
 module rounded_rect(w, d) {
     offset(r = lid_edge_r) offset(r = -lid_edge_r) square([w, d]);
 }
+// The underside perimeter carries a fill_lead_in chamfer (D30): the lid now
+// simply drops into its recess and rests on the seat ledges, and the chamfer
+// is what lets it find the recess. Printed flipped, it is a 45 degree face
+// near the top of the print.
 module fill_plate_slab() {
     hull() {
-        linear_extrude(height = lid_t - lid_chamfer) rounded_rect(fill_lid_x, fill_lid_y);
+        linear_extrude(height = 0.01)
+            offset(delta = -fill_lead_in) rounded_rect(fill_lid_x, fill_lid_y);
+        translate([0, 0, fill_lead_in])
+            linear_extrude(height = lid_t - lid_chamfer - fill_lead_in) rounded_rect(fill_lid_x, fill_lid_y);
         translate([0, 0, lid_t - 0.01]) linear_extrude(height = 0.01)
             offset(delta = -lid_chamfer) rounded_rect(fill_lid_x, fill_lid_y);
     }
@@ -74,53 +78,13 @@ assert(lip_back > 0 && lip_back < lid_chamfer,
        "the lip must end inside the plate's chamfer band, or its top face overlaps the plate's");
 module fill_plate() { fill_plate_slab(); fill_lip_slab(); }
 
-// Barb profile in (y, z), local to the tab's outer face at y = 0, pointing -Y.
-// The retaining face slopes DOWN toward the barb's tip at fill_tab_return_deg
-// (D23), so a pull on the lid cams the tab inward instead of tearing the
-// pocket; below it a shallow ramp lets the tab cam in as the lid is pressed
-// home.
-// The return face is the line through (tab outer face, barb top) at
-// fill_tab_return_deg; the root point is that line continued fill_tab_root
-// into the tab, so the visible face is at the decision's angle. Revision 7 put
-// the root at the barb-top height and spread the drop over the extra run,
-// which made the face 25.7 degrees (INCIDENTS.md).
-barb_top   = fill_barb_top_z - fill_seat_z;
-barb_slope = tan(fill_tab_return_deg);
-BARB = [
-    [fill_tab_inset + fill_tab_root, barb_top + fill_tab_root * barb_slope],
-    [-fill_tab_barb, barb_top - (fill_tab_barb + fill_tab_inset) * barb_slope],
-    [fill_tab_inset + fill_tab_root, fill_barb_bot_z - fill_seat_z]
-];
-barb_face_deg = atan((BARB[0][1] - BARB[1][1]) / (BARB[0][0] - BARB[1][0]));
+module fill_lid_geometry() { fill_plate(); }
 
-assert(abs(barb_face_deg - fill_tab_return_deg) < 0.01,
-       "the barb's return face is not at fill_tab_return_deg");
-assert(BARB[1][1] > fill_barb_bot_z - fill_seat_z + 0.5,
-       "the barb's return face runs down into its own entry ramp");
-assert(barb_top + fill_tab_root * barb_slope < 1.0 + (fill_barb_top_z - fill_seat_z),
-       "the barb's root rises above the pocket ceiling inside the tab");
-
-module fill_tabs() {
-    x0 = fill_lid_x / 2 - fill_tab_w / 2;
-    // front
-    // Each tab runs 1mm up INTO the plate and each barb 0.5mm into its tab, so
-    // every union here overlaps volumetrically instead of sharing a face.
-    translate([x0, fill_tab_inset, -fill_tab_drop]) cube([fill_tab_w, fill_tab_t, fill_tab_drop + 1.0]);
-    yz_extrude(x0, x0 + fill_tab_w) polygon(BARB);
-    // back, mirrored about the lid's mid-depth
-    translate([x0, fill_lid_y - fill_tab_t - fill_tab_inset, -fill_tab_drop])
-        cube([fill_tab_w, fill_tab_t, fill_tab_drop + 1.0]);
-    translate([0, fill_lid_y, 0]) mirror([0, 1, 0])
-        yz_extrude(x0, x0 + fill_tab_w) polygon(BARB);
-}
-
-module fill_lid_geometry() { union() { fill_plate(); fill_tabs(); } }
-
-// SUBFEATURES: fill_plate, fill_tabs
+// SUBFEATURES: fill_plate_slab, fill_lip_slab
 SUBFEATURE = is_undef(SUBFEATURE) ? "" : SUBFEATURE;
 module subfeature_by_name(name) {
-    if (name == "fill_plate") fill_plate();
-    else if (name == "fill_tabs") fill_tabs();
+    if (name == "fill_plate_slab") fill_plate_slab();
+    else if (name == "fill_lip_slab") fill_lip_slab();
     else assert(false, str("Unknown sub-feature '", name, "' in fill_lid.scad"));
 }
 if (SUBFEATURE != "") subfeature_by_name(SUBFEATURE);
