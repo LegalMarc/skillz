@@ -1,6 +1,6 @@
 # Resume note — revision 10 (read this first)
 
-**Where it stands:** revision 10 (test print 2's fixes, D36-D40) is implemented
+**Where it stands:** revision 10 (test print 2's fixes, D36-D40, plus the review-of-revision-10 fixes F1-F8: perpendicular stop faces, motion declared) is implemented
 on branch `pill_organizer_rev10`, not pushed, no PR. Parts, params, probes,
 docs, print-ready STLs, maquette and section plates, and previews are
 regenerated. The review below this note was written for revision 9 and is kept

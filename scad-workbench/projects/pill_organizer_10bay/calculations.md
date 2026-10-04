@@ -5,7 +5,7 @@ All lengths mm, all angles degrees. `tan(40) = 0.839100`, `tan(25) = 0.466308`,
 
 **Revision 10.** Test print 2 (D36-D40). Tray A's floor tilts 35 degrees toward
 the front wall, the porch is 40 degrees, bins are deeper and wider, the pick lid
-is retained by lugs behind pillars, the rail-1 buttress is thicker. Where a table
+is retained by lugs against stop blocks with faces perpendicular to the pick plane, the rail-1 buttress is thicker. Where a table
 below says "(rev 9)" its numbers are the old ones; the new ones are in the
 revision 10 sections at the end of this file, which win.
 
@@ -32,7 +32,7 @@ the 90-day charge.
 |---|---|---|---|
 | Pill envelope (length x diameter) | 26.0 x 11.0 | User, D2 | OK |
 | Build volume | 256 x 256 x 256 | User sketch | OK |
-| Usable footprint / height | 243 x 243 x 243 | 256 less 13mm skirt/brim + exclusion (D3) | OK |
+| Usable footprint / height | 246 x 246 x 250 | 256 less 5 mm margin each side in X and Y, height 250 (D37; D3's 243 x 243 x 243 is superseded) | OK |
 | Bays per row | 5, two rows | User | OK |
 | Lids | exactly 2, grouped by function | User, D8 | OK |
 | Target charge per bay | ~90-day supply, one large capsule/day | User | OK |
@@ -439,17 +439,17 @@ range for every pill on it to be able to slide.
 | Floor at the front wall / at the chute foot | `base_z` / `base_z + tray_d x tan(35)` | 3.0 / 31.0 |
 | Height cost | `tray_d x tan(35)`; at 30 degrees it would be 23.1, at 40 33.6 | 28.0 |
 | Chute floor | 40 degrees from the foot (porch = ramp, D36) | one straight line, 31.0 at y 42.8, 66.6 at y 85.2 |
-| Mouth into tray A | `chute_clear` vertical = 27.6 perpendicular to the floor | 1.06x pill length |
+| Mouth into tray A | true minimum, `(chute_clear - wall_div x tan(40)) x cos(40)`, from the back-bottom corner of the wall between the trays (the front-bottom corner gives 27.6) | **26.03**, 1.0x pill length; asserted >= pill length. Only a capsule standing on end is limited by it |
 | Pile crest at the front wall, repose r | `outletA_top - tray_d x tan(r)`, outletA_top 67.0 | 48.4 (25), **43.9 (30)**, 39.0 (35) |
 | Pile depth at the front wall | crest - 3.0 | 45.4 (25), **40.9 (30)**, 36.0 (35) |
-| Front wall (scalloped) | `trayA_front_h` | 52.0 |
-| Reach over the wall, repose 30 / 25 | wall - crest | **8.1** / 3.6 (asserted > 2 at 25) |
+| Front wall (scalloped) | `trayA_front_h`; 52 until the revision 10 review | 55.0 |
+| Reach over the wall, repose 30 / 25 | wall - crest | **11.1** / 6.6 (asserted > pill radius, 5.5, at 25) |
 
 What 35 buys against the estimate: at repose 30 the floor is 5 degrees past it,
 at 35 it is exactly at the limit, and at 25 10 degrees past. Below the floor's
 angle the pile cannot rest on it, so the pile re-forms against the front wall as
 pills are removed. What it costs: a pile 41 mm deep at the front wall (36 at
-repose 35) and a wall 52 high. The pile is deeper at the front than at the
+repose 35) and a wall 55 high. The pile is deeper at the front than at the
 mouth (36) because the floor is steeper than the pile surface; that is the point.
 The porch no longer carries a wedge: the throat/stagnation tables of D12 and D20
 above are history.
@@ -476,10 +476,10 @@ and 1.95 at 25), and the plane's slope must stay at or under 45 degrees, because
 the pick lid prints with the plate on the bed and the skirt, and now the lugs'
 vertical faces, lean over by that angle. Tray B's floor rose 49 mm; the plane at
 the wall between the trays is `rimA + (yB_tray0 / yB_tray1) x rise`, so rim A
-had to rise with it: 77. The front WALL stays low (52) by D17.
+had to rise with it: 77. The front WALL stays low (55) by D17.
 
 Plate fit (D37): footprint 245 x 194.8 (limit 246 x 246), height 189 (250). Pick
-lid in its print orientation 239 x 143.7 x 24.9; fill lid 233.8 x 111.8 x 3. The
+lid in its print orientation 239 x 139.3 x 22.7; fill lid 233.8 x 111.8 x 3. The
 vault's gable on the wider bay: `vault_up + vault_down` 12 -> 12.4 (4.4 / 8.0)
 so the face stays at 44.9 degrees from vertical (45.15 with 12.0); chute clear
 at the dividers 28.0, as before.
@@ -491,7 +491,7 @@ the trays, `fill_seat_z` over the hoppers), split into connected voids.
 
 | Row | Middle bay | End bay | vs 147.4 mL charge | Days at one/day |
 |---|---|---|---|---|
-| Row A, front tray, crossing chute | **428.0 mL** | 409.7 | 2.90x | 261 |
+| Row A, front tray, crossing chute | **427.6 mL** | 406.3 | 2.90x | 261 |
 | Row B, back tray, plain ramp | **200.2 mL** | 193.1 | 1.36x | 122 |
 | Cubby, per bay | 366 | 361 | | |
 
@@ -500,34 +500,49 @@ maximum with the lids on: about 3.09 L in a 9.0 L envelope. Row A's chute is
 taller and longer and its mouth pocket under tray B is 70 mm tall at the front;
 that pocket fills with pills that sit above the mouth and feed through it.
 
-### Derived: pick lid retention (D38)
+### Derived: pick lid retention (D38, perpendicular faces after the review)
+
+The first version stopped the lid with a lug whose front face was vertical,
+against the vertical back face of a pillar. The review of revision 10 showed it
+jamming on removal: lifting the lid by the front notches pivots it about its
+back edge, 106 mm behind the lugs, and a lug at depth d below the plane moves
+`d x theta` toward the stop while it rises `106 x theta` along the normal. With a
+vertical face that meant 7 to 25 mm3 of overlap at 0.5 to 2 degrees of tilt,
+freeing only at about 3 degrees. With both faces perpendicular to the plane the
+lug rises along the faces, and its sideways approach (0.5 mm of clearance, `d x
+theta`) only closes after it has risen clear of the stop (6.9 mm of overlap
+against `106 x theta` of rise: clear at 3.7 degrees, contact would need 4.7).
 
 Geometry per side, left (the right is the mirror):
 
 | Quantity | Formula | Value |
 |---|---|---|
-| Pillar | front wall not scalloped, from the side wall's inner face | x 2.8 .. 7.8 (`pillar_w` 5), full pick-plane height at y 0 .. 2.8 |
-| Pillar's back face | the inside face of the front wall, normal +Y | y = 2.8, vertical |
-| Lug | `pick_lug_t` x `pick_lug_len` x `pick_lug_dv` | 3.0 (X) x 5.0 (Y) x 8.0 (Z below the plate's underside) |
-| Lug position | against the side wall, in front of the buttress | x 3.3 .. 6.3, y 3.3 .. 8.3 (buttress starts at y 11.3) |
-| Clearance | `pick_lug_clear`, to the pillar face and to the side wall | 0.5 |
-| Travel to first contact | clearance / cos(slope) | 0.69 mm (probe: 0.709) |
-| Engagement | pillar top at its back face down to the lug's bottom | 7.3 mm vertical |
-| Air under the lug | to tray A's pile line | 30.1 mm |
-| Lug front face in print | vertical in assembly, so it leans over by the slope | 43.8 degrees, inside 45 |
+| Stop face | perpendicular to the plane; meets the plane at `pick_stop_y` and runs `pick_stop_depth` down along the inward normal, then drops vertically to the floor | y 3.8 at the plane, 9.0 deep, back to y 10.0 |
+| Stop block | fused to the side wall and front wall, `pick_stop_w` wide, top 0.2 under the plane (clipped by OUTER_CLIP) | x 2.8 .. 8.4, y 1.0 .. 10.0 |
+| Front wall pillar | scallop stops `pillar_w` from the side wall | x 2.8 .. 8.8 |
+| Lug | `pick_lug_t` x `pick_lug_len` x `pick_lug_d` | 4.0 (X) x 4.0 (along the slope) x 7.0 (perpendicular to the plate) |
+| Lug position | against the side wall, in front of the buttress | x 3.3 .. 7.3; lowest corner y 11.8, buttress front y 14.3 (rail1_y moved +3 for this) |
+| Clearance | `pick_lug_clear`, along the slope, face to face | 0.5 (probe: first contact 0.51) |
+| Engagement | lug depth below the plane, perpendicular | 6.86 mm; stop face runs 9.0 deep |
+| Material behind the face | along the slope from the face | 5.3 at the top (`y / cos(slope)`), 9.1 at 4 mm down |
+| Air under the lug | to tray A's pile line | 29.7 mm |
+| Lug front face in print | vertical (perpendicular to the plate) | no overhang |
+| Stop face in print | faces up and back, 46 degrees above horizontal | no support, sheds pills |
 
-Why a vertical face: a face perpendicular to the plane would touch the
-pillar's top edge, not its face (the plane meets the vertical back face at the
-pillar's top corner), so it would stop the lid at a line. A vertical front face
-lies flat on the vertical back face. Why not the buttress: it starts 8.5 mm
-behind the front wall; a lug beside it would have no face to bear on. Lifting
-straight up: the faces are parallel and vertical, so the lid separates from
-them with 0.5 mm clear all the way.
+The contact face meets the block's top (the plane) at 90 degrees, so the
+contact zone has no knife edge (the vertical-face pillar was a 46 degree wedge
+thinning to nothing there). Lugs are 4 mm thick, up from 3: a cantilever across
+the layers, with the stop block 5.6 wide to keep 1.1 mm beyond the lug.
+
+Back edge: `pick_lid_back_clear` 1.2 mm (0.35 until the review). Tilting about the
+back edge swings the plate's top-back corner into the wall behind tray B after
+9 degrees at 0.35; at 1.2 it clears 15 degrees with the lid's minimum clearance
+rising from 0.14 mm at rest to 0.25 at 15 degrees.
 
 Reversed (turned 180 degrees about the plane's normal): the skirt lands in the
-wall behind tray B (2562 mm3 of overlap); the lugs alone, in tray B's end bays,
+wall behind tray B (2449 mm3 of overlap); the lugs alone, in tray B's end bays,
 touch nothing. The lid cannot be put on turned round, and it is the skirt that
-says so. `probes/lid_retention.py` output is in the REVIEW_HANDOFF.
+says so. Output of `probes/lid_retention.py` is in `probes/lid_retention.out.txt`.
 
 ### Derived: the groove corner (D39)
 
@@ -537,13 +552,13 @@ says so. `probes/lid_retention.py` output is in the REVIEW_HANDOFF.
 | Buttress length in Y | `rail_boss_w` | 19 -> 23 |
 | Buttress either side of the groove's widest part | `(rail_boss_w - rail_tip_w - 2 x rail_clear) / 2` | 3.5 -> 5.8 |
 | End bay width left | `bay_w - rail_boss` | 40.0 -> 37.96 (needs >= 26) |
-| Front corner | 2.4 mm fin above the scallop -> pillar 2.8 front wall x 7.8 deep | |
+| Front corner | 2.4 mm fin above the scallop -> full-height front wall 6 mm wide with a stop block behind it | |
 
 Measured by `probes/corner_thickness.py`: skin 4.40 at z 30, 60 and 90;
-buttress 5.86 / 5.81 either side; pillar 2.8 x 7.8. Slice scan for material
+buttress 5.86 / 5.81 either side; stop block to y 10.0 at z 62, 9.1 mm of material behind the contact face. Slice scan for material
 under 2 mm: only wedge tips where the pick plane cuts a wall and the 0.5 mm
-label recess leaves 1.9 mm; no region over 4 mm2 near the groove or the pillar
-beyond the pillar's own plane-cut top.
+label recess leaves 1.9 mm; no region over 4 mm2 near the groove or the stop block
+beyond the front wall's own plane-cut top.
 
 ### Derived: rail fit (D40)
 

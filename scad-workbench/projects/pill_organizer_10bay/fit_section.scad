@@ -11,7 +11,7 @@
 //
 //   PART="body"     the right-hand end of the body, full size: bay 5
 //                   from the middle of divider 4 to the right side
-//                   wall, up to z 160 (a little above tray B's rim) and
+//                   wall, up to z 165 (6 mm above tray B's rim) and
 //                   back to where hopper B's ramp rises through that
 //                   height, so hopper B is a closed funnel open only
 //                   at the top. Pour real capsules in: they run down
@@ -29,7 +29,8 @@
 //                   chute in cross-section; and the front joining
 //                   groove breaking out through the top, now with a
 //                   4.4 mm skin and a longer buttress (D39).
-//   PART="pick_lid" the matching right-hand end of the pick lid, in
+//   PART="pick_lid" the matching right-hand end of the pick lid (cut back
+//                   far enough to include the right finger notch), in
 //                   print orientation, with its right retention lug
 //                   (D38). Lay it on the section: the lug drops in
 //                   directly behind the pillar (0.5 mm clear), the
@@ -57,7 +58,8 @@ use <parts/fill_lid.scad>
 PART = is_undef(PART) ? "body" : PART;
 
 sec_x0 = wall_x0(4) + wall_div / 2;          // the middle of divider 4
-sec_z1 = 160.0;
+sec_z1 = 165.0;     // 6.4 mm over tray B's rim (158.6): the wall behind the lid's back edge is there
+                    // (review F2). Hopper B's ramp passes 166 at y 152, the most the closed funnel allows
 // back to where hopper B's ramp rises 1mm past the top cut, so the funnel's
 // floor leaves through the top and its back is closed
 sec_y1 = ceil(yB_tray1 + (sec_z1 + 1 - rampB_foot) / ramp_tan);
@@ -78,7 +80,11 @@ pick_lid_drop  = (pickplane_front + pick_lid_gap + pick_lid_tv) * cos(pick_lid_s
 pick_lid_backy = yB_tray1 - pick_lid_back_clear;
 pick_lid_shift = pick_lid_backy * cos(pick_lid_slope)
                + (pickplane(pick_lid_backy) + pick_lid_gap + pick_lid_tv) * sin(pick_lid_slope);
-lid_x0 = sec_x0 - (module_w - pick_lid_w) / 2;  // the same plane, in the lid's own x
+// The lid piece is cut wider than the body section, back to just before the right-hand
+// finger notch (bay 4's centre, x 156..178), so that the section's lid has a
+// notch to lift by. Its left part overhangs air: it is a lid end, not a lid.
+lid_x0 = min(sec_x0 - (module_w - pick_lid_w) / 2,
+             pick_notch_x[1] - pick_notch_w / 2 - (module_w - pick_lid_w) / 2 - 8);
 
 module lid_section() {
     translate([-lid_x0, pick_lid_shift, pick_lid_drop])

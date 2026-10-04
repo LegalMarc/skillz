@@ -45,10 +45,11 @@
 //   lays the plate flat with the skirt pointing DOWN (INCIDENTS).
 //   NOT as modelled.
 //
-// To remove: lift STRAIGHT UP by the two notches. Do not tilt
-//   it about its back edge -- that edge is 0.35mm from the wall
-//   behind tray B and the top-back corner meets the wall after
-//   about 5 degrees. Nothing to unclip.
+// To remove: lift it by the finger notches. It may tilt about its back edge
+//   (1.2 mm from the wall behind tray B; swept clear to 15 degrees) or come
+//   straight up or along the plane's normal; none of these touches the stop
+//   blocks after the first few millimetres (probes/lid_retention.py, joints.json
+//   motion). Nothing to unclip.
 //
 // EXPECTED_BBOX: [239.0, 87.6, 111.63]
 // ============================================================

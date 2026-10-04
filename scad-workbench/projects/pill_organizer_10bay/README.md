@@ -15,7 +15,7 @@ the bins felt small; the groove corner tore again; and the coupon had been read
 off a brim-fused print. Revision 10 tilts tray A's floor 35 degrees toward the
 front wall and makes the porch 40 degrees (D36), deepens the trays 28 -> 40 mm
 and widens the bays to 44.96 mm (D37), holds the lid on with lugs that stop
-against pillars of the front wall (D38), thickens the groove corner (D39) and
+against stop blocks in tray A's front corners (D38), thickens the groove corner (D39) and
 sets `rail_clear` to 0.20 pending a new coupon (D40). `INCIDENTS.md` has the
 lid error and why no check caught it. The earlier history: revision 3 took the
 envelope from 9.45 L to 5.54 L with a 40-degree ramp; revision 4 scalloped the
@@ -30,7 +30,7 @@ revision 9 fixed tray B's pile.
 |---|---|
 | Overall | 245 x 194.8 x 189 mm (the 245 includes the 5 mm joining rail; the plate allows 246 x 246 x 250) |
 | Bays | 10, two rows of 5, 44.96 mm clear each, trays 40 mm deep |
-| Capacity, middle bay | **428 mL front row, 200 mL back row**; end bays 410 / 193. About 3.1 L total, geometric maximum |
+| Capacity, middle bay | **428 mL front row, 200 mL back row**; end bays 406 / 193. About 3.1 L total, geometric maximum |
 | Printed parts | **3 designs, 3 pieces**, no hardware |
 | Validation | **13 passed, 0 failed, 4 n/a, 0 inconclusive, 1 advisory** (the advisory is `check_printability.py`; its overhang half fails every real FDM part on area, but its THIN-WALL half caught a real 0.2 mm wall in revision 7 that everyone had stopped reading it for — read both halves) |
 | Confidence | Tier 2 — geometry verified, fit uncalibrated |
@@ -73,13 +73,13 @@ the wedge to work.
 - **The front tray is a parts bin, not a well.** The pile crests at 43.9 mm at
   the front wall (40.9 mm deep), sloping up to 67 mm at the chute mouth. The lid
   plane stays under 45 degrees, which pins its front end at 77 mm; the front
-  WALL is scalloped down to 52, so the reach over it is **8.1 mm** (3.6 at a
-  25-degree repose). With the lid off, tray A is open at the top and front.
+  WALL is scalloped down to 55, so the reach over it is **11.1 mm** (6.6 at a
+  25-degree repose, a pill radius or more). With the lid off, tray A is open at the top and front.
   With it on, the lid's skirt hangs down the outside and the scallops are
   invisible. Two rounded finger notches in the skirt, under bays 2 and 4, are
-  what you lift the lid by, straight up. In each END bay the scallop stops 5 mm
-  short of the side wall: a pillar of the front wall stays at full height there
-  and is what holds the lid on (below).
+  what you lift the lid by (it tilts about its back edge, or lifts straight). In each END bay the scallop stops 6 mm
+  short of the side wall: the front wall stays at full height there, with a stop
+  block behind it in the corner, and that is what holds the lid on (below).
 - **The wedge under the chute is an accessory cubby.** It can never hold pills,
   so it holds everything else — a splitter, a funnel, a bottle of the next
   refill. One void the full inner width, 70 mm deep, 83 mm tall at its shallow
@@ -122,13 +122,18 @@ the wedge to work.
   something to lift by. The notch stops at the seat plane: with the lid on,
   nothing below it is open. (Revisions 5 to 7 had snap tabs; test print 1
   broke every one, because a tab printed standing up bends across its layers.)
-- **The pick lid is held by its lugs, against the pillars** (D38). Two lugs
-  under its ends drop into the end bays of tray A, against the side walls and
-  directly behind the front wall's pillars, 0.5 mm clear. The lid is on a
-  43.8-degree slope; PLA on PLA holds to about 17. Slide it down the slope and
-  each lug's front face meets the pillar's back face after 0.7 mm and engages it
-  over 7.3 mm. Lift it straight up and nothing touches. Turn it round and the
-  skirt lands in the wall behind tray B, so it cannot sit. "FRONT" is embossed
+- **The pick lid is held by its lugs, against stop blocks** (D38). Two lugs
+  under its ends (4 mm thick) drop into the end bays of tray A, against the
+  side walls, each directly behind a stop block fused into the front corner. The
+  lid is on a 43.8-degree slope; PLA on PLA holds to about 17. Both stop faces,
+  the lug's and the block's, are **perpendicular to the pick plane**: slide the
+  lid down the slope and the faces meet flat after 0.5 mm and overlap by 6.9
+  mm. Lift it by the front notches, which pivots it about its back edge, and the
+  lug swings along the plane's normal, along the faces, not into them; lift it
+  straight up or along the normal and nothing touches either. Turn it round and
+  the skirt lands in the wall behind tray B, so it cannot sit. (The first
+  version had a vertical stop face; the lug drove into it at 0.5 to 2 degrees
+  of tilt and jammed. The review of revision 10 found it.) "FRONT" is embossed
   on the skirt. The two notches in the skirt are finger grips.
 - **Foot pads.** Four 10 mm recesses in the base take stick-on rubber feet, so
   a unit that is bumped while pouring does not skate.
@@ -153,12 +158,16 @@ the wedge to work.
 bridging them as an L has its mass centre well below any back-top pivot and
 falls shut every time; a front pivot runs the far corner into the benchtop. The
 pick lid lifts straight off. What keeps it on the slope is its two lugs against
-the front wall's pillars (D38), not its skirt: the skirt hangs outside the front
+the stop blocks in tray A's front corners (D38), not its skirt: the skirt hangs outside the front
 face, and sliding down the slope takes it further from that face. Revisions 4 to
 9 said the skirt did it; test print 2 slid the lid straight off.
-`probes/lid_retention.py` now moves the lid and fails if nothing stops it. It
-lifts straight, not tilted: its back edge is 0.35 mm from the wall behind tray B
-and the top-back corner meets that wall after 5 degrees of tilt.
+`probes/lid_retention.py` now moves the lid and fails if nothing stops it, if it
+jams on the way off, or if it can be fitted turned round. It lifts by its front
+notches tilted about its back edge, which is 1.2 mm from the wall behind tray B
+(0.35 until the review of revision 10: the top-back corner met that wall after 9
+degrees of tilt); it is swept clear to 15 degrees, with 0.14 mm of clearance at
+rest and more as it tilts, and the whole removal is declared in `joints.json` so
+`motion_sweep.py` runs it.
 
 **The pick surface is one sloped plane, not two steps.** A lid spanning two
 steps is a Z in section, and a Z cannot be printed without support whichever way
@@ -187,8 +196,8 @@ and label recess ceilings, the 1 mm lips at the ends of each vault ridge, and
 the seat ledge's underside along the leaning divider; the pick lid has a 1 mm
 strip at the tip of its skirt, its plate chamfers on the bed, and the edges of
 the "FRONT" relief (0.6 mm, 45.3 to 46.2 degrees); the fill lid has only its 1
-mm top chamfer, which lies on the bed. The lugs' vertical front faces lean over
-by the plane's 43.8 degrees and are not flagged.
+mm top chamfer, which lies on the bed. The lugs' front faces, perpendicular to the plane, stand
+vertical in print; the stop blocks' contact faces print facing up and back.
 
 Slicer: **no brim** (Elegoo Slicer: Others, Skirt and brim, Brim type,
 No-brim). Test print 1 used one and it fused into the walls. Enable bridge
@@ -197,10 +206,10 @@ detection, which is on by default in Orca-based slicers.
 Purchased: four stick-on rubber feet, 10 mm; 1/2 inch TZe label tape.
 
 Test print: `build/section/test_print_section_256.3mf` -- full size, on one
-256 mm plate: the right-hand end bay of the body (to z 160, back to where
-hopper B's ramp leaves the top: 49 x 146 x 160 mm), the matching end of the pick
-lid, a corner of the fill mouth and of the fill lid, and the coupon. About 7 to
-8 hours. `python3 build/maquette/make_plate.py section --export` rebuilds it
+256 mm plate: the right-hand end bay of the body (to z 165, back to where
+hopper B's ramp leaves the top: 49 x 152 x 165 mm), the matching end of the pick
+lid (91 x 139 mm, wide enough to include the right finger notch), a corner of the fill mouth and of the fill lid, and the coupon. About 8 hours
+(500 cm3 of solid against test print 2's 191). `python3 build/maquette/make_plate.py section --export` rebuilds it
 from the sources. This is the one to
 print; see "The full-size section" below. The 0.42 maquette plate
 (`build/maquette/test_print_plate_256.3mf`) judges shape only.
@@ -233,9 +242,12 @@ parts, so every clearance, wall and bridge is the real one. What to do with it:
    top. They run down the ramp, out under the outlet and pile in tray B. The
    pile must stay below the wall in front of it, with room to spare.
 3. **Pick lid (D38).** Lay the lid end on the section: the lug drops in against
-   the side wall directly behind the pillar, the plate sits flat on the plane,
+   the side wall directly behind the stop block, the plate sits flat on the plane,
    the skirt covers the scalloped front. It must not slide down the slope (it
-   moves under 1 mm). Lift it straight off. Try it turned round.
+   moves 0.5 mm). Lift it by the front notch with one hand, letting it tilt
+   about its back edge, and lower it hinged from the back: neither may jam.
+   Lift it straight off. Try it turned round. This is a lid end on a section,
+   so a pass is provisional for the full lid.
 4. **Groove corner (D39).** Lower a spare rail into the front groove; nothing
    tears at the break-out.
 5. **Fill lid.** Drop the lid corner into the mouth corner: it should go in
@@ -269,9 +281,13 @@ judge the shape and the lid fits; do not judge the flow from it.
 
 ## Reviewer's attention
 
-- **Nothing in this revision moves**, but the lid is the thing that came off, so
-  `probes/lid_retention.py` moves it: rest, 1/2/5 mm down-slope, a 30 mm lift,
-  and a 180-degree reversal, with exact boolean overlaps. Run it.
+- **The pick lid is the one moving part**, if only on removal, and the review
+  of revision 10 found that treating it as static had hidden a stop face that
+  jammed. `probes/lid_retention.py` moves it: rest, 1/2/5 mm down-slope, a 30 mm
+  straight lift and a lift along the plane's normal, a tilt about the back edge
+  (0 to 15 degrees in 0.25 degree steps, back edge raised 0/1/3 mm) and a
+  180-degree reversal, with exact boolean overlaps; `joints.json` declares the
+  removal motions for `motion_sweep.py`. Run both.
 - **The new heights.** Everything behind tray A rose: tray B's floor 105.6,
   hopper_rim 189, tray A's rim 77. The plane is 43.8 degrees (limit 45); the
   wall between the trays holds 14.7 over tray B's floor and tray B's pile is 6.4
@@ -279,15 +295,17 @@ judge the shape and the lid fits; do not judge the flow from it.
 - **Tray A's floor angle** is a judgement from the repose estimate, not a
   measurement. If real capsules need more than 35 degrees, the one plane (40,
   with the chute) is the limit.
-- **The chute mouth is 36 mm vertical, 27.6 perpendicular** to the 40-degree
-  floor: 1.06x a pill length. Row B's outlet is tighter (27 vertical) and fed
+- **The chute mouth is 36 mm vertical; its true minimum is 26.0 mm**,
+  perpendicular to the 40-degree floor from the back-bottom corner of the wall
+  between the trays (the front-bottom corner gives 27.6): 1.0x a pill length,
+  asserted. It matters only to a capsule standing on end. Row B's outlet is tighter (27 vertical) and fed
   well in test print 2.
 - **The hanging wall between the trays** is now 35 mm tall below tray B's floor
   (it was 14), 2.4 mm thick, carried by the dividers and the outlet chamfers.
 - **The porch ceiling is a flat 45 x 40 mm bridge in every bay** (D29). Check it
   on the first print for sag.
-- The ~2 L of solid wedge under the chute is infill. The body is 2.0 L of
-  solid; plan for about 600 g at 15% infill.
+- The ~2 L of solid wedge under the chute is infill. The body is 2.3 L of
+  solid; plan for about 650 g at 15% infill.
 - Bay width is **1.73x the longest pill** against a 2-3x mass-flow rule of
   thumb. Mitigated, not eliminated.
 - The two `NEAR MISS` notes (0.150 mm, 0.144 mm) are both lids' intended
@@ -322,7 +340,7 @@ fit. The independent review of revision 8 found tray B's pile above its wall,
 which revision 9 fixes (D33). Test print 2 (full-size section) found the
 lid retention, the row A feed, the bin size, the groove corner and the coupon
 reading that revision 10 fixes. What is *not* verified: that the tilted floor
-feeds, that the new lugs hold on a real print, and the rail fit at 0.20; the
+feeds, that the new lugs hold and do not jam on a real print, and the rail fit at 0.20; the
 revision 10 section print is built to check all three. The `probes/` directory
 holds the scripts behind every revision 10 number (`lid_retention.py`,
 `corner_thickness.py`, `capacity.py`, `overhang_scan.py`).

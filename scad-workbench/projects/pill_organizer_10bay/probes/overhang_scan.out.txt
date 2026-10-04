@@ -1,0 +1,54 @@
+
+build/print_ready/body.stl: 6160 faces, bounds [-5.0, 0.0, 0.0] .. [240.0, 194.8, 189.0]
+  downward faces past 45 deg from vertical, above the bed: flat 9664 mm2, steep 3423 mm2
+    flat    8530.1 mm2  normal (np.float64(0.0), np.float64(0.0), np.float64(-1.0))  90.0 deg from vertical  x 18..222 y 60..72 z 103..103
+    flat     319.1 mm2  normal (np.float64(0.0), np.float64(0.0), np.float64(-1.0))  90.0 deg from vertical  x 20..220 y 44..44 z 67..67
+    flat     319.1 mm2  normal (np.float64(0.0), np.float64(0.0), np.float64(-1.0))  90.0 deg from vertical  x 20..220 y 86..87 z 137..137
+    flat     313.3 mm2  normal (np.float64(0.0), np.float64(0.0), np.float64(-1.0))  90.0 deg from vertical  x 10..230 y 13..181 z 1..1
+    flat      90.0 mm2  normal (np.float64(0.0), np.float64(0.0), np.float64(-1.0))  90.0 deg from vertical  x 19..221 y 43..43 z 99..99
+    flat      90.0 mm2  normal (np.float64(0.0), np.float64(0.0), np.float64(-1.0))  90.0 deg from vertical  x 19..221 y 0..0 z 19..19
+    flat       2.4 mm2  normal (np.float64(0.0), np.float64(0.1), np.float64(-1.0))  86.9 deg from vertical  x 18..222 y 85..85 z 103..103
+    steep   1064.5 mm2  normal (np.float64(0.0), np.float64(-0.6), np.float64(-0.8))  54.0 deg from vertical  x 18..222 y 149..151 z 183..185
+    steep    753.8 mm2  normal (np.float64(0.0), np.float64(0.6), np.float64(-0.8))  51.4 deg from vertical  x 18..232 y 157..159 z 163..165
+    steep    703.9 mm2  normal (np.float64(0.0), np.float64(-0.7), np.float64(-0.7))  45.0 deg from vertical  x 18..222 y 190..191 z 184..185
+    steep    481.1 mm2  normal (np.float64(0.0), np.float64(0.6), np.float64(-0.8))  51.2 deg from vertical  x 8..222 y 46..87 z 102..104
+    steep     88.1 mm2  normal (np.float64(0.0), np.float64(0.1), np.float64(-1.0))  84.4 deg from vertical  x 18..222 y 47..47 z 103..103
+    steep     88.1 mm2  normal (np.float64(0.0), np.float64(0.5), np.float64(-0.9))  61.9 deg from vertical  x 18..222 y 46..46 z 102..102
+    steep     88.1 mm2  normal (np.float64(0.0), np.float64(0.3), np.float64(-1.0))  73.1 deg from vertical  x 18..222 y 47..47 z 102..103
+    steep     39.0 mm2  normal (np.float64(-0.7), np.float64(-0.0), np.float64(-0.7))  45.0 deg from vertical  x 42..92 y 85..88 z 132..134
+    steep     26.0 mm2  normal (np.float64(0.7), np.float64(0.0), np.float64(-0.7))  45.0 deg from vertical  x 5..8 y 85..88 z 132..134
+    steep     16.3 mm2  normal (np.float64(-0.0), np.float64(-0.1), np.float64(-1.0))  84.4 deg from vertical  x 5..235 y 43..43 z 67..67
+    steep     16.3 mm2  normal (np.float64(-0.0), np.float64(-0.1), np.float64(-1.0))  84.4 deg from vertical  x 5..235 y 85..85 z 137..137
+    steep     16.3 mm2  normal (np.float64(-0.0), np.float64(0.1), np.float64(-1.0))  84.4 deg from vertical  x 5..235 y 45..45 z 67..67
+    steep     16.3 mm2  normal (np.float64(-0.0), np.float64(0.1), np.float64(-1.0))  84.4 deg from vertical  x 5..235 y 88..88 z 137..137
+    steep      9.2 mm2  normal (np.float64(0.0), np.float64(0.2), np.float64(-1.0))  78.1 deg from vertical  x 18..222 y 85..85 z 103..103
+    steep      8.0 mm2  normal (np.float64(0.0), np.float64(-0.6), np.float64(-0.8))  50.6 deg from vertical  x 24..215 y 156..156 z 165..166
+    steep      4.6 mm2  normal (np.float64(0.0), np.float64(-0.5), np.float64(-0.9))  61.9 deg from vertical  x 25..215 y 156..156 z 166..166
+
+build/print_ready/fill_lid.stl: 456 faces, bounds [0.0, -103.8, 0.0] .. [233.8, 8.0, 3.0]
+  downward faces past 45 deg from vertical, above the bed: flat 0 mm2, steep 62 mm2
+    steep     54.5 mm2  normal (np.float64(0.0), np.float64(0.7), np.float64(-0.7))  45.0 deg from vertical  x 69..165 y -1..-1 z 0..0
+    steep      0.5 mm2  normal (np.float64(-0.1), np.float64(-0.7), np.float64(-0.7))  45.0 deg from vertical  x 2..2 y -103..-103 z 0..1
+    steep      0.5 mm2  normal (np.float64(0.7), np.float64(-0.1), np.float64(-0.7))  45.0 deg from vertical  x 233..233 y -102..-102 z 0..1
+    steep      0.5 mm2  normal (np.float64(0.1), np.float64(-0.7), np.float64(-0.7))  45.0 deg from vertical  x 232..232 y -103..-103 z 0..1
+    steep      0.4 mm2  normal (np.float64(0.7), np.float64(-0.2), np.float64(-0.7))  45.0 deg from vertical  x 233..233 y -102..-102 z 0..1
+    steep      0.4 mm2  normal (np.float64(0.2), np.float64(-0.7), np.float64(-0.7))  45.0 deg from vertical  x 232..232 y -103..-103 z 0..1
+    steep      0.4 mm2  normal (np.float64(0.5), np.float64(-0.4), np.float64(-0.7))  45.0 deg from vertical  x 233..233 y -103..-103 z 0..1
+    steep      0.4 mm2  normal (np.float64(0.4), np.float64(-0.5), np.float64(-0.7))  45.0 deg from vertical  x 233..233 y -103..-103 z 0..1
+    steep      0.4 mm2  normal (np.float64(-0.2), np.float64(-0.7), np.float64(-0.7))  45.0 deg from vertical  x 2..2 y -103..-103 z 0..1
+    steep      0.4 mm2  normal (np.float64(0.7), np.float64(0.2), np.float64(-0.7))  45.0 deg from vertical  x 233..233 y -2..-2 z 0..1
+    steep      0.4 mm2  normal (np.float64(0.5), np.float64(0.4), np.float64(-0.7))  45.0 deg from vertical  x 233..233 y -1..-1 z 0..1
+    steep      0.4 mm2  normal (np.float64(-0.4), np.float64(-0.5), np.float64(-0.7))  45.0 deg from vertical  x 1..1 y -103..-103 z 0..1
+    steep      0.4 mm2  normal (np.float64(-0.5), np.float64(-0.4), np.float64(-0.7))  45.0 deg from vertical  x 1..1 y -103..-103 z 0..1
+    steep      0.4 mm2  normal (np.float64(0.4), np.float64(0.5), np.float64(-0.7))  45.0 deg from vertical  x 233..233 y -1..-1 z 0..1
+    steep      0.4 mm2  normal (np.float64(0.6), np.float64(-0.3), np.float64(-0.7))  45.0 deg from vertical  x 233..233 y -103..-102 z 0..1
+    steep      0.4 mm2  normal (np.float64(0.3), np.float64(-0.6), np.float64(-0.7))  45.0 deg from vertical  x 232..233 y -103..-103 z 0..1
+
+build/print_ready/pick_lid.stl: 2438 faces, bounds [0.0, 1.2, 0.0] .. [239.0, 140.4, 22.7]
+  downward faces past 45 deg from vertical, above the bed: flat 0 mm2, steep 117 mm2
+    steep     97.0 mm2  normal (np.float64(-0.0), np.float64(0.4), np.float64(-0.9))  66.9 deg from vertical  x 80..159 y 120..120 z 0..0
+    steep     18.0 mm2  normal (np.float64(0.0), np.float64(-0.7), np.float64(-0.7))  46.2 deg from vertical  x 101..138 y 131..136 z 11..16
+    steep      0.8 mm2  normal (np.float64(0.1), np.float64(-0.7), np.float64(-0.7))  45.9 deg from vertical  x 111..120 y 131..136 z 11..16
+    steep      0.6 mm2  normal (np.float64(-0.1), np.float64(-0.7), np.float64(-0.7))  45.9 deg from vertical  x 111..120 y 131..136 z 11..16
+    steep      0.5 mm2  normal (np.float64(0.2), np.float64(-0.7), np.float64(-0.7))  45.3 deg from vertical  x 112..121 y 131..136 z 11..16
+    steep      0.4 mm2  normal (np.float64(-0.2), np.float64(-0.7), np.float64(-0.7))  45.3 deg from vertical  x 111..120 y 131..136 z 11..16

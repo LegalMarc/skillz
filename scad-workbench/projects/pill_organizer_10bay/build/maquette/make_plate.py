@@ -57,15 +57,15 @@ PLATES = {
     ]),
     # full size: one end bay of the real body back to hopper B's ramp, the end
     # of the real pick lid, a corner of the fill mouth and of the fill lid
-    # revision 10: the body section is 49 x 146 x 160, the lid end 48.5 x 142.5,
-    # the coupon 124 x 30; the coupon moves behind them (y 180)
+    # revision 10: the body section is 49 x 152 x 165, the lid end about 91 x 143,
+    # the coupon 124 x 30; the coupon sits behind them (y 190)
     "section": ("build/section/test_print_section_256.3mf",
                 "full-size end bay + pick lid end + fill mouth and lid corners + calibration coupon", [
         ("body_section_bay5_full_size",   "build/section/body.stl",       (20.0, 20.0)),
-        ("pick_lid_end_full_size",        "build/section/pick_lid.stl",   (90.0, 20.0)),
-        ("fill_mouth_corner_full_size",   "build/section/mouth.stl",      (160.0, 20.0)),
-        ("fill_lid_corner_full_size",     "build/section/fill_lid.stl",   (160.0, 65.0)),
-        ("calibration_coupon",            "build/calibration_coupon.stl", (20.0, 180.0)),
+        ("pick_lid_end_full_size",        "build/section/pick_lid.stl",   (80.0, 20.0)),
+        ("fill_mouth_corner_full_size",   "build/section/mouth.stl",      (190.0, 20.0)),
+        ("fill_lid_corner_full_size",     "build/section/fill_lid.stl",   (190.0, 65.0)),
+        ("calibration_coupon",            "build/calibration_coupon.stl", (20.0, 190.0)),
     ]),
 }
 WHICH = sys.argv[1] if len(sys.argv) > 1 else "maquette"
