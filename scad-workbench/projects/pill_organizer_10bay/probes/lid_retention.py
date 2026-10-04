@@ -13,6 +13,13 @@ boolean volumes on the real meshes (not a contact heuristic):
   (c) lifted straight up 30 mm in 1 mm steps it never intersects
   (d) turned 180 degrees about the plane's normal it cannot seat: it intersects
       the body at every in-plane position that keeps it over the pick plane
+  (e) tilted 0..15 degrees about its BACK edge in 0.25 degree steps (the way a
+      lid lifted by the front notches or hinged on from the back moves), with
+      the back edge raised 0, 1 and 3 mm, it never intersects the body; the
+      minimum clearance is reported every degree. The first stop face was
+      vertical and jammed here at 0.5-2 degrees (review of revision 10, F1)
+  (f) lifted along the plane's normal, 0..30 mm, it never intersects
+  (g) the built lid's skirt reaches below the scalloped front wall's top
 
 Exit status 1 on any failure.
 """
@@ -58,8 +65,8 @@ for _ in range(14):
     if overlap_mm3(body, moved(lid, translation(down * mid))) > TOL: hi = mid
     else: lo = mid
 check("(a) first contact within 1 mm of travel", hi < 1.0, f"first contact at {hi:.3f} mm "
-      f"(expected {P['lug_clear'] / np.cos(s):.3f} = clearance / cos(slope))")
-# how much of the pillar's back face the lug covers, from the overlap at 2 mm
+      f"(expected {P['lug_clear']:.3f} = the clearance: both stop faces are perpendicular to the slope)")
+# how much of the stop face the lug covers, from the overlap at 2 mm
 deep = trimesh.boolean.intersection([body, moved(lid, translation(down * 2.0))], engine="manifold")
 zr = deep.bounds[:, 2]
 print(f"      overlap region at 2 mm: z {zr[0]:.2f} .. {zr[1]:.2f} (height {zr[1]-zr[0]:.2f} mm), "
@@ -103,5 +110,47 @@ hit = trimesh.boolean.intersection([body, rev], engine="manifold")
 zr = hit.bounds
 print(f"      reversed lid meets the body at y {zr[0,1]:.1f} .. {zr[1,1]:.1f}, z {zr[0,2]:.1f} .. {zr[1,2]:.1f}")
 
+# (e) tilt about the back edge
+print()
+back = lid.vertices[np.isclose(lid.vertices[:, 1], lid.bounds[1][1])]
+pivot = back[np.argmin(back[:, 2])]
+print(f"      back edge pivot at y {pivot[1]:.2f}, z {pivot[2]:.2f}")
+fcl_ok = True
+try:
+    from trimesh.collision import CollisionManager
+    cm = CollisionManager(); cm.add_object("body", body)
+except Exception:
+    fcl_ok = False
+worst, first_bad, mins = 0.0, None, {}
+for lift in (0.0, 1.0, 3.0):
+    for ang in np.arange(0.0, 15.01, 0.25):
+        R = trimesh.transformations.rotation_matrix(-np.radians(ang), [1, 0, 0], pivot)
+        m = moved(lid, translation([0, 0, lift]) @ R)
+        v = overlap_mm3(body, m)
+        if v > TOL and first_bad is None: first_bad = (lift, ang, v)
+        worst = max(worst, v)
+        if fcl_ok and abs(ang - round(ang)) < 1e-9 and lift == 0.0:
+            mins[int(round(ang))] = cm.min_distance_single(m)
+front_z = [moved(lid, trimesh.transformations.rotation_matrix(-np.radians(5), [1, 0, 0], pivot)).bounds[1][2] - lid.bounds[1][2]]
+check("(e) tilting about the back edge, 0..15 deg x back edge raised 0/1/3 mm (183 poses): no intersection",
+      first_bad is None, f"worst overlap {worst:.3f} mm3" if first_bad is None else f"first overlap at lift {first_bad[0]} mm, {first_bad[1]} deg: {first_bad[2]:.2f} mm3")
+if mins:
+    print("      min clearance lid <-> body, back edge not raised, mm per degree of tilt:")
+    print("      " + "  ".join(f"{a}:{d:.2f}" for a, d in mins.items()))
+# the same poses in the reverse order are the lid being hinged ON from the back;
+# the poses are identical, so the result is too -- stated, not re-run.
+
+# (f) along the plane's normal
+worst = 0.0
+for k in range(0, 31):
+    worst = max(worst, overlap_mm3(body, moved(lid, translation(N * float(k)))))
+check("(f) lifts along the plane's normal 0..30 mm (31 poses): no intersection", worst <= TOL,
+      f"worst overlap {worst:.3f} mm3")
+
+# (g) the skirt really covers the scalloped wall
+skirt_bot = lid.bounds[0][2]
+check("(g) the built lid's skirt reaches at least 3 mm below the scalloped front wall's top",
+      skirt_bot <= P["trayA_front_h"] - 3.0, f"skirt bottom z {skirt_bot:.1f}, wall top {P['trayA_front_h']:.1f}")
+# first contact along the slope, as built, vs the 0.5 mm clearance
 print("\nRESULT:", "ALL PASS" if ok else "FAILED")
 sys.exit(0 if ok else 1)

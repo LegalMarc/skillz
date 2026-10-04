@@ -103,16 +103,25 @@ if __name__ == "__main__":
         for z in (30.0, 60.0):
             r = run_len(mesh, [xg, 5.0, z], [xg, y + 20, z]); fb += [q[1] for q in r if 8.0 < q[0][1] < y + 10]
             print(f"  buttress either side of the groove, along Y at x={xg:.1f}, z={z:.0f}: ", r)
-        r = run_len(mesh, [mw - wo - P["pillar_w"] / 2, -0.5, 62.0], [mw - wo - P["pillar_w"] / 2, 8, 62.0])
-        print("  pillar, along Y at x=%.1f, z=62: " % (mw - wo - P["pillar_w"] / 2), r)
-        r2 = run_len(mesh, [mw - 12, 1.4, 62.0], [mw + 0.5, 1.4, 62.0])
-        print("  pillar, along X at y=1.4, z=62: ", r2)
+        xs = mw - wo - 3.0           # inside the right stop block (x 231.2 .. 237.2 less 0.4)
+        r = run_len(mesh, [xs, -0.5, 62.0], [xs, 14, 62.0])
+        print(f"  stop block + front wall, along Y at x={xs:.1f}, z=62: ", r)
+        # the contact zone: 4 mm down the stop face, just in front of it
+        sa = np.sin(np.radians(P["slope"])); ca = np.cos(np.radians(P["slope"]))
+        zp = lambda y: P["trayA_rim"] + y * (P["trayB_rim"] - P["trayA_rim"]) / P["yB_tray1"]
+        y0 = P["stop_y"]
+        cy, cz = y0 + 4 * sa, zp(y0) - 4 * ca            # a point on the face, 4 mm down
+        r3 = run_len(mesh, [xs, cy - 12 * ca, cz - 12 * sa], [xs, cy + 0.2 * ca, cz + 0.2 * sa], step=0.02)
+        print(f"  material behind the contact face, along the slope from the face (x={xs:.1f}): ", r3)
+        r2 = run_len(mesh, [mw - 14, 1.4, 62.0], [mw + 0.5, 1.4, 62.0])
+        print("  front wall + side wall, along X at y=1.4, z=62: ", r2)
         def chk(label, cond):
             global ok
             ok &= bool(cond); print(("PASS  " if cond else "FAIL  ") + label)
         print()
         chk(f"skin behind the groove is >= 4.0 mm at every height (min {min(skins):.2f})", min(skins) >= 4.0 - 1e-6)
         chk(f"buttress on either side of the groove is >= 5.0 mm (min {min(fb):.2f})", min(fb) >= 5.0 - 1e-6)
-        chk("pillar is the front wall's full 2.8 mm thick and reaches 5 mm + the side wall in X",
-            abs(r[0][1] - wo) < 0.1 and r2[0][1] >= wo + P["pillar_w"] - 0.1)
+        chk(f"stop block reaches back to y {P['stop_back_y']:.1f} at z=62 (run {r[0][1]:.2f})", r[0][1] >= P["stop_back_y"] - 0.1)
+        chk(f"material behind the contact face along the slope is >= 1.5 mm (min {min(q[1] for q in r3):.2f})", min(q[1] for q in r3) >= 1.5)
+        chk("front wall and side wall run unbroken across the pillar in X (no gap)", r2[0][1] >= wo + P["pillar_w"] - 0.5)
     sys.exit(0 if ok else 1)

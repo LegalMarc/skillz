@@ -75,7 +75,7 @@ module body_section() {
 // The lid as print_export.scad prints it: top face on the bed, rotated
 // [180 - slope] about X and dropped onto z = 0 -- after cutting it.
 pick_lid_drop  = (pickplane_front + pick_lid_gap + pick_lid_tv) * cos(pick_lid_slope);
-pick_lid_backy = yB_tray1 - pick_lid_clear;
+pick_lid_backy = yB_tray1 - pick_lid_back_clear;
 pick_lid_shift = pick_lid_backy * cos(pick_lid_slope)
                + (pickplane(pick_lid_backy) + pick_lid_gap + pick_lid_tv) * sin(pick_lid_slope);
 lid_x0 = sec_x0 - (module_w - pick_lid_w) / 2;  // the same plane, in the lid's own x

@@ -1,4 +1,74 @@
 {
-  "_comment": "No declared contacts and no motion. Nothing in this revision moves: the two tray rims are 51mm apart, which makes a hinged shared lid impossible (an L-section lid's mass centre sits ~48mm below any back-top pivot, putting its over-centre angle near 144 degrees), so both lids now lift off. Both are clearance fits -- the pick lid floats 0.2mm above its plane and the fill lid 0.15mm above its seat -- so both report as NEAR MISS, which is correct. Modelling either as a coplanar resting contact is what made FCL report 66.9mm of penetration on a pair whose real boolean overlap measured 0.000 mm3.",
-  "contacts": []
+  "_comment": "Contacts: none. Both lids are clearance fits -- the pick lid floats 0.2mm above its plane and the fill lid 0.15mm above its seat -- so both report as NEAR MISS, which is correct. Modelling either as a coplanar resting contact is what made FCL report 66.9mm of penetration on a pair whose real boolean overlap measured 0.000 mm3. Motion (revision 10 review, F1): neither lid is hinged, but the PICK LID is REMOVED, and 'nothing moves' was how a lid with a stop face that jammed on removal (and, before that, no retention at all) went unchecked. Three removal motions are swept: tilting about the back edge (lifting by the front notches, or hinging on from the back), a straight lift, and a lift along the plane's normal. The retention in the OTHER direction (down-slope slide must be stopped) is a contact, not a clearance, and is checked by probes/lid_retention.py with exact boolean overlaps. The two lifts are swept 0-12 mm (the lug is clear of the stop face after 7 mm of lift); a straight lift past about 24 mm would meet the fill lid's pull lip, which the body-only probe does not include, and nobody lifts that far straight: past 7 mm the lid is free to move forward.",
+  "contacts": [],
+  "motion": [
+    {
+      "id": "pick_lid_tilt_about_back_edge",
+      "drivers": [
+        {
+          "part": "pick_lid",
+          "type": "revolute",
+          "axis": [
+            -1,
+            0,
+            0
+          ],
+          "origin": [
+            0,
+            84.0,
+            157.86
+          ],
+          "ratio": 1.0
+        }
+      ],
+      "range_deg": [
+        0,
+        15
+      ],
+      "step_deg": 0.25,
+      "min_clearance_mm": 0.05
+    },
+    {
+      "id": "pick_lid_lift_straight_up",
+      "drivers": [
+        {
+          "part": "pick_lid",
+          "type": "prismatic",
+          "axis": [
+            0,
+            0,
+            1
+          ],
+          "ratio": 1.0
+        }
+      ],
+      "range_deg": [
+        0,
+        12
+      ],
+      "step_deg": 0.5,
+      "min_clearance_mm": 0.05
+    },
+    {
+      "id": "pick_lid_lift_along_plane_normal",
+      "drivers": [
+        {
+          "part": "pick_lid",
+          "type": "prismatic",
+          "axis": [
+            0,
+            -0.69169,
+            0.72218
+          ],
+          "ratio": 1.0
+        }
+      ],
+      "range_deg": [
+        0,
+        12
+      ],
+      "step_deg": 0.5,
+      "min_clearance_mm": 0.05
+    }
+  ]
 }

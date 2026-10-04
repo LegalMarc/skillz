@@ -310,8 +310,8 @@ assert(hop_lean_deg < 40,
        "the hopper divider leans past the FDM overhang band -- its front face would need support");
 assert(hopwall_A(rampB(yB_hop1)) - yB_hop1 >= wall_div - 1e-6,
        "the hopper divider is thinner than wall_div where hopper B's ramp ends -- the lean starts below the ramp's end");
-assert(hopwall_z0 >= rampB(yB_hop1) - 1e-6,
-       "the hopper divider starts leaning below the end of hopper B's ramp");
+assert(hopper_rim - hopwall_z0 >= 10.0,
+       "the hopper divider springs from less than 10mm under the rim: the lean would run out of height (hopwall_z0 is a max() that contains rampB's end, so it cannot be asserted against it)");
 assert(mouth_ratio > 1.3 && mouth_ratio < 1.9,
        "the two fill mouths are no longer within the 3:2 band the lean exists to hit");
 assert(mouthA_w > pill_len + 8 && mouthB_w > pill_len + 8,
@@ -332,6 +332,13 @@ assert(chuteA_floor(yA_hop1) + hopper_free <= hopper_rim,
        "hopper A's floor leaves less than hopper_free under the rim");
 assert(chute_clear > pill_len,
        "the crossing chute ridge is not taller than the longest pill");
+// The mouth into tray A, true minimum (review F3): the nearest point of the
+// wall between the trays to the 40 degree floor is that wall's back-bottom
+// corner, wall_div further up the floor than its front-bottom corner, so
+// (chute_clear - wall_div x tan(porch)) x cos(porch), not chute_clear x cos.
+mouthA_min = (chute_clear - wall_div * porch_tan) * cos(porch_deg);          //  26.03
+assert(mouthA_min >= pill_len,
+       "the true minimum of the mouth into tray A, measured perpendicular to the floor, is under one pill length");
 assert(outlet_h > pill_len && outlet_h >= 2 * pill_dia,
        "outlet_h fails the pill-passage or slot rule");
 assert(trayA_rim > outletA_top && trayB_rim > outletB_top,
@@ -364,18 +371,20 @@ tray_step = trayB_rim - trayA_rim;                       //  81.59
 // the pills -- which crest at 22.8 there -- are open to the front. With the
 // lid on, its skirt hangs down the outside and closes the scallops.
 // ------------------------------------------------------------
-trayA_front_h   = 52.0;     // 30 until D36: tray A's pile now crests at 43.9, not 22.8
+trayA_front_h   = 55.0;     // 30 until D36 (pile crests at 43.9, not 22.8), 52 until the revision 10
+                            // review: at a 25 degree repose the crest is 48.4 and the wall must
+                            // stand over it by at least a pill radius (asserted), not 2 mm
 trayA_scallop_r = 6.0;
-// The two END bays are not scalloped all the way to the side wall (D38). A
-// pillar of the front wall, pillar_w wide, stays at the full pick-plane height
-// beside each side wall. It is what stops the pick lid sliding down its slope:
-// the lid's lug drops in directly behind it, and the pillar's back face -- the
-// inside face of the front wall, the one that faces +Y -- is the first body face
-// the lug meets going down-slope. See pick_lid.scad and the probe
-// probes/lid_retention.py. (Until revision 10 the lid's skirt was believed to do
-// this job; it hangs OUTSIDE the front face, sliding down the slope takes it
-// further from that face, and it retained nothing. INCIDENTS.md.)
-pillar_w        = 5.0;      // from the side wall's inner face, in X
+// The two END bays are not scalloped all the way to the side wall (D38). The
+// front wall stays at the full pick-plane height for pillar_w beside each side
+// wall, and behind it sits a STOP BLOCK (section 9, pick_stop_*) whose back
+// face is perpendicular to the pick plane. That face is what stops the pick lid
+// sliding down its slope: the lid's lug drops in directly behind it. See
+// pick_lid.scad and probes/lid_retention.py. (Until revision 10 the lid's
+// skirt was believed to do this job; it hangs OUTSIDE the front face, sliding
+// down the slope takes it further from that face, and it retained nothing.
+// INCIDENTS.md.)
+pillar_w        = 6.0;      // from the side wall's inner face, in X (stop block width too)
 // The scallop's sides would otherwise land exactly on the bay dividers' own
 // faces -- two boolean faces sharing one plane, which is what left 57
 // non-manifold edges the first time. It oversteps instead, taking a sliver off
@@ -410,8 +419,8 @@ assert(label_z_center - label_h / 2 > 2,
 
 assert(trayA_front_h > trayA_pile_front + 5,
        "the scalloped front wall is at or under the pill line -- row A would spill out of its own front");
-assert(trayA_front_h > outletA_top - tray_d * tan(25) + 2,
-       "at a 25 degree repose tray A's pile would crest within 2mm of the front wall (or over it)");
+assert(trayA_front_h > outletA_top - tray_d * tan(25) + pill_dia / 2,
+       "at a 25 degree repose tray A's pile would crest within a pill radius of the front wall's top (or over it)");
 assert(trayA_front_h < trayA_rim - 6,
        "the scallop is too shallow to be worth cutting");
 assert(trayA_scallop_r < (bay_w - 2 * trayA_scallop_r) / 2,
@@ -515,10 +524,14 @@ bayB_vol_measured_ml = 0;
 // 7. Pick lid -- ONE lid over BOTH tray rows, lift-off
 // ------------------------------------------------------------
 pick_lid_w     = module_w - 1.0;
-pick_lid_clear = 0.35;
+pick_lid_clear = 0.35;       // skirt to the front face
+pick_lid_back_clear = 1.2;   // plate back edge to the wall behind tray B. 0.35 until the revision 10
+                             // review: lifting the lid by the front edge pivots it about this edge
+                             // and the top-back corner swings into that wall after about 9 degrees;
+                             // 1.2 clears a 15 degree tilt (probes/lid_retention.py (e))
 pick_lid_slope = atan((trayB_rim - pickplane_front) / yB_tray1);   // 43.8 deg
 pick_lid_len   = sqrt(pow(yB_tray1, 2) + pow(trayB_rim - pickplane_front, 2))
-                 - pick_lid_clear;
+                 - pick_lid_back_clear;
 pick_lid_hook_t = 3.0;
 pick_lid_gap    = 0.2;   // vertical float above the pick plane; keeps the pair a
                          // near miss rather than a coplanar resting contact
@@ -538,17 +551,22 @@ pick_lid_tv  = lid_t / cos(pick_lid_slope);
 
 assert(pick_lid_slope > 17.0 && pick_lid_slope <= 45.0,
        "the pick plane is outside 17..45 degrees: under 17 friction alone would hold the lid and the lugs are decoration; over 45 the lid's skirt prints past the no-support limit");
-assert(pick_lid_hook_h > pick_lid_skirt_over + 4.0,
-       "the lid skirt is too short to cover the scalloped front wall");
-assert(pick_lid_skirt_bot < trayA_front_h - 3.0,
-       "the lid skirt does not reach far enough down to overlap the scalloped front wall");
+// The skirt's bottom is trayA_front_h - pick_lid_skirt_over BY DEFINITION, so
+// an assert on that difference cannot fail (revision 10 review, F7). What can
+// fail is the overlap input itself, and the real property -- the skirt of the
+// built lid reaching below the scalloped wall's top -- is measured on the meshes
+// by probes/lid_retention.py (g).
+assert(pick_lid_skirt_over >= 3.0,
+       "the lid skirt overlaps the scalloped front wall by under 3mm, so it will not hide the scallop");
 assert(pick_lid_skirt_bot > label_z_center + label_h / 2 + 2,
        "the lid skirt covers the bay labels");
 
 // Finger notches in the skirt (D22). The lid comes off with a straight lift --
 // its back edge is 0.35mm from the wall behind tray B, so tilting it about
-// that edge jams the top-back corner after 5 degrees -- and a 229mm plate
-// hung 0.35mm off the front face gives nothing to lift by. Two rounded slots
+// that edge lets the top-back corner meet that wall after about 5 degrees
+// (probes/lid_retention.py (e) tilts it 0-15 degrees and reports where each
+// part meets) -- and a 229mm plate hung 0.35mm off the front face gives
+// nothing to lift by. Two rounded slots
 // in the skirt's bottom edge, one under each hand, leave a 3mm ceiling to
 // hook a fingertip under. Their top runs a little above the scalloped wall,
 // so the notch shows a sliver of tray, but stays above the pill line.
@@ -625,8 +643,9 @@ assert(fill_ledge_w >= 2.5, "the fill-lid seat ledge is too narrow to carry the 
 // cut to fill_seat_z. The perimeter ledges sit seat_lip_drop lower, so the lid
 // floats over them and they only catch it if it is dropped in tilted (the
 // revision 8 review measured the dividers at 137.99 and the ledges at 137.79).
-assert(fill_lid_x > inner_w - 2 * fill_lid_clear - 1e-6,
-       "the fill lid does not span the dividers it rests on");
+// (fill_lid_x is defined as inner_w - 2 x fill_lid_clear, so it spans the
+// dividers by definition; the assert that said so could not fail. The real
+// check is the next but one: the lid is smaller than the mouth.)
 assert(fill_ledge_w - fill_lid_clear - fill_lead_in >= 1.5,
        "the lead-in chamfer leaves under 1.5mm of lid over the perimeter ledge");
 assert(fill_seat_z - fill_ledge_t > rampB(yB_hop1)
@@ -681,7 +700,8 @@ assert(boss_clip_drop > 0 && boss_clip_drop < 0.5,
 // Rail 1 sits under tray A, not under tray B. Under tray B it would stand in
 // the porch and narrow one lane of an end bay below the single-file rule; tray
 // A is a pick pocket, where a 5mm buttress in one corner costs nothing.
-rail1_y      = (yA_tray0 + yA_tray1) / 2;                  //  22.8, mid tray A
+rail1_y      = (yA_tray0 + yA_tray1) / 2 + 3.0;            //  25.8, mid tray A + 3: the stop block and
+                                                           // lug need 8 mm in front of the buttress
 // A dovetail groove is entered from above, so it has to break out of the top
 // of the wall that carries it -- and over tray A that top is the pick plane,
 // which is HIGHEST at the groove's back edge. Revision 3 capped this groove at
@@ -712,66 +732,92 @@ assert(rail1_y + rail_boss_w / 2 < yA_tray1,
        "rail 1's buttress reaches back into the chute mouth");
 assert(rail_skin >= 4.0,
        "the skin between the rail-1 groove and tray A is under 4mm: it stands as a thin blade where the pick plane cuts the buttress (D39)");
-assert((rail_boss_w - rail_tip_w - 2 * rail_clear) / 2 >= 5.0,
-       "the buttress leaves under 5mm of material in front of or behind the rail groove (D39)");
+assert(rail_boss_w - rail_tip_w >= 10.0,
+       "the buttress is under 5mm longer than the rail's tip on each side (D39); the groove itself is measured on the mesh by probes/corner_thickness.py");
 assert(bay_w - rail_boss >= pill_len,
        "the rail buttress narrows an end bay below one pill length");
 assert(rail_sep > 50, "the two rails are too close together to resist yaw");
 
-// Retention lugs (D32, D34, D38). Two lugs hang from the lid's underside into
-// the END bays of tray A, each directly behind a PILLAR: the stretch of the
-// front wall that stays at full pick-plane height beside the side wall
-// (pillar_w, section 4c). Down-slope the lid moves forward and down; the lug's
-// front face, which is VERTICAL like the pillar's back face (the inside face of
-// the front wall, facing +Y), meets that face after pick_lug_clear / cos(slope)
-// = 0.7 mm of travel and engages it over pick_lug_engage mm of height. That,
-// and nothing on the skirt, is what holds the lid on the slope. The lugs sit
-// between the pillar and the rail-1 buttress, against the side wall: they also
-// locate the lid in X (0.5 each side) and stop it being fitted reversed (the
-// skirt, rotated 180 degrees about the plane's normal, lands inside the wall
-// behind tray B). The front face is vertical rather than perpendicular to the
-// plane so it lies flat on the pillar's face instead of touching its top edge;
-// printed with the plate on the bed that face leans over by the pick plane's
-// slope -- 43.8 degrees, inside the 45 degree no-support rule (asserted above).
-pick_lug_t     = 3.0;       // thickness in X
-pick_lug_clear = 0.5;       // to the pillar's back face (Y) and to the side wall's inner face (X)
-pick_lug_len   = 5.0;       // along Y, front face to back face
-pick_lug_dv    = 8.0;       // vertical depth below the plate's underside at the lug's front face
-pick_lug_chamfer = 1.0;     // lead-in chamfers on the tip's X edges (and front edge in Y)
+// Retention lug and stop block (D32, D34, D38; face geometry after the revision
+// 10 review). Two lugs hang from the lid's underside into the END bays of
+// tray A, each directly behind a STOP BLOCK in the front corner of the bay. The
+// stop faces are PERPENDICULAR TO THE PICK PLANE (normal along the up-slope
+// direction) on both the lug's front face and the block's back face:
+//   * down-slope the lid moves along that normal and stops after pick_lug_clear
+//     (0.5 mm) of travel, with the faces parallel and flat on each other;
+//   * lifted by the front edge the lid pivots about its back edge and the lug
+//     moves along the plane's NORMAL, i.e. along the faces, not into them. The
+//     first version had a vertical stop face, which the swinging lug drove into
+//     at 0.5-2 degrees of tilt and jammed (review of revision 10, F1).
+// The block is fused to the side wall and the front wall; its top is the pick
+// plane, so the contact face meets the top surface at 90 degrees and there is no
+// knife edge. The face prints facing up and back (about 46 degrees above
+// horizontal), so it needs no support and sheds pills; the lug's face stands
+// vertical in the lid's print orientation.
+pick_lug_t     = 4.0;       // thickness in X (3 until the review: a cantilever across layers)
+pick_lug_clear = 0.5;       // along the slope, lug face to stop face; also to the side wall in X
+pick_lug_len   = 4.0;       // along the slope, front face to back face
+pick_lug_d     = 7.0;       // perpendicular to the plate, below its underside
+pick_lug_chamfer = 1.0;     // lead-in chamfer on the tip's X edges
+pick_stop_w    = pillar_w - 0.4;   // the block is a hair narrower than the pillar, so its side face does not
+                            // lie on the scallop cut's face (a coplanar boolean)
+pick_stop_off  = 1.0;       // where the stop face meets the plane, behind the front wall's inner face
+pick_stop_depth = 9.0;      // how far down (perpendicular) the stop face runs from the plane
+pick_stop_y    = yA_tray0 + pick_stop_off;                              //   3.8
+// the stop face's position along the slope, measured from the lid frame's origin
+// (the underside at y = 0), and the lug's faces from it
+pick_stop_s    = pick_stop_y / cos(pick_lid_slope) - pick_lid_gap * sin(pick_lid_slope);
+pick_lug_s0    = pick_stop_s + pick_lug_clear;
+pick_lug_s1    = pick_lug_s0 + pick_lug_len;
 pick_lug_x_left  = wall_out + pick_lug_clear;                           //   3.3, low-X face (wall side)
-pick_lug_x_right = module_w - wall_out - pick_lug_clear - pick_lug_t;   // 233.7, low-X face (interior side)
-pick_lug_y0    = yA_tray0 + pick_lug_clear;                             //   3.3, front face
-pick_lug_y1    = pick_lug_y0 + pick_lug_len;                            //   8.3, back face
-rail1_boss_y0  = rail1_y - rail_boss_w / 2;                             //  11.3, buttress front face
-// Vertical overlap of the lug's front face with the pillar's back face: the
-// pillar's top (the plane, at the back face) down to the lug's bottom.
-pick_lug_engage = pickplane(yA_tray0)
-                - (pickplane(pick_lug_y0) + pick_lid_gap - pick_lug_dv);
-// Air between the lug's lowest point and tray A's pill line under it.
-pick_lug_air   = (pickplane(pick_lug_y1) + pick_lid_gap - pick_lug_dv)
-               - (trayA_pile_front + (pick_lug_y1 - yA_tray0) * tan(repose_deg));
+pick_lug_x_right = module_w - wall_out - pick_lug_clear - pick_lug_t;   // 232.7, low-X face (interior side)
+rail1_boss_y0  = rail1_y - rail_boss_w / 2;                             //  14.3, buttress front face
+// Contact depth: the lug's depth below the plane, perpendicular to it (the
+// underside floats pick_lid_gap above the plane). The stop block's top is
+// boss_clip_drop under the plane; the face is perpendicular, so that costs
+// only the first boss_clip_drop x cos(slope).
+pick_lug_engage = pick_lug_d - pick_lid_gap * cos(pick_lid_slope);
+pick_stop_back_y = pick_stop_y + pick_stop_depth * sin(pick_lid_slope);  // where the face ends, 10.0
+// The lug's lowest, rearmost corner in body coordinates, and the air between it
+// and tray A's pill line there.
+pick_lug_corner_y = pick_lug_s1 * cos(pick_lid_slope) + pick_lug_d * sin(pick_lid_slope);
+pick_lug_corner_z = pickplane_front + pick_lid_gap + pick_lug_s1 * sin(pick_lid_slope)
+                  - pick_lug_d * cos(pick_lid_slope);
+pick_lug_air   = pick_lug_corner_z
+               - (trayA_pile_front + (pick_lug_corner_y - yA_tray0) * tan(repose_deg));
+// Material behind the contact face along the slope, at the top of the face (where
+// the block is thinnest): from the face back to the front wall's outer face.
+pick_stop_top_thick = pick_stop_y / cos(pick_lid_slope);
 
 assert(pick_lug_engage >= 5.0,
-       "the lug engages the pillar's back face by under 5mm (D38)");
-assert(pillar_w >= pick_lug_clear + pick_lug_t + 1.0,
-       "the pillar does not extend 1mm beyond the lug it stops (D38)");
-assert(pick_lug_y1 + 2.0 <= rail1_boss_y0,
-       "a pick-lid lug is within 2mm of the rail-1 buttress in front of which it hangs");
+       "the lug engages the stop face by under 5mm, measured perpendicular to the plane (D38)");
+assert(pick_stop_depth >= pick_lug_d + 1.0,
+       "the stop face does not run 1mm deeper than the lug that bears on it (D38)");
+assert(pick_stop_w >= pick_lug_clear + pick_lug_t + 1.0,
+       "the stop block does not extend 1mm beyond the lug it stops (D38)");
+assert(pick_lug_corner_y + 2.0 <= rail1_boss_y0,
+       "a pick-lid lug's lowest corner is within 2mm of the rail-1 buttress in front of which it hangs");
+assert(pick_stop_back_y + 2.0 <= rail1_boss_y0,
+       "the stop block's lower back face is within 2mm of the rail-1 buttress");
 assert(pick_lug_air > 10,
        "a pick-lid lug hangs within 10mm of tray A's pill line");
 assert(pick_lug_t + pick_lug_clear < bay_w / 4,
        "a pick-lid lug takes too much of its bay");
-assert(pick_lug_chamfer < pick_lug_t / 2 && pick_lug_chamfer < pick_lug_dv / 2,
-       "the lug's lead-in chamfer eats the lug");
-// The travel from rest to first contact, along the plane.
-pick_lug_travel = pick_lug_clear / cos(pick_lid_slope);
-assert(pick_lug_travel < 1.0,
-       "the lid can slide a millimetre down its slope before the lug meets the pillar (D38)");
+assert(pick_lug_chamfer < pick_lug_t / 2 - 0.5,
+       "the lug's lead-in chamfers leave under 1mm of its tip");
+assert(pick_stop_top_thick >= 1.5,
+       "the stop block leaves under 1.5mm of material behind the contact face at its top (knife edge, D38/F6)");
+// pick_lug_clear is the lid's travel to first contact along the slope BY
+// CONSTRUCTION (the faces are perpendicular to it). The travel is not asserted
+// here because the formula is the definition; probes/lid_retention.py measures
+// it on the meshes.
 
 // The "FRONT" mark on the skirt's outer face (D38): embossed, raised by
-// pick_front_h, readable from the front with the lid on, and so printable in the
-// lid's print orientation without supports (the skirt leans out at 44 degrees,
-// the relief is 0.6mm).
+// pick_front_h, readable from the front with the lid on. Printed with the plate
+// on the bed the skirt leans out at 43.8 degrees and the relief is 0.6mm tall:
+// the letters' TOP edges face down at 46.2 degrees from vertical, 1.2 past the
+// 45 degree rule, over a 0.6mm step (about 0.2mm of overhang per layer). Accepted
+// and listed, not fixed: about 3 mm2 in all.
 pick_front_text = "FRONT";
 pick_front_size = 9.0;
 pick_front_h    = 0.6;
@@ -853,9 +899,11 @@ echo(str("rail 1 groove: open from z ", rail_z0, " to ", rail1_soc_z1,
          base_z, " at the front wall .. ", z_foot, " at the chute foot; pile depth at the front wall ",
          trayA_pile_front - base_z, " (30 deg repose), ",
          outletA_top - tray_d * tan(25) - base_z, " (25), ", outletA_top - tray_d * tan(35) - base_z, " (35)"));
-echo(str("pick lid retention: lug front face ", pick_lug_y0, " vs pillar back face ", yA_tray0,
-         "; first contact after ", pick_lug_travel, " mm of travel; engagement ", pick_lug_engage,
-         " mm; footprint ", module_w + rail_out, " x ", module_d, " x ", module_h));
+echo(str("pick lid retention: stop face at y ", pick_stop_y, " on the plane, ", pick_stop_depth,
+         " deep; lug ", pick_lug_t, " x ", pick_lug_len, " x ", pick_lug_d, ", clearance ", pick_lug_clear,
+         " along the slope; engagement ", pick_lug_engage, " mm perpendicular; lug corner y ",
+         pick_lug_corner_y, " vs buttress ", rail1_boss_y0, "; air ", pick_lug_air,
+         "; mouth A minimum ", mouthA_min, "; footprint ", module_w + rail_out, " x ", module_d, " x ", module_h));
 echo(str("vault: gable ", vault_deg, " deg, face ", vault_face_from_vertical,
          " from vertical; chute clear ", chute_clear - vault_down, " at the edges, ",
          chute_clear + vault_up, " at the ridge; hopper B foot ", rampB_foot,

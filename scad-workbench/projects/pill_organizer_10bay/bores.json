@@ -100,16 +100,16 @@
     "part": "body",
     "start": [
       237.3,
-      22.8,
+      25.8,
       12.0
     ],
     "end": [
       237.3,
-      22.8,
-      108.0
+      25.8,
+      111.0
     ],
     "step_mm": 0.5,
-    "_why": "the front joining groove must be open from its floor OUT OF THE TOP of the side wall, or a neighbouring module's rail cannot be lowered in. Its top is the pick plane over tray A, which is highest at the groove's back edge (about 104.3). This line ends at 108, in open air above the plane. D39 thickened the skin behind the groove and lengthened the buttress; this proves the groove is still open end to end."
+    "_why": "the front joining groove must be open from its floor OUT OF THE TOP of the side wall, or a neighbouring module's rail cannot be lowered in. Its top is the pick plane over tray A, which is highest at the groove's back edge (about 107.2). This line ends at 111, in open air above the plane. D39 thickened the skin behind the groove and lengthened the buttress; this proves the groove is still open end to end."
   },
   {
     "name": "rail_groove_back",

@@ -37,7 +37,7 @@ SCALE = is_undef(SCALE) ? (is_undef(TEST_SCALE) ? 1.0 : TEST_SCALE) : SCALE;
 // most negative Y is the plate's top-back corner; shifted so the part starts
 // at y = 0 like the others.
 pick_lid_drop  = (pickplane_front + pick_lid_gap + pick_lid_tv) * cos(pick_lid_slope);
-pick_lid_backy = yB_tray1 - pick_lid_clear;
+pick_lid_backy = yB_tray1 - pick_lid_back_clear;
 pick_lid_shift = pick_lid_backy * cos(pick_lid_slope)
                + (pickplane(pick_lid_backy) + pick_lid_gap + pick_lid_tv) * sin(pick_lid_slope);
 

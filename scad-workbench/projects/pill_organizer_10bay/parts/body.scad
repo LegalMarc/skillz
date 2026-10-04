@@ -383,6 +383,32 @@ module rail_bosses() {
     }
 }
 
+// The stop blocks (D38). In each end bay's front corner of tray A, fused to the
+// side wall and to the front wall, a block whose BACK face is perpendicular to
+// the pick plane: it leaves the plane at pick_stop_y and runs pick_stop_depth
+// down along the plane's inward normal, then drops vertically to the floor. The
+// pick lid's lug bears on that face (pick_lid.scad). The face meets the block's
+// top (the plane) at 90 degrees, so there is no knife edge, and it prints facing
+// up and back at about 46 degrees above horizontal, with no support. Like the
+// buttresses, the block is clipped by OUTER_CLIP so its top lands a hair under
+// the shell's own top face instead of on it.
+module stop_block_profile() {
+    sa = sin(pick_lid_slope); ca = cos(pick_lid_slope);
+    P0 = [pick_stop_y, pickplane(pick_stop_y)];
+    F  = function(t) [P0[0] + t * sa, P0[1] - t * ca];
+    Fm = F(-1.5); P1 = F(pick_stop_depth);
+    polygon([[1.0, Fm[1]], Fm, P1, [P1[0], base_z - 1], [1.0, base_z - 1]]);
+}
+module stop_blocks() {
+    intersection() {
+        union() {
+            yz_extrude(wall_out - weld_embed, wall_out + pick_stop_w) stop_block_profile();
+            yz_extrude(module_w - wall_out - pick_stop_w, module_w - wall_out + weld_embed) stop_block_profile();
+        }
+        yz_extrude(0, module_w) polygon(OUTER_CLIP);
+    }
+}
+
 module rail_socket_cut() {
     for (r = [[rail1_y, rail1_soc_z1], [rail2_y, rail2_soc_z1]])
         translate([module_w, r[0], rail_z0]) {
@@ -425,7 +451,7 @@ module foot_pad_cuts() {
 // ------------------------------------------------------------
 module body_geometry() {
     difference() {
-        union() { body_shell(); outlet_chamfers(); vault_roof(); rail_male(); rail_bosses(); }
+        union() { body_shell(); outlet_chamfers(); vault_roof(); rail_male(); rail_bosses(); stop_blocks(); }
         fill_seat_cut();
         front_scallop_cut();
         rail_socket_cut();

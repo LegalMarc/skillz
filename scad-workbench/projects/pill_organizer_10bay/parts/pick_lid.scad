@@ -16,8 +16,12 @@
 // forward, which takes the skirt AWAY from that face. Revisions 6 to 9 said
 // otherwise, and test print 2 slid the lid straight off. The retention is the
 // pair of lugs under the plate's ends (D38): each drops into an end bay of tray
-// A directly behind a pillar of the front wall, and its vertical front face
-// meets the pillar's back face after 0.7 mm of travel. probes/lid_retention.py
+// A directly behind a stop block in the front corner. Both stop faces are
+// perpendicular to the pick plane, so the lid stops after 0.5 mm of down-slope
+// travel, while lifting it by the front edge (it pivots about its back edge, and
+// the lug swings along the plane's normal, i.e. along the faces) or straight up
+// does not jam. An earlier vertical stop face did jam at 0.5 to 2 degrees of
+// tilt (review of revision 10). probes/lid_retention.py
 // checks that, the straight lift-off, and that the lid cannot be fitted turned
 // round.
 //
@@ -46,7 +50,7 @@
 //   behind tray B and the top-back corner meets the wall after
 //   about 5 degrees. Nothing to unclip.
 //
-// EXPECTED_BBOX: [239.0, 88.45, 115.44]
+// EXPECTED_BBOX: [239.0, 87.6, 111.63]
 // ============================================================
 
 include <../params.scad>
@@ -54,12 +58,12 @@ include <../params.scad>
 // The underside of the plate: the pick plane, floated by pick_lid_gap.
 function zu(y) = pickplane(y) + pick_lid_gap;
 
-lid_back_y = yB_tray1 - pick_lid_clear;        // 60.85
+lid_back_y = yB_tray1 - pick_lid_back_clear;   // 84.0
 
 assert(lid_back_y > yB_tray0,
        "the pick lid does not reach across tray B");
-assert(zu(0) - pick_lid_hook_h < trayA_front_h - 3,
-       "the front skirt does not reach down past the scalloped front wall");
+assert(pick_lid_skirt_over > 3,
+       "the front skirt overlaps the scalloped front wall by under 3mm (its bottom is front_h - overlap by definition; probes/lid_retention.py (g) measures the built lid)");
 
 module yz_extrude(x0, x1) {
     rotate([90, 0, 90]) translate([0, 0, x0])
@@ -142,34 +146,24 @@ module pick_notches() {
 lid_dx_local = (module_w - pick_lid_w) / 2;                 // 0.5
 
 // Retention lugs (D32, D34, D38): one under each end of the plate, hanging into
-// the end bay of tray A directly behind a pillar of the front wall (params.scad
-// 4c and 9). Going down the slope the lug's FRONT face meets the pillar's back
-// face and the lid stops; nothing else on the lid does that. The face is
-// vertical, like the pillar's, and so is built here in the assembled (y, z)
-// frame rather than the plate's: a polygon with a vertical front face and back
-// face and a tip parallel to the plate's underside, extruded across the lug's
-// thickness in X. It reaches 1.5 mm up into the plate so the union is
-// volumetric. The tip's three edges are chamfered (pick_lug_chamfer) so the lug
-// leads itself in behind the pillar when the lid is set down.
-function lug_zu(y) = zu(y);
+// the end bay of tray A directly behind a stop block in the front corner (params.scad
+// 9). Both stop faces are PERPENDICULAR TO THE PICK PLANE: the lug's front face
+// here, the block's back face in body.scad. Going down the slope the lid moves
+// along that face's normal and stops after pick_lug_clear; lifting by the front
+// edge swings the lug along the plane's normal, which is along the faces, so
+// nothing jams. Built in the plate's own frame (s along the slope, n normal to
+// it, negative below the underside) and placed by the ONE rotation that lays
+// that frame on the plane; it reaches 1.5 mm up into the plate so the union is
+// volumetric. The tip's X edges are chamfered (pick_lug_chamfer) to lead it in.
+function lug_s(y) = y / cos(pick_lid_slope);
 module pick_lug(x_low) {
-    c = pick_lug_chamfer; t = pick_lug_t;
-    y0 = pick_lug_y0; y1 = pick_lug_y1;
-    // the body of the lug stops c above the tip; a second slab, inset c on the
-    // front face and on both X faces, runs the full depth; the hull is the
-    // chamfered tip. Back face stays vertical and square.
-    hull() {
-        yz_extrude(x_low, x_low + t)
-            polygon([[y0, lug_zu(y0) + 1.5],
-                     [y0, lug_zu(y0) - pick_lug_dv + c],
-                     [y1, lug_zu(y1) - pick_lug_dv + c],
-                     [y1, lug_zu(y1) + 1.5]]);
-        yz_extrude(x_low + c, x_low + t - c)
-            polygon([[y0 + c, lug_zu(y0 + c) + 1.5],
-                     [y0 + c, lug_zu(y0 + c) - pick_lug_dv],
-                     [y1,     lug_zu(y1) - pick_lug_dv],
-                     [y1,     lug_zu(y1) + 1.5]]);
-    }
+    c = pick_lug_chamfer; t = pick_lug_t; d = pick_lug_d;
+    s0 = pick_lug_s0; L = pick_lug_len;
+    translate([0, 0, zu(0)]) rotate([pick_lid_slope, 0, 0])
+        hull() {
+            translate([x_low, s0, -d + c]) cube([t, L, d - c + 1.5]);
+            translate([x_low + c, s0, -d]) cube([t - 2 * c, L, 0.01]);
+        }
 }
 module pick_lugs() {
     pick_lug(pick_lug_x_left  - lid_dx_local);

@@ -34,4 +34,8 @@ echo(str("PROBE trayA_pile_front=", trayA_pile_front));
 echo(str("PROBE outletA_top=", outletA_top));
 echo(str("PROBE z_foot=", z_foot));
 echo(str("PROBE trayB_floor=", trayB_floor));
+echo(str("PROBE trayA_front_h=", trayA_front_h));
+echo(str("PROBE stop_y=", pick_stop_y));
+echo(str("PROBE stop_back_y=", pick_stop_back_y));
+echo(str("PROBE pick_stop_w=", pick_stop_w));
 cube(0.001);
