@@ -169,10 +169,41 @@ module pick_front_mark() {
                      font = "Liberation Sans:style=Bold");
 }
 
+// Underside x-end edges (D48): the plate's end face meets its underside in a 90 degree
+// convex edge along the whole slope. Same construction as the top chamfers, mirrored onto the
+// underside; it starts at y = 0.2, 0.55 behind the skirt's inner face plane (y = -0.35), where the
+// plate's underside stops being an edge (in front of that it is the skirt's own interior);
+// starting at the face itself left a 0.01 mm edge.
+// (Turned 44.5 degrees, not 45: at exactly 45 the prism's edge lies IN the underside plane, and
+// where the plate's back chamfer crosses it that left zero-area slivers and a non-watertight mesh.)
+module pick_under_chamfers() {
+    c = pick_under_chamfer; a = c * sqrt(2);
+    s0 = 0.2 / cos(pick_lid_slope);      // along the slope, from y = 0
+    for (x = [0, pick_lid_w])
+        translate([x, 0, zu(0)])
+            rotate([pick_lid_slope, 0, 0]) translate([0, s0 + 200, 0]) rotate([0, 44.5, 0])
+                cube([a, 400, a], center = true);
+}
+
+// The skirt's outer end edges (D48): the two vertical edges where its ends meet its
+// outer face, which the user pinches the lid by. Chamfers, not rounds: in print the outer
+// face hangs 43.8 degrees off vertical, and a 45 degree chamfer between it and the vertical
+// end face stays inside that. Each is a square prism turned 45 degrees about the edge, from
+// below the skirt's bottom to above the plate's top-front corner. The skirt's inner end edges,
+// facing the body's front face across the 0.35 clearance, are left square.
+module pick_skirt_chamfers() {
+    c = pick_skirt_chamfer; a = c * sqrt(2);
+    z0 = zu(0) - pick_lid_hook_h - 2; z1 = zu(hook_front) + pick_lid_tv + 2;
+    for (x = [0, pick_lid_w])
+        translate([x, hook_front, z0]) rotate([0, 0, 44.5]) translate([-a / 2, -a / 2, 0]) cube([a, a, z1 - z0]);
+}
+
 module pick_lid_geometry() {
     difference() {
         union() { pick_plate(); pick_hook(); pick_lugs(); pick_front_mark(); }
         pick_end_chamfers();
+        pick_under_chamfers();
+        pick_skirt_chamfers();
     }
 }
 

@@ -899,19 +899,19 @@ pick_front_h    = 0.6;
 // Label recesses: section 4c, beside the scalloped front wall they sit under.
 
 tray_fillet_r = 2.0;        // vertical fillets where dividers meet tray A's front wall (revision 11)
+tray_fillet_top_under = 2.0;   // D48: tray B's divider gussets stop this far under the wall's top plane at its face
 fillet_r  = 2.0;            // internal: every flow-void corner (opening pass)
 
 // External edges (D27). Nothing a hand or a sleeve meets is left sharp: the
 // four vertical corners of the body, its top edges, both lids' plan corners
 // and the fill lid's top perimeter. Chosen small enough that no wall thins
 // past its own thickness: 1.5 on a 2.4 wall top leaves 0.9 of flat.
-corner_r   = 1.2;           // body's vertical outer corners (3.0 until D35: where the
-                            // adjoining wall is cut away -- above the scallops, beside
-                            // the cubby opening -- a round larger than the wall feathered
-                            // the side wall's end to 0.01mm). NOT equal to edge_r_top:
-                            // equal radii put both rounds' tangent lines on one line at
-                            // the back-top corners and left zero-area slivers there
-edge_r_top = 1.5;           // body's top edges (OUTER's convex corners)
+edge_r_top = 1.5;           // body's outer rounds (D48): ONE ball radius for every outer edge. The body's
+                            // silhouette, extruded, is dilated by a ball of this radius (Minkowski), so the
+                            // top edges in section, the four vertical corners and the side faces' perimeter
+                            // are one surface. Revisions 7 to 11 cut the vertical corners separately at
+                            // corner_r 1.2 (never equal to this one: separate cutters on one tangent line
+                            // left zero-area slivers, INCIDENTS.md); a single ball has no second tangent.
 lid_edge_r = 2.0;           // lids' plan-view corners
 lid_chamfer = 1.0;          // fill lid top perimeter; pick lid plate x-end edges
 lid_round   = 1.0;          // pick lid plate front/back edges and skirt bottom, in
@@ -924,12 +924,31 @@ lid_round   = 1.0;          // pick lid plate front/back edges and skirt bottom,
 assert(lid_round < lid_t / 2 - 0.3 && lid_round < (pick_lid_hook_t - pick_lid_clear) / 2 - 0.3,
        "lid_round erodes the pick lid's plate or skirt to nothing");
 
+// D48, the edge pass (revision 12). The audit of every edge class is the table in
+// calculations.md "Revision 12: the edge pass".
+// Bed contact: a 45 degree chamfer round every perimeter that lies on the bed, against
+// PETG's elephant foot (the first layers squash outward by about 0.2 to 0.3).
+bed_chamfer     = 0.5;      // body base perimeter and foot-pad recess mouths
+// Scalloped front wall: the top edge of each scallop's floor, on the front face and on
+// the tray side, is a 45 degree chamfer that follows the scallop outline and fades to
+// nothing up the scallop's rounded corners.
+scallop_chamfer = 0.7;
+// The fill mouth's rim (the opening both hoppers share), inside edge, all four sides.
+mouth_chamfer   = 0.45;  // the front rim wall is wall_div wide and loses edge_r_top to the outer round: 0.45 keeps 0.45 of flat. NOT 0.4: that is seat_cut_over, and the cone's corner then crossed the seat cuts' corner lines and left four zero-volume shards
+// Pick lid (print face down is the plate's top, already chamfered 1.0 on all four sides, which is the
+// bed chamfer): the underside's x-end edges, and the skirt's outer end edges where the lid is pinched.
+pick_under_chamfer = 0.8;   // plate x-end underside edges (the end face keeps lid_t - lid_chamfer - this = 1.2 of flat)
+pick_skirt_chamfer = 1.0;   // skirt outer end edges (vertical in the assembly)
+// Fill lid: the pull lip's underside perimeter, where a fingertip hooks under it
+fill_lip_chamfer = 0.5;
+// The cubby's mouth in the back face: the three straight edges (both sides and the lip's top).
+cubby_chamfer   = 0.5;   // the side walls are wall_out wide and lose edge_r_top to the outer round: 0.5 keeps 0.8 of flat
+cubby_fillet_r  = 2.0;   // the cubby's inside corners (the same 2 mm as every flow void), rounded in three dimensions
+
 assert(edge_r_top < wall_div - 0.5,
        "the top-edge round is deeper than the thinnest wall it runs along");
-assert(abs(corner_r - edge_r_top) > 0.1,
-       "corner_r and edge_r_top must differ -- equal rounds meet on one tangent line and leave slivers");
-assert(corner_r <= wall_out - 1.0,
-       "the corner round is too large for the wall: where the adjoining wall is cut away it feathers the side wall's end");
+assert(edge_r_top <= wall_out - 1.0,
+       "the outer round is too large for the wall: where the adjoining wall is cut away it feathers the side wall's end");
 assert(lid_chamfer < lid_t - 1.0, "the lid chamfer leaves under 1mm of plate");
 
 // Recesses in the base for stick-on rubber feet (D24): a bench unit that is

@@ -65,10 +65,18 @@ module fill_plate_slab() {
 }
 lip_back = lid_chamfer - 0.05;     // where the lip's solid ends, inside the chamfer band
 lip_in   = 0.1;                    // its underside, above the plate's underside
+// The lip's underside perimeter (D48) is a fill_lip_chamfer bevel, where a fingertip hooks
+// under it. Its first layer is the outline inset on the front and the sides only: the back
+// end is buried in the plate, whose own lead-in chamfer lies above the lip's underside there,
+// so insetting it would leave a 0.05 mm ledge under the plate.
 module fill_lip_slab() {
-    d = fill_lip_len + lip_back;
+    d = fill_lip_len + lip_back; c = fill_lip_chamfer;
     translate([fill_lid_x / 2 - fill_lip_w / 2, -fill_lip_len, 0]) hull() {
-        translate([0, 0, lip_in]) linear_extrude(height = lid_t - lid_chamfer - lip_in)
+        translate([0, 0, lip_in]) linear_extrude(height = 0.01) union() {
+            offset(delta = -c) rounded_rect(fill_lip_w, d);
+            translate([c, d - c - 0.5]) square([fill_lip_w - 2 * c, c + 0.5]);
+        }
+        translate([0, 0, lip_in + c]) linear_extrude(height = lid_t - lid_chamfer - lip_in - c)
             rounded_rect(fill_lip_w, d);
         translate([lid_chamfer, lid_chamfer, lid_t - 0.01]) linear_extrude(height = 0.01)
             square([fill_lip_w - 2 * lid_chamfer, d - lid_chamfer]);

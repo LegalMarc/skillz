@@ -1,5 +1,5 @@
 // ============================================================
-// body.scad -- the organizer body, revision 10. Two pick trays
+// body.scad -- the organizer body, revision 12. Two pick trays
 // at the FRONT under one lid, two fill mouths at the BACK under
 // one lid.
 //
@@ -17,7 +17,8 @@
 // +Y back, +Z up. This is the assembly datum.
 //
 // Material: PLA or PETG.
-// Print orientation: as modelled, flat on its base, no supports.
+// Print orientation: as modelled, flat on its base, no supports. The base perimeter
+// carries a bed_chamfer bevel against elephant foot (D48).
 //
 // EXPECTED_BBOX: [243.0, 213.01, 189.0]
 // ============================================================
@@ -57,15 +58,49 @@ OUTER = [
     [yB_tray1,  trayB_rim],
     [0,         pickplane_front]
 ];
-// The silhouette with its top edges rounded (D27): an opening pass rounds
-// every convex corner, then a plain band puts the two base corners back so the
-// first layers stay square on the bed. The step's inside corner is concave and
-// is untouched.
-module outer_2d() {
-    union() {
-        offset(r = edge_r_top) offset(r = -edge_r_top) polygon(OUTER);
-        polygon([[0, 0], [module_d, 0],
-                 [module_d, edge_r_top + 0.5], [0, edge_r_top + 0.5]]);
+// The outer solid (D27, rebuilt in D48). The silhouette is extruded across the module's
+// width, eroded by edge_r_top and dilated by one tool of that size (Minkowski): an opening of
+// the whole solid. Every convex edge of the outside is then a true round of that radius, the
+// silhouette's top edges in section (as before), the four vertical corners (the back ones
+// follow the leaning back wall exactly) AND the perimeter of both side faces, which revisions
+// 7 to 11 left square. The step's inside corner is concave and is untouched.
+//
+// The tool is a ball whose lower half is a 45 degree cone: the upper hemisphere hulled with a
+// disc bed_chamfer under its equator, edge_r_top - bed_chamfer in radius. Wherever it sweeps
+// the bottom of the solid the result is a flat bed face with a bed_chamfer x bed_chamfer 45
+// degree bevel running round it, and round the vertical corners too, because the cone is
+// the ball's own lower half. Everything comes from the one dilation: no cutter has to
+// agree with the rounded surface (an earlier version cut the bevel with a cone of the footprint
+// and its facets met the ball's, which left zero-volume shards that came and went with the
+// number of segments).
+// ball(): OpenSCAD's sphere($fn = n) has its rings half a step off the poles and the
+// equator, so it is cos(180 / n) = 0.9914 of r tall and wide; scaled up by the inverse
+// its flats come out exactly r.
+OUTER_BOT = bed_chamfer - edge_r_top;      // the silhouette's bottom edge, so the result's bed face is z = 0
+assert(bed_chamfer > 0 && bed_chamfer < edge_r_top - 0.3, "bed_chamfer must be positive and clearly smaller than the outer round");
+OUTER_EXT = [
+    [0,         OUTER_BOT],
+    [module_d,  OUTER_BOT],
+    [module_d,  flare_zo],                // the back wall leans out above here (D42)
+    [module_d_top, hopper_rim],
+    [yB_tray1,  hopper_rim],
+    [yB_tray1,  trayB_rim],
+    [0,         pickplane_front]
+];
+module ball(r, n = 24) { sphere(r = r / cos(180 / n), $fn = n); }
+module outer_tool() {
+    r = edge_r_top; c = bed_chamfer;
+    hull() {
+        intersection() { ball(r); translate([-r - 1, -r - 1, 0]) cube([2 * r + 2, 2 * r + 2, r + 1]); }
+        translate([0, 0, -c]) cylinder(r = r - c, h = 0.01, $fn = 24);
+    }
+}
+module outer_solid() {
+    r = edge_r_top;
+    minkowski() {
+        translate([r, 0, 0]) yz_extrude(0, module_w - 2 * r)
+            offset(delta = -r) polygon(OUTER_EXT);
+        outer_tool();
     }
 }
 
@@ -167,28 +202,59 @@ module mouth_2d()  { polygon(MOUTH); }
 // under the chute floor at the back face and thickening forward (D21). Cut
 // here rather than in body_geometry so the rail buttresses, which are unioned
 // afterwards, are not eaten by it.
-CUBBY = [
+// Nothing flows through the cubby, but it is cleaned and its corners collect dust, so since
+// D48 its inside corners are filleted like every flow void's, in three dimensions: the void
+// is the profile eroded by cubby_fillet_r, extruded across the shortened width and dilated by
+// a ball, which rounds every convex edge of the VOID (the floor / front wall, floor / side
+// wall, ceiling / side wall and ceiling / front wall corners). The lip's top is a concave edge
+// of the void and stays sharp under an opening; it carries cubby_chamfer below. The void ends
+// cubby_end_over past the back face, further than the ball is wide, so the rounding of its end
+// edges happens in the air behind the module (the back wall leans out above flare_zo, but
+// slower than the 45 degree ceiling climbs, so nothing of it is reached).
+cubby_end_over = 1 + cubby_fillet_r + 1;
+CUBBY_OPEN = [
     [cubby_y0,     base_t],
-    [cubby_back,   base_t],                      // inside face of the retaining lip
-    [cubby_back,   base_t + cubby_lip_h],        // up and over it
-    [module_d + 1, base_t + cubby_lip_h],        // out through the back wall above it
-    [module_d + 1, cubby_ceil_z(module_d + 1)],  // 45 degree ceiling (D21)
+    [cubby_back,   base_t],
+    [cubby_back,   base_t + cubby_lip_h],
+    [module_d + cubby_end_over, base_t + cubby_lip_h],
+    [module_d + cubby_end_over, cubby_ceil_z(module_d + cubby_end_over)],
     [cubby_y0,     cubby_ceil_z(cubby_y0)]
 ];
-// No fillet pass here: nothing flows through the cubby, and the closing
-// operation the flow voids use would round the lip's own top edge away.
-module cubby_2d() { polygon(CUBBY); }
+module cubby_void() {
+    r = cubby_fillet_r;
+    minkowski() {
+        translate([wall_out + r, 0, 0]) yz_extrude(0, inner_w - 2 * r)
+            offset(delta = -r) polygon(CUBBY_OPEN);
+        ball(r);
+    }
+}
+
+// The cubby's mouth in the back face (D48): the sides and the lip's top are 90 degree
+// convex edges of the module's back wall, where a hand goes in for the accessories.
+// A cone of the mouth's own outline, growing 45 degrees outward from the face, takes a
+// cubby_chamfer bevel off all three. Its top is the cubby's own 45 degree ceiling plane
+// (a hair, 0.05, under it, so no face lies on the ceiling), so it does not cut above the
+// mouth; the leaning wall begins exactly there. The near plate is 0.3 inside the void.
+module cubby_chamfer_cut() {
+    c = cubby_chamfer; yi = module_d - c - 0.3; yo = module_d + 1;
+    x0 = wall_out; x1 = module_w - wall_out; zl = base_t + cubby_lip_h;
+    function ztop(y) = cubby_ceil_z(y) - 0.05;
+    hull() {
+        translate([x0 + 0.3, yi, zl + 0.3]) cube([x1 - x0 - 0.6, 0.01, ztop(yi) - zl - 0.3]);
+        translate([x0 - (c + 1), yo, zl - (c + 1)]) cube([x1 - x0 + 2 * (c + 1), 0.01, ztop(yo) - zl + (c + 1)]);
+    }
+}
 
 module body_shell() {
     difference() {
-        yz_extrude(0, module_w) outer_2d();
+        outer_solid();
         for (i = [0 : bays - 1]) {
             x0 = wall_x1(i);
             yz_extrude(x0, x0 + bay_w) void_a_2d();
             yz_extrude(x0, x0 + bay_w) void_b_2d();
             yz_extrude(x0, x0 + bay_w) mouth_2d();
         }
-        yz_extrude(wall_out, module_w - wall_out) cubby_2d();
+        cubby_void();
     }
 }
 
@@ -254,35 +320,6 @@ module vault_roof() {
     }
 }
 
-// Round the body's four vertical corners (D27). Each cutter is the square
-// corner block minus the corner cylinder, overstepping OUTWARD into air so no
-// cut face lands on the body's own faces.
-module corner_cut_2d(r, nick = 0) {
-    // nick: the circle's centre is pulled this far toward the corner, so the cutter
-    // crosses the faces it rounds instead of lying tangent to them. The sheared (leaning)
-    // cutters need it: their tangent lines coincide with the leaning face (coplanar sliver).
-    difference() {
-        translate([-1, -1]) square([r + 1, r + 1]);
-        translate([r - nick, r - nick]) circle(r = r, $fn = 64);
-    }
-}
-module corner_cuts() {
-    r = corner_r;
-    for (c = [[0, 0, 0], [module_w, 0, 90]])
-        translate([c[0], c[1], -1]) rotate([0, 0, c[2]])
-            linear_extrude(height = module_h + 2) corner_cut_2d(r);
-    // the back corners follow the leaning back wall (D42): a vertical cutter up to
-    // the lean, and above it the same cutter sheared back by the lean's slope
-    for (c = [[module_w, module_d, 180], [0, module_d, 270]])
-        translate([c[0], c[1], -1]) rotate([0, 0, c[2]]) {
-            linear_extrude(height = flare_zo + 1) corner_cut_2d(r);   // top at flare_zo exactly, where the sheared cutter above starts with the same section (a top 0.5 higher left a 0.8 mm2 ledge)
-        }
-    for (c = [[module_w, 180], [0, 270]])
-        multmatrix([[1, 0, 0, 0], [0, 1, flare_tan, module_d - flare_zo * flare_tan], [0, 0, 1, 0], [0, 0, 0, 1]])
-            translate([c[0], 0, flare_zo]) rotate([0, 0, c[1]])
-                linear_extrude(height = module_h - flare_zo + 2) corner_cut_2d(r, 0.03);
-}
-
 // ------------------------------------------------------------
 // Fill-lid seat. One lid spans BOTH mouths, so everything
 // standing above the seat plane between them comes down to it.
@@ -307,6 +344,22 @@ module fill_seat_cut() {
         cube([fill_grip_d, wall_div + 3, lid_t + 2]);
 }
 
+// The fill mouth's rim (D48). Both hoppers share one rectangular opening; its four
+// inside edges at the rim are 90 degree convex edges that the pouring hand, the pills and the lid
+// all pass. A cone of the opening's outline, growing 45 degrees from mouth_chamfer under
+// the rim, bevels all four at once, and doubles as a lead-in for the lid. The near plate is 0.3
+// inside the opening, so no cutter face lies on a wall of the mouth.
+module mouth_chamfer_cut() {
+    c = mouth_chamfer; z0 = hopper_rim - c - 0.3; z1 = hopper_rim + 1;
+    s = 0.02;   // the front and back flanks sit 0.02 further out than the side flanks, so the cone's corner edges never run through the mouth's own vertical corner edges
+    x0 = wall_out; x1 = module_w - wall_out;
+    hull() {
+        translate([x0 + 0.3, hop_mouth_y0 + 0.3 - s, z0]) cube([x1 - x0 - 0.6, hop_mouth_y1 - hop_mouth_y0 - 0.6 + 2 * s, 0.01]);
+        translate([x0 - (c + 1), hop_mouth_y0 - (c + 1) - s, z1])
+            cube([x1 - x0 + 2 * (c + 1), hop_mouth_y1 - hop_mouth_y0 + 2 * (c + 1) + 2 * s, 0.01]);
+    }
+}
+
 // ------------------------------------------------------------
 // Scalloped front wall (params.scad 4c). The lid plane cannot come down any
 // further -- its back end is pinned to tray B's rim -- but the front WALL can.
@@ -314,6 +367,15 @@ module fill_seat_cut() {
 // dividers and the two side walls still run up to the plane and carry the lid.
 // The lid's skirt hangs down the outside and closes the scallops.
 // ------------------------------------------------------------
+module scallop_outline(x0, x1, r) {
+    offset(r = r)
+        polygon([[x0 + r, trayA_front_h + r],
+                 [x1 - r, trayA_front_h + r],
+                 [x1 - r, trayA_front_h + 40],
+                 [x0 + r, trayA_front_h + 40]]);
+}
+function scallop_x0(i) = i == 0 ? wall_x1(i) + pillar_w : wall_x1(i) - scallop_over;
+function scallop_x1(i) = i == bays - 1 ? wall_x1(i) + bay_w - pillar_w : wall_x1(i) + bay_w + scallop_over;
 module front_scallop_cut() {
     r = trayA_scallop_r;
     for (i = [0 : bays - 1]) {
@@ -321,14 +383,37 @@ module front_scallop_cut() {
         // front wall stays at the full pick-plane height there and the pick
         // lid's lug drops in behind it. No scallop_over on that side, since the
         // cut then ends in the middle of the front wall, on no face of its own.
-        x0 = i == 0         ? wall_x1(i) + pillar_w : wall_x1(i) - scallop_over;
-        x1 = i == bays - 1  ? wall_x1(i) + bay_w - pillar_w : wall_x1(i) + bay_w + scallop_over;
-        xz_extrude(-1, wall_out + 1)
-            offset(r = r)
-                polygon([[x0 + r, trayA_front_h + r],
-                         [x1 - r, trayA_front_h + r],
-                         [x1 - r, trayA_front_h + 40],
-                         [x0 + r, trayA_front_h + 40]]);
+        xz_extrude(-1, wall_out + 1) scallop_outline(scallop_x0(i), scallop_x1(i), r);
+    }
+}
+
+// The scallop's floor edge, front face and tray side (D48): a 45 degree chamfer along the
+// top edge of the front wall wherever the scallop has cut it down, where a finger rests and
+// a pill is pulled over. Each cutter is a frustum of the scallop's own outline SHIFTED DOWN,
+// not grown: it is scallop_chamfer deep at the wall's face and nothing at that depth into the
+// wall, so the bevel is widest on the flat floor, narrows up the rounded corners as they steepen
+// and fades out where they meet the vertical sides; it never reaches the dividers' tips (which
+// scallop_over has already thinned) and stops 0.1 short of the bay's own sides. The tray-side
+// frustum starts 0.2 into the tray and shifts a little further, so it stays above the divider
+// fillets' tops (front_fillets stops 1 under the scallop floor).
+module scallop_chamfer_cuts() {
+    c = scallop_chamfer; r = trayA_scallop_r; e = 0.2;
+    for (i = [0 : bays - 1]) {
+        a = scallop_x0(i) + scallop_over + 0.1; b = scallop_x1(i) - scallop_over - 0.1;   // inside the bay's own width, clear of the divider tips
+        // Each frustum is the hull of two thin plates of the outline, one far out in the air and one
+        // far inside the scallop cut itself, so the shift runs straight through the wall's face at 45
+        // degrees: shift(y) = c - y on the front face, c - (wall_out - y) on the tray side. (Plates
+        // of any thickness bend the hull's slope: its lower surface runs to the plate's far edge.)
+        // front face: shift c + 1.6 at y = -1.6, -0.6 (up) at y = c + 0.6
+        hull() {
+            translate([0, -1.6, 0]) xz_extrude(0, 0.01) translate([0, -(c + 1.6)]) scallop_outline(a, b, r);
+            translate([0, c + 0.6, 0]) xz_extrude(0, 0.01) translate([0, 0.6]) scallop_outline(a, b, r);
+        }
+        // tray side: shift c + e at y = wall_out + e, -0.6 at y = wall_out - c - 0.6
+        hull() {
+            translate([0, wall_out + e, 0]) xz_extrude(0, 0.01) translate([0, -(c + e)]) scallop_outline(a, b, r);
+            translate([0, wall_out - c - 0.6, 0]) xz_extrude(0, 0.01) translate([0, 0.6]) scallop_outline(a, b, r);
+        }
     }
 }
 
@@ -459,11 +544,20 @@ module corner_beads() {
 // bare T is where a layer line wants to open, and it is a square pocket for a capsule
 // end. A tray_fillet_r quarter-round in each of the twelve corners, from the floor up
 // to just under the scallop, fixes both; the scallop cut trims anything above.
+//
+// D48 does the same for tray B's front wall (the wall between the trays, face at yB_tray0):
+// pills pile against it just as they do against tray A's front wall. Its gusset starts 1 under
+// tray B's floor and stops tray_fillet_top_under below the wall's top plane at the face, so
+// the plane's slope (the wall's top rises 0.96 mm per mm toward the back) clears it.
 module front_fillets() {
-    r = tray_fillet_r; y0 = yA_tray0;
+    corner_fillets(yA_tray0, base_z - 1, trayA_front_h - 1.0);
+    corner_fillets(yB_tray0, trayB_floor - 1, pickplane(yB_tray0) - tray_fillet_top_under);
+}
+module corner_fillets(y0, z0, z1) {
+    r = tray_fillet_r;
     for (i = [0 : bays - 1]) {
         bx0 = wall_x1(i); bx1 = bx0 + bay_w;
-        translate([0, 0, base_z - 1]) linear_extrude(height = trayA_front_h - 1.0 - (base_z - 1)) {
+        translate([0, 0, z0]) linear_extrude(height = z1 - z0) {
             difference() {      // left corner of the bay: the fillet grows toward +x
                 translate([bx0 - 0.3, y0 - 0.3]) square([r + 0.3, r + 0.3]);
                 translate([bx0 + r, y0 + r]) circle(r = r + 0.03, $fn = 48);   // +0.03: crosses the faces, not tangent to them
@@ -617,6 +711,15 @@ module foot_pad_cuts() {
               [module_w - foot_pad_inset, module_d - foot_pad_inset]])
         translate([p[0], p[1], -1])
             cylinder(h = 1 + foot_pad_depth, d = foot_pad_d, $fn = 48);
+    // elephant foot squeezes each recess's mouth smaller: a bed_chamfer lead-in cone on the
+    // bed face (it crosses the recess wall at bed_chamfer, steeper than the wall is tall, so
+    // it is transversal to it) keeps the full diameter for the stick-on foot
+    for (p = [[foot_pad_inset, foot_pad_inset],
+              [module_w - foot_pad_inset, foot_pad_inset],
+              [foot_pad_inset, module_d - foot_pad_inset],
+              [module_w - foot_pad_inset, module_d - foot_pad_inset]])
+        translate([p[0], p[1], -1])
+            cylinder(h = 1 + bed_chamfer + 0.2, d1 = foot_pad_d + 2 * (bed_chamfer + 1.0), d2 = foot_pad_d - 0.4, $fn = 48);
 }
 
 // ------------------------------------------------------------
@@ -632,7 +735,9 @@ module body_geometry() {
         skin_trim();
         label_cuts();
         foot_pad_cuts();
-        corner_cuts();
+        mouth_chamfer_cut();
+        cubby_chamfer_cut();
+        scallop_chamfer_cuts();
     }
 }
 
