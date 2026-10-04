@@ -255,11 +255,11 @@ final --export` rebuilds them from the sources and checks each against its STL):
   coupon; in another filament run the coupon again. **Dry it first**: test print 3 strung
   heavily (groove, bins, lid).
 - **No brim.** Elegoo Slicer: Others, Skirt and brim, Brim type, No-brim (a brim fused into
-  the walls on test print 1). **No supports.** 15% infill, 0.2 mm layers. Bridge detection on.
+  the walls on test print 1). **No supports.** 10% cubic infill, 2 wall loops (the 2.4-2.8 mm walls are already near solid at 2 loops; a third added about 150 g), 0.2 mm layers. Bridge detection on.
 - The body's base and the foot-pad recesses carry a 0.5 mm bevel against elephant foot; the
   lids' bed faces carry 1.0.
 - Purchased: four stick-on rubber feet, 10 mm (they drop into the recesses); 1/2 inch TZe label tape.
-- Print the body first; it is the long one (about 960 g of PETG at 15% infill; start on a full 1 kg spool and keep a second one ready) and the lids are
+- Print the body first; it is the long one (Elegoo Slicer, revision 12 with D50: 899 g of PETG, 1 d 3 h at 10% cubic infill and 2 wall loops, so it fits one full 1 kg spool; at 15% it was 1.02 kg) and the lids are
   checked against it. The lid plates are 239 and 234 mm wide: nothing else goes on those plates.
 - Features printed for the first time in this unit: the D41 ribs, the D42 flare, the D43 slim
   rail and groove, the K1 skin cap, the D45 labels, the divider fillets. `TEST_PRINTS.md`,
@@ -392,7 +392,7 @@ judge the shape and the lid fits; do not judge the flow from it.
 - **The porch ceiling is a flat 45 x 40 mm bridge in every bay** (D29). Check it
   on the first print for sag.
 - The ~2 L of solid wedge under the chute is infill. The body is 2.3 L of
-  solid; plan for about 960 g at 15% infill (2.28 L solid; read the exact figure from the slicer).
+  solid; sliced at 899 g with 10% cubic infill and 2 wall loops (2.31 L solid).
 - Bay width is **1.73x the longest pill** against a 2-3x mass-flow rule of
   thumb. Mitigated, not eliminated.
 - The two `NEAR MISS` notes (0.150 mm, 0.144 mm) are both lids' intended
