@@ -738,3 +738,122 @@ corner cutter ending 0.5 mm above the sheared one that starts the lean: it left 
 It now ends where the sheared cutter starts (`flare_zo`), which is the back edge of the
 cubby's ceiling (155.55), and an assert ties the two. 0.1 mm2 remains (below the nozzle).
 
+
+## Revision 12: the edge pass (D48) and the final print files (D49)
+
+Test print 4 is skipped; the user goes straight to the full unit. D48 audits every edge
+class of the three parts. Decisions: **T** treated now (new), **E** already treated in an
+earlier revision and kept, **K** kept sharp on purpose (functional), **L** left square by
+judgement (not worth a cut, or the cut would make something worse). `probes/edge_pass.py`
+tests every T row on the real meshes.
+
+### Audit, body (print orientation = as modelled)
+
+| # | Edge | Treatment before | Decision | Reason |
+|---|---|---|---|---|
+| B1 | Base perimeter (the bed face, 4 sides and 4 corners) | square | **T** 0.5 mm 45 degree chamfer | elephant foot; comes from the outer tool (below), so it follows the rounded corners |
+| B2 | Foot-pad recess mouths (4, on the bed face) | square | **T** 45 degree lead-in cone, 0.5 mm at the bed face, crossing the recess wall at 0.5 | elephant foot closes a recess mouth by a few tenths; the 10 mm stick-on foot must still enter. The recess itself is not smaller |
+| B3 | Vertical outer corners (4) | round r 1.2 (separate cutters) | **T** round r 1.5, same surface as B4/B5 | one dilation, no second tangent line (INCIDENTS) |
+| B4 | Top edges in section (the step, the rim, the back lean, the pick plane's back end) | round r 1.5 | **E** unchanged | |
+| B5 | Side faces' perimeter (x = 0 and x = 240: along the pick plane, the step, the rim, the back lean) | square | **T** round r 1.5 (hand-carried edge; up-facing or vertical, so a round, not a chamfer) | the side walls are 2.8 thick: 1.3 of flat is left. The rail-1 break-out zone on the right face was re-probed with the round running through it (below) |
+| B6 | Front edge of the pick plane (130 degrees) | 0.16 mm easing | **E** unchanged | |
+| B7 | Tops of dividers, walls and the front wall's pillars on the pick plane, inner edges | square | **K** | the pick lid's seating plane and its 0.2 float; a 2.4 wall top with a bevel on each side keeps 1.4 of flat for nothing |
+| B8 | Scallop floor edges, front face and tray side (5 floors) | square | **T** 0.7 mm 45 degree chamfer following the outline, fading to nothing up the r 6 corners | a finger rests on it and a pill is pulled over it. Not applied up the vertical sides: the divider tips there are already thinned to 1.6 by `scallop_over` |
+| B9 | Scallop sides / divider tips above the floor, pillars beside the end bays | square | **L** | the tips are 1.6 x 3.8 mm; any bevel feathers them. The pillars are the stop blocks' front |
+| B10 | Fill mouth rim, inside, 4 edges | square | **T** 0.45 mm 45 degree chamfer (a cone of the opening), also a lead-in for the lid | 0.45 and not more: the front rim wall is 2.4 wide and loses 1.5 to the outer round (0.45 of flat left). Not 0.4 (see INCIDENTS) |
+| B11 | Fill mouth rim, outside (the step, the back lean, the sides) | round r 1.5 / square | **E** / **T** by B4, B5 | |
+| B12 | Fill-lid seat ledges, divider tops at the seat plane, the lid's 0.30 recess walls | square | **K** | the lid rests on them; the 0.30 fit |
+| B13 | Pull-lip notch (the wall cut down to the seat across 34 mm), its vertical edges and its floor edge | square | **L** | the finger works under the lid's lip, not on these edges; they bound the lip's clearance of 2 mm per side. Named as the one hand-reached edge left square |
+| B14 | Cubby mouth in the back face: both side edges and the lip's top edge | square | **T** 0.5 mm 45 degree chamfer (a cone of the mouth, its top on the 45 degree ceiling less 0.05) | where a hand goes in. 0.5: the side walls are 2.8 wide and lose 1.5 to the outer round (0.8 of flat left) |
+| B15 | Cubby mouth, ceiling edge (135 degrees) | obtuse | **E** | |
+| B16 | Cubby inside corners: floor / front wall, floor / side walls, ceiling / side walls, ceiling / front wall | square | **T** 2 mm fillet, three-dimensional (the void is dilated by a ball) | easier cleaning |
+| B17 | Cubby lip, inner top edge | square | **L** | it is the lip's inside edge, 2.8 wide and 30 high; accessories lie against it flat |
+| B18 | Male rail and groove edges (dovetail profile, lead-in cone, rail undersides, groove countersink and bevels) | as D28, D39, D43 | **K** | the coupon must still match; the rail-1 groove bevels are the K1/K2-verified geometry |
+| B19 | Label recess edges | square | **K** | the recess is 0.5 deep and the tape is 0.16: a bevel would fill it |
+| B20 | Stop block, filler, lug contact faces and their 0.5 mm clearance, the lid lug sweep | square | **K** | D38 |
+| B21 | Stop block, filler and buttress roots (their concave edges to the floor and walls) | square | **L** | they are fused into the end bay's corner behind the contact faces, in the one place a capsule lies against the wall; a fillet at the stop block's back-face root would run into the lug's swept envelope. The corner beads (D41) are already there to push a capsule away |
+| B22 | D41 rib geometry and roots | as D41 | **K** | the push-stop function is measured (`capsule_corner.py`); a root fillet changes it |
+| B23 | Outlet openings' lower edges (the hanging wall between the trays, hopper B's front wall) | square, with 8 mm corner chamfers | **L** | a downward bridge edge; a bevel is an overhang and nothing touches it (36 mm of clear height under it) |
+| B24 | Flow-void corners in section (tray A and B floors, chute foot, porch, both hoppers, the D42 flare, the vault) | fillet r 2 | **E** unchanged | |
+| B25 | Tray A front wall / divider and side wall vertical corners | r 2 gusset (D46) | **E** unchanged | |
+| B26 | Tray B front wall / divider and side wall vertical corners (10) | square | **T** r 2 gusset from 1 mm under the floor to 2 mm under the wall's top plane | pills pile against that wall, as against tray A's front wall |
+| B27 | Divider / floor edges along the flow, and the vertical corners of the chute, tray B's back wall and both hoppers | square | **L**, impractical | a three-dimensional fillet of those voids stands free where the later cuts take the wall away: above the seat plane (the seat cuts remove the dividers but not a 2 mm gusset beside them) and over the scallops. Tried on paper against the cuts, not hacked; the flow corners that matter (floors, ramps, the foot) are the profile fillets |
+
+### Audit, pick lid (print orientation: plate top face on the bed)
+
+| # | Edge | Before | Decision | Reason |
+|---|---|---|---|---|
+| P1 | Plate top face perimeter, all four sides (the bed face) | chamfer 1.0 | **E** | already over the 0.4 to 0.6 elephant-foot chamfer |
+| P2 | Plate underside, front and back edges | chamfer 1.0 | **E** | |
+| P3 | Plate underside, x-end edges | square | **T** 0.8 mm chamfer, from y = 0.2 back | up-facing in print; the end face keeps 3 - 1.0 - 0.8 = 1.2 mm of flat |
+| P4 | Skirt bottom edge | chamfer 1.0 | **E** | |
+| P5 | Skirt outer end edges (2 vertical edges, where the lid is pinched) | square | **T** 1.0 mm chamfer, not a round | the outer face hangs 43.8 degrees off vertical in print; a chamfer between it and the vertical end face stays inside that |
+| P6 | Skirt inner end edges | square | **K** | they face the body's front face across the 0.35 clearance |
+| P7 | Seating plane (underside), skirt clearance, lug and its contact face | | **K** | |
+| P8 | "FRONT" relief edges | square | **L** | 0.6 mm of text |
+
+### Audit, fill lid (print orientation: plate top face on the bed)
+
+| # | Edge | Before | Decision | Reason |
+|---|---|---|---|---|
+| F1 | Top perimeter (the bed face), plate and lip | chamfer 1.0 | **E** | |
+| F2 | Plan corners, plate and lip | round r 2 | **E** | |
+| F3 | Underside perimeter of the plate | 0.6 lead-in chamfer | **K** | the fit's lead-in (0.30 clearance) |
+| F4 | Pull lip underside perimeter, front and sides (the back is buried in the plate) | square | **T** 0.5 mm chamfer | a fingertip hooks under it |
+
+Counts over the 39 rows: **T 12** (body B1, B2, B3, B5, B8, B10, B14, B16, B26; pick lid P3, P5; fill lid F4),
+**E 11** (B4, B6, B11, B15, B24, B25; P1, P2, P4; F1, F2), **K 9** (B7, B12, B18, B19, B20, B22; P6, P7; F3),
+**L 7** (B9, B13, B17, B21, B23, B27; P8; B27 is the one named impractical). Body 27 rows, pick lid 8, fill lid 4.
+
+### Derived: the outer solid is one dilation
+
+Revisions 7 to 11 rounded the body twice: the silhouette's convex corners by an opening pass
+in the (y, z) profile, and the four vertical corners by separate cutters at `corner_r` 1.2.
+Rounding the side faces' perimeter as well meant a third family of cutters along straight and
+oblique lines, each of which would have had to meet the others on their tangent lines (the
+INCIDENTS class). D48 replaces all of it with one operation: the silhouette extruded across the
+width is eroded by `edge_r_top` (1.5) and dilated by a ball of that radius (Minkowski). Every
+convex outer edge is then the same rounded surface, the back corners follow the leaning wall
+exactly, and the bed chamfer comes from the tool's shape: its lower half is a 45 degree cone
+(the upper hemisphere hulled with a disc 0.5 under its equator, 1.0 in radius), so the bed face
+is flat with a 0.5 mm bevel round it, corners included. `ball()` scales OpenSCAD's sphere by
+1 / cos(180 / n), because the sphere has no vertex on the poles or equator and comes out 0.9%
+small. `corner_r` and its asserts are gone; `edge_r_top <= wall_out - 1.0` replaces them.
+The step's inside corner stays sharp (checked on the mesh); the lid probes are unchanged
+(0.14 mm clearance at rest).
+
+Measured with `probes/edge_pass.py` (point-in-solid pairs placed from `params.scad`) on the
+three real meshes, all pass: bed face 0.96 mm narrower than the first full section; side face round
+at the rim and on the pick plane; mouth chamfer on three sides; scallop chamfer on both faces
+with the floor still at `trayA_front_h` mid-wall; cubby corners filled and its mouth chamfered;
+tray B corner gusset; pick lid skirt and underside chamfers; fill-lip chamfer. Each part is one
+watertight body, 17002 / 2178 / 460 triangles, and has no edge under 0.001 mm (revision 11's body
+had six).
+
+### Derived: what else moved, and what did not
+
+| Check | Revision 11 | Revision 12 |
+|---|---|---|
+| `validate_scad.sh --all` | 14 passed, 0 failed, 3 n/a, 0 inconclusive, 1 advisory | the same, verbatim: `COVERAGE: 14 passed, 0 failed, 3 not-applicable, 0 inconclusive, 1 advisory (18 checks reported).` |
+| Capacity, middle bay (A / B) | 438.2 / 200.2 mL | 438.3 / 200.2 mL |
+| Capacity, end bays (A / B) | 428.4, 428.8 / 198.3 | 428.4, 428.8 / 198.3 |
+| `corner_thickness.py`: right break-out zone, thin regions | 465, all named | 422, all named; 0 knife edges |
+| Skin above the front lip (groove floor / mid / mouth) | 2.26 / 1.69 / 1.28 mm | 2.26 / 1.69 / 1.57 mm (limit 2.4) |
+| `lid_retention.py` (a) to (h) | all pass | all pass; clearance at rest 0.14 mm |
+| `overhang_scan.py` | the declared bridges; pick lid 117 mm2 steep, fill lid 62 | the same bridges; pick lid 92, fill lid 75 (the lead-in and bed chamfers at exactly 45.0); the body reads 760 mm2 more steep: the cubby ceiling, exactly 45.0 degrees before and now, whose triangles now fall either side of the threshold on rounding noise |
+| Body bounding box | 243.0 x 213.01 x 189 | the same |
+
+Final part sizes, print orientation: body 243.0 x 213.0 x 189.0 mm (2281 cm3), pick lid
+239.0 x 139.3 x 22.7 mm (103 cm3), fill lid 233.8 x 129.0 x 3.0 mm (85 cm3).
+
+### D49: the final print files
+
+`python3 build/maquette/make_plate.py final --export` re-renders `build/print_ready/{body,pick_lid,fill_lid}.stl`
+(print orientation, z = 0) and writes `build/final/final_{body,pick_lid,fill_lid}_256.3mf`:
+core-spec 3MF, one named object each (`pill_organizer_body`, `pill_organizer_pick_lid`,
+`pill_organizer_fill_lid`), centred on the 256 x 256 plate at z = 0. Each is read back and
+compared with its STL (size within 0.001 mm, volume within 0.01%, triangle count, watertight).
+The limit checked is the printer's usable footprint, **5 to 251 mm** (`max_part_x` 246), not
+10 to 246: the body with its rail is 243 mm wide and cannot lie within a 236 mm window.
+Centred, the body spans x 6.5 to 249.5, y 21.5 to 234.5; the pick lid x 8.5 to 247.5, y 58.4 to 197.6;
+the fill lid x 11.1 to 244.9, y 63.5 to 192.5.

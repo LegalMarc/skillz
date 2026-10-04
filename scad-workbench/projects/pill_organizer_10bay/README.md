@@ -7,6 +7,17 @@ Lift one lid and all ten types are exposed.
 **Two lids total.** Both fill ports at the back under one flat lid, both pick
 rows at the front under one sloped lid.
 
+**Revision 12.** Twelve revisions, forty-nine recorded decisions (`plan.md`). Revision
+12 is the final full-size print: the user skipped test print 4 and goes straight to the unit.
+It is an edge pass (D48): every edge of the three parts was audited (`calculations.md`,
+"Revision 12: the edge pass", 39 rows) and the ones a hand, a pill or the bed touches are
+chamfered or rounded: a 0.5 mm bed chamfer on the base and the foot-pad mouths, r 1.5 on the
+side faces' perimeter, chamfers on the scallop floors, the fill mouth's rim and the cubby's
+mouth, 2 mm fillets in the cubby and in tray B's divider corners, and chamfers on the pick
+lid's skirt and underside ends and the fill lid's lip. The lid's seat, the dovetail, the
+stop blocks and lugs, the labels and the ribs stay sharp on purpose. Capacities move by 0.1
+mL. D49 writes the three plates to print (`build/final/`, see "Print the final unit").
+
 **Revision 11.** Eleven revisions, forty-seven recorded decisions (`plan.md`).
 Revision 11 is test print 3 (the revision 10 section, in Generic PETG): row A
 refills now, the lid and its lug work, and what was left was small. Three small
@@ -42,9 +53,9 @@ revision 9 fixed tray B's pile.
 |---|---|
 | Overall | 243 x 213.0 x 189 mm (the 243 includes the 3 mm joining rail; 194.8 deep below z 155, the back wall leans out above; the plate allows 246 x 246 x 250) |
 | Bays | 10, two rows of 5, 44.96 mm clear each, trays 40 mm deep |
-| Capacity, middle bay | **438 mL front row, 200 mL back row**; end bays 428 / 198. About 3.2 L total, geometric maximum |
+| Capacity, middle bay | **438 mL front row, 200 mL back row** (438.3 / 200.2 after the edge pass); end bays 428 / 198. About 3.2 L total, geometric maximum |
 | Printed parts | **3 designs, 3 pieces**, no hardware |
-| Validation | **13 passed, 0 failed, 4 n/a, 0 inconclusive, 1 advisory** (the advisory is `check_printability.py`; its overhang half fails every real FDM part on area, but its THIN-WALL half caught a real 0.2 mm wall in revision 7 that everyone had stopped reading it for — read both halves) |
+| Validation | **14 passed, 0 failed, 3 n/a, 0 inconclusive, 1 advisory** (the advisory is `check_printability.py`; its overhang half fails every real FDM part on area, but its THIN-WALL half caught a real 0.2 mm wall in revision 7 that everyone had stopped reading it for — read both halves) |
 | Confidence | Tier 2 — geometry verified, fit uncalibrated |
 
 A 90-day once-daily size-00 charge is 147.4 mL, so the front row carries 261
@@ -225,6 +236,33 @@ it is laid. Every wall over both trays dies on that plane.
   found it awkward and half hidden by the rail.) They are 0.5 mm deep, so the tape
   sits below flush and cannot be caught. Neither is on a lid — lids come off and
   go back the other way round.
+
+## Print the final unit
+
+Revision 12 is the full unit; test print 4 (the revision 11 section) was skipped. Three
+plates, one part each, plain core-spec 3MFs that Elegoo Slicer opens as a single named
+object, already centred on the 256 x 256 plate at z = 0 (`python3 build/maquette/make_plate.py
+final --export` rebuilds them from the sources and checks each against its STL):
+
+| Plate | File | Part | Size on the plate | Spans |
+|---|---|---|---|---|
+| 1 | `build/final/final_body_256.3mf` | `pill_organizer_body` | 243.0 x 213.0 x 189.0 mm, 2.28 L of solid | x 6.5-249.5, y 21.5-234.5 |
+| 2 | `build/final/final_pick_lid_256.3mf` | `pill_organizer_pick_lid` | 239.0 x 139.3 x 22.7 mm, 103 cm3 | x 8.5-247.5, y 58.4-197.6 |
+| 3 | `build/final/final_fill_lid_256.3mf` | `pill_organizer_fill_lid` | 233.8 x 129.0 x 3.0 mm, 85 cm3 | x 11.1-244.9, y 63.5-192.5 |
+
+- **Filament: PETG**, the same as test print 3. `rail_clear` 0.215 was read from a PETG
+  coupon; in another filament run the coupon again. **Dry it first**: test print 3 strung
+  heavily (groove, bins, lid).
+- **No brim.** Elegoo Slicer: Others, Skirt and brim, Brim type, No-brim (a brim fused into
+  the walls on test print 1). **No supports.** 15% infill, 0.2 mm layers. Bridge detection on.
+- The body's base and the foot-pad recesses carry a 0.5 mm bevel against elephant foot; the
+  lids' bed faces carry 1.0.
+- Purchased: four stick-on rubber feet, 10 mm (they drop into the recesses); 1/2 inch TZe label tape.
+- Print the body first; it is the long one (about 650 g at 15% infill) and the lids are
+  checked against it. The lid plates are 239 and 234 mm wide: nothing else goes on those plates.
+- Features printed for the first time in this unit: the D41 ribs, the D42 flare, the D43 slim
+  rail and groove, the K1 skin cap, the D45 labels, the divider fillets. `TEST_PRINTS.md`,
+  "Final print", lists what to look at on each.
 
 ## Bill of materials
 

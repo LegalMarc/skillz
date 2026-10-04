@@ -136,6 +136,9 @@ the print shows a problem):
 
 ## Test print 4 — planned, revision 11
 
+**SKIPPED:** the user went straight to the full unit (revision 12, "Final print" below). Nothing here
+was printed. Its checks are kept because the final print is the first print of every feature in it.
+
 **Printed:** `build/section/test_print_section_256.3mf`: the right-hand end bay cut at
 the left face of divider 4, the whole height and depth (50.2 x 213 x 189 mm), the
 matching pick-lid end and fill-lid end at the section's own width, and the coupon
@@ -157,3 +160,26 @@ filament first. Slicer settings as test print 3 (no brim, no supports).
 | Cubby opening | Look at the back | Low retaining wall (30 mm) across a pocket that takes a chapstick or two |
 | Stringing | Look at the groove, bins and lid | Much less than test print 3 once the filament is dry |
 
+
+## Final print — planned, revision 12
+
+**Printed:** three plates, `build/final/final_body_256.3mf`, `final_pick_lid_256.3mf`,
+`final_fill_lid_256.3mf`. PETG (dried), no brim, no supports, 15% infill. Test print 4
+was skipped, so the revision 11 features below have never been printed; the edge pass
+(D48) is new too. Report anything that is not a pass.
+
+| Watch | Where | What to look for | If it fails |
+|---|---|---|---|
+| D41 ribs | tray A, front-bottom corner, three per bay | Print clean as half-round ribs with a rounded end; a capsule slid to the wall rides up a rib's side and tips | A filled wedge, not larger ribs |
+| D42 flare | hopper A's back wall | A clean 60-degree lean (30 degrees from vertical, not an overhang); pouring from a bottle goes in without spilling | Shallower lean or a wider mouth |
+| D43 slim rail and groove | right wall (groove) and left wall (rail), both ends | Rail enters the groove by hand at `rail_clear` 0.215, snug, comes out by hand; no tear at the break-out | Move `rail_clear` by one 0.025 step (the coupon is the guide) |
+| K1 skin cap | the 2.4 mm skin behind the rail-1 groove, front bin | No wobble or tear; flat top, 2.3 mm above the lip at worst | Thicken or lower the cap |
+| D45 labels | the front face, two stacked strips | Both strips visible with the lid on, tape fits the 0.5 recess | |
+| Divider fillets | tray A and tray B front-wall corners (D46, D48) | Smooth quarter-rounds, no gap between them and the divider | |
+| Bed chamfer (D48) | body base and the four foot-pad recess mouths | A 0.5 mm bevel on the first layers; a 10 mm stick-on foot enters its recess | Raise `bed_chamfer` toward 0.6 |
+| Side-face rounds (D48) | both side faces, along the pick plane, the step and the rim | Smooth rounds, no ragged edge, no thin shell | |
+| Scallop, mouth and cubby chamfers (D48) | front wall floors, fill-mouth rim, cubby mouth | Clean 45-degree faces; the scallop chamfer fades out up the corner arcs | |
+| Lid fit | pick lid on the body | Seats on its lugs, no jam on lift (probes pass; first time with the rounded side faces under the lid's ends) | |
+| Fill lid | in the mouth | 0.30 all round, lifts out by the lip; the lip's underside bevel is a fingertip rest | |
+| Stringing | groove, bins, lids | Much less than test print 3 once the PETG is dry | Dry longer; tune retraction |
+| Print time | body | About 650 g at 15% infill | |

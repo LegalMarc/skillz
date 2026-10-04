@@ -1,3 +1,29 @@
+# Resume note -- revision 12 (read this first)
+
+**Where it stands:** revision 12, the final full-size print, is implemented on branch
+`pill-organizer-rev12` (from `pill-organizer-rev11` at `7d99c97`); not pushed, no PR. Test
+print 4 was skipped. D48 is the edge pass (audit table in `calculations.md`, "Revision 12: the
+edge pass": 39 rows, 12 treated, 11 already treated, 9 kept sharp, 7 left square, one named
+impractical). D49 is the print files: `build/final/final_{body,pick_lid,fill_lid}_256.3mf`
+(`python3 build/maquette/make_plate.py final --export`), centred on the plate, read back
+against their STLs. The body's outer solid is now one Minkowski dilation of the extruded
+silhouette (it replaced the opening pass and `corner_r`); read that first if you review it.
+
+**Proven:** `validate_scad.sh --all` (14 passed, 0 failed, 3 n/a, 0 inconclusive, 1 advisory),
+`check_rules.py`, every probe in `probes/` including the new `probes/edge_pass.py`; capacities
+438.3 / 200.2 mL (middle bay), 428.4 / 428.8 / 198.3 (end bays); each part one watertight body
+with no edge under 0.001 mm. **Not proven:** anything about the printed result: the D41 ribs,
+the D42 flare, the D43 rail, the K1 skin cap, the labels, the fillets and now the bevels have
+never been printed (`TEST_PRINTS.md`, "Final print"). Judgement calls: the plate window is
+5..251 mm, not the 10..246 asked for (the body is 243 wide); the side-face round runs through
+the rail-1 break-out zone (the K2 probe still passes: 0 unnamed thin regions, 0 knife edges).
+
+**Next step:** an adversarial review of revision 12 (start with `outer_solid()` in
+`parts/body.scad` and the audit table's K and L rows), then print the three plates, body first,
+dried PETG, no brim, no supports.
+
+---
+
 # Resume note — revision 11 (read this first)
 
 **Where it stands:** revision 11 (test print 3's results, D41-D47) is implemented on

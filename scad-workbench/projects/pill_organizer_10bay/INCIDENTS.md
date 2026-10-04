@@ -408,3 +408,19 @@ declarations against what they claimed to test and by probing the mesh with
 - **Fix:** the skin's top is trimmed to one skin thickness above the lowest front-lip top; the check now measures exactly that (`probes/skin_free_height.py`: 6.35 / 6.03 / 5.24 mm before, 2.26 / 1.69 / 1.28 after) and the slice test is back as a failing check with every exception named in `calculations.md`.
 - **Already promoted to a rule?** not yet -- candidate: when a probe is relaxed because it flags harmless things, replace it with a check that names the harmless things; deleting the coverage is how the real defect gets through.
 
+
+## Revision 12 -- the edge pass
+
+### 2026-10-04 -- a bevel cutter built as a convex hull cut nothing, then left zero-volume shards that came and went with the segment count
+- **Where:** the body's bed chamfer, the fill mouth's rim chamfer, the scallop chamfers (D48).
+- **Symptom:** (1) the first bed-chamfer cutter, `hull()` of a prism under the bed and a ring above it, removed nothing: the hull reaches its widest at its LOWEST ring, so the 45 degree face ran from the prism's bottom to the top ring and passed outside the part. (2) The scallop frustums, hulled from thick plates, came out at 35 degrees, not 45: a hull's lower surface runs to a plate's far edge. (3) The bevel cutters that lay against the rounded corner left 2 to 15 zero-volume shards along the vertical corners, and the count changed with `$fn` (36: 15 bodies, 44: watertight, 52: 7). (4) The mouth cone's corner edges ran exactly through the mouth's own vertical corner edges and left four degenerate triangle pairs.
+- **Root cause:** hull() of a prism and a plate is not the loft between the two outlines; two surfaces made by different faceting routines (a cone ring and a Minkowski ball) meet near-tangent along the whole corner; a cone's corner edge through another edge is a coincidence like a face on a face.
+- **Fix:** the bed chamfer is the Minkowski tool's own lower half (a cone), so there is no cutter to agree with the rounded surface at all; frustums are hulled from two THIN plates, one in the air and one far inside the cut, so the surface runs straight through the face; the mouth cone's front and back flanks sit 0.02 further out so its corner edges cross rather than meet. A 0.01 mm plate edge inside a divider's tip came from a plate that was wider than the bay; the plates are now narrower than it.
+- **Already promoted to a rule?** partly -- the generalisation: a bevel is a surface by construction (a shifted outline, or the tool that made the round), not a hull of convenient plates; and a body edit is not trusted until watertight, one body, and no edge under 0.001 mm, which is what found all four.
+
+### 2026-10-04 -- the brief's plate window could not hold the part
+- **Where:** `make_plate.py final`: "within 10..246 mm".
+- **Symptom:** the body is 243 mm wide with its rail; 246 - 10 = 236.
+- **Root cause:** the 10 mm margin is the multi-part test plates' spacing; the printer's usable footprint is 246 (5 mm each side).
+- **Fix:** single-part final plates are checked against 5..251 (`FINAL_MARGIN`) and the body is centred at x 6.5..249.5; recorded in `calculations.md` D49.
+- **Already promoted to a rule?** no.
