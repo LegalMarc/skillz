@@ -1,0 +1,36 @@
+bead_r 8.0; pill 26 x 11; floor 35 deg
+MIDDLE BAY (bay 2)
+  no beads    along x   : underside above the floor at rest min  0.28 max  0.28 mm; centre y 8.00 .. 8.00
+  no beads    along y   : underside above the floor at rest min  0.14 max  0.14 mm; centre y 15.60 .. 15.60
+  no beads    along d45 : underside above the floor at rest min  0.04 max  0.04 mm; centre y 13.40 .. 13.40
+  no beads    along d135: underside above the floor at rest min  0.04 max  0.04 mm; centre y 13.40 .. 13.40
+  with beads  along x   : underside above the floor at rest min  0.81 max  0.81 mm; centre y 8.80 .. 8.80
+  with beads  along y   : underside above the floor at rest min  0.14 max  0.14 mm; centre y 15.60 .. 15.60
+  with beads  along d45 : underside above the floor at rest min  0.04 max  0.04 mm; centre y 13.40 .. 13.40
+  with beads  along d135: underside above the floor at rest min  0.04 max  0.04 mm; centre y 13.40 .. 13.40
+  pockets in the last bay's corner zone, deeper than 3 mm (z, x, y, area mm2, depth mm): 0
+  rest poses within 30 mm of the right side wall (orientation, x, y, z, lift mm):
+     ('x', 207.2, 8.8, 14.9, 0.81)
+     ('x', 211.2, 8.8, 14.9, 0.81)
+     ('x', 215.2, 8.8, 14.9, 0.81)
+     ('x', 219.2, 12.0, 16.5, 0.28)
+     ('y', 207.2, 15.6, 24.1, 0.14)
+     ('y', 211.2, 15.6, 24.1, 0.14)
+     ('y', 215.2, 15.6, 24.1, 0.14)
+     ('y', 219.2, 15.6, 24.1, 0.14)
+     ('y', 223.2, 15.6, 24.1, 0.14)
+     ('y', 227.2, 26.0, 27.3, -3.2)
+     ('d45', 207.2, 13.4, 20.9, 0.04)
+     ('d45', 211.2, 13.4, 20.9, 0.04)
+     ('d45', 215.2, 13.4, 20.9, 0.04)
+     ('d45', 219.2, 13.4, 20.9, 0.04)
+     ('d45', 223.2, 15.2, 22.1, -0.01)
+     ('d135', 207.2, 13.4, 20.9, 0.04)
+     ('d135', 211.2, 13.4, 20.9, 0.04)
+     ('d135', 215.2, 13.4, 20.9, 0.04)
+     ('d135', 219.2, 13.4, 20.9, 0.04)
+     ('d135', 223.2, 25.8, 27.3, -1.83)
+  note: the capsule axis is held horizontal in the model, so only ALONG X (parallel to the contour lines of the 35 degree floor) is a true rest pose;
+        the other orientations are reported for the record (a capsule lying along Y really tilts with the floor).
+
+RESULT: beads lift a capsule lying along X by 0.81 mm at worst (without beads 0.28); last-bay slots: 0

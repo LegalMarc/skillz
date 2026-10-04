@@ -7,6 +7,18 @@ Lift one lid and all ten types are exposed.
 **Two lids total.** Both fill ports at the back under one flat lid, both pick
 rows at the front under one sloped lid.
 
+**Revision 11.** Eleven revisions, forty-seven recorded decisions (`plan.md`).
+Revision 11 is test print 3 (the revision 10 section, in Generic PETG): row A
+refills now, the lid and its lug work, and what was left was small. Three corner
+beads per bay keep the last capsules out of the wedge where tray A's floor meets
+the front wall (D41); hopper A's back wall flares 30 degrees so the narrow back
+mouth is easier to pour into (D42, mouth 39 -> 57 mm); the rail, groove and
+buttress are slimmed to about a divider, the buttress protruding 3 mm into the bay
+instead of 7 (D43); the pick lid has no finger notches, you pinch it (D44); both
+labels sit on the front face, stacked (D45); the section is cut at a full divider
+(D46); and `rail_clear` is 0.215, from the PETG coupon (D47). Tray A's divider
+joints also get a fillet.
+
 **Revision 10.** Ten revisions, forty recorded decisions (`plan.md`). Revision 10
 is test print 2, the first full-size print. It found four things wrong and one
 thing unproven: the pick lid slid straight off its slope (nothing had ever
@@ -28,9 +40,9 @@ revision 9 fixed tray B's pile.
 
 | | |
 |---|---|
-| Overall | 245 x 194.8 x 189 mm (the 245 includes the 5 mm joining rail; the plate allows 246 x 246 x 250) |
+| Overall | 243 x 213.1 x 189 mm (the 243 includes the 3 mm joining rail; 194.8 deep below z 155, the back wall leans out above; the plate allows 246 x 246 x 250) |
 | Bays | 10, two rows of 5, 44.96 mm clear each, trays 40 mm deep |
-| Capacity, middle bay | **428 mL front row, 200 mL back row**; end bays 405 / 193. About 3.1 L total, geometric maximum |
+| Capacity, middle bay | **438 mL front row, 200 mL back row**; end bays 428 / 198. About 3.2 L total, geometric maximum |
 | Printed parts | **3 designs, 3 pieces**, no hardware |
 | Validation | **13 passed, 0 failed, 4 n/a, 0 inconclusive, 1 advisory** (the advisory is `check_printability.py`; its overhang half fails every real FDM part on area, but its THIN-WALL half caught a real 0.2 mm wall in revision 7 that everyone had stopped reading it for — read both halves) |
 | Confidence | Tier 2 — geometry verified, fit uncalibrated |
@@ -76,8 +88,9 @@ the wedge to work.
   WALL is scalloped down to 55, so the reach over it is **11.1 mm** (6.6 at a
   25-degree repose, a pill radius or more). With the lid off, tray A is open at the top and front.
   With it on, the lid's skirt hangs down the outside and the scallops are
-  invisible. Two rounded finger notches in the skirt, under bays 2 and 4, are
-  what you lift the lid by (it tilts about its back edge, or lifts straight). In each END bay the scallop stops 6 mm
+  invisible. The lid has no notches or handles: you pinch the skirt and the plate
+  edge between thumb and forefinger (it tilts about its back edge, or lifts
+  straight, then forward). In each END bay the scallop stops 6 mm
   short of the side wall: the front wall stays at full height there, with a stop
   block behind it in the corner, and that is what holds the lid on (below).
 - **The wedge under the chute is an accessory cubby.** It can never hold pills,
@@ -89,7 +102,23 @@ the wedge to work.
   end — keeps the contents in when you slide the module about; 123 mm of clear
   opening remains above it. About 1.8 L of what was solid infill is usable
   space. (The pick lid does not fit in it: it is 144 mm long.)
-- **The fill mouths are 63 and 39 mm, about 3:2.** The wall between them leans
+- **Corner beads** (D41). The floor meets the front wall in a 55 degree wedge, and
+  the last, larger capsules lodged in it on test print 3. Three spheres of 8 mm
+  radius per bay, centred on the floor/wall junction at a quarter, half and three
+  quarters of the bay, show as rounded bosses in the corner: overlapping, fused to
+  both surfaces, nothing behind them, all faces looking up or out. They hold a
+  capsule lying along the wall up off the apex and out of the wedge. They are
+  modest by nature (see `calculations.md` for the measured effect); the next print
+  says whether they are enough.
+- **Hopper A's mouth flares** (D42). The back wall of the module leans out at 30
+  degrees from vertical from the chute floor's end up to the rim, so the opening
+  you pour into widens toward the top: 57 mm front to back under the lid (39
+  before), 60 at the rim, 49 between the seat ledges (33 before). The chute floor
+  is untouched. The fill lid's recess follows the flare, so the lid is 121 mm long
+  (104) and still drops in with 0.3 mm all round. The module is 214 mm deep at the
+  rim; the back wall's outer face leans 30 degrees, an overhang inside the 45
+  degree rule.
+- **The fill mouths are 63 and 57 mm now (about 1.1:1; 63 and 39 before D42).** The wall between them leans
   8.8 mm forward at the rim (26 degrees from vertical), pivoting at the end
   of hopper B's ramp so the ramp is untouched and the wall below the pivot is
   full thickness. (The revision 7 review found the pivot 7 mm below the ramp's
@@ -128,15 +157,15 @@ the wedge to work.
   lid is on a 43.8-degree slope; PLA on PLA holds to about 17. Both stop faces,
   the lug's and the block's, are **perpendicular to the pick plane**: slide the
   lid down the slope and the faces meet flat after 0.5 mm and overlap by 6.9
-  mm. Lift it by the front notches, which pivots it about its back edge, and the
+  mm. Pinch it by the skirt and lift the front, which pivots it about its back edge, and the
   lug swings along the plane's normal, along the faces, not into them; lift it
   straight up or along the normal and nothing touches either. Turn it round and
   the skirt lands in the wall behind tray B, so it cannot sit. (The first
   version had a vertical stop face; the lug drove into it at 0.5 to 2 degrees
   of tilt and jammed. The review of revision 10 found it.) A 45-degree filler
   closes the slot between each block and the rail buttress so nothing can lodge
-  there. "FRONT" is embossed
-  on the skirt. The two notches in the skirt are finger grips.
+  there. "FRONT" is embossed on the skirt. Test print 3 confirmed the lug keeps the
+  lid seated; the finger notches of revisions 6 to 10 are gone (D44).
 - **Foot pads.** Four 10 mm recesses in the base take stick-on rubber feet, so
   a unit that is bumped while pouring does not skate.
 - **Edges.** The body's vertical corners are rounded at 3 mm and the step and
@@ -150,9 +179,12 @@ the wedge to work.
   Lift the pick lid off the left-hand unit, lower the right-hand unit's rails
   in from above. Revisions 3 to 5 had the front groove capped by the side wall,
   so this could not be done; it is open through the pick plane now, and the lid
-  covers the opening in use. Since D39 the buttress behind the front groove is
-  7 mm deep and 23 mm long, leaving a 4.4 mm skin between the groove and tray A
-  (2.4 before: a blade that tore in both test prints).
+  covers the opening in use. Since D43 the rail is 3 mm out of the wall (5 before)
+  and 3.6 mm at the root, the groove 3.4 deep, and the buttress behind the front
+  groove protrudes 3 mm into the bay (7 before) and is 14 mm long; the skin between
+  the groove and tray A is 2.4 mm, a divider, and the groove's front lip is bevelled
+  1.5 mm where it meets the sloped plane (D39's lesson: no thin blade, no knife
+  edge). Test print 3 found the old rail overbuilt; the dovetail slope is unchanged.
 
 ## Two things that were forced, not chosen
 
@@ -165,7 +197,7 @@ face, and sliding down the slope takes it further from that face. Revisions 4 to
 9 said the skirt did it; test print 2 slid the lid straight off.
 `probes/lid_retention.py` now moves the lid and fails if nothing stops it, if it
 jams on the way off, or if it can be fitted turned round. It lifts by its front
-notches tilted about its back edge, which is 1.2 mm from the wall behind tray B
+edge, tilted about its back edge, which is 1.2 mm from the wall behind tray B
 (0.35 until the review of revision 10: the top-back corner met that wall after 9
 degrees of tilt); it is swept clear to 15 degrees, with 0.14 mm of clearance at
 rest and more as it tilts, and the whole removal is declared in `joints.json` so
@@ -175,17 +207,20 @@ rest and more as it tilts, and the whole removal is declared in `joints.json` so
 steps is a Z in section, and a Z cannot be printed without support whichever way
 it is laid. Every wall over both trays dies on that plane.
 
-- **Two label strips per bay, sized for 1/2 inch TZe tape.** The lower one is
-  on the module's own front face, below the lid skirt, so it reads with the lid
-  on; the upper one is on the wall between the trays, facing forward over tray
-  A. They are 0.5 mm deep, so the tape sits below flush and cannot be caught.
-  Neither is on a lid — lids come off and go back the other way round.
+- **Two label strips per bay, sized for 1/2 inch TZe tape (D45).** Both are on
+  the module's own flat front face, below the lid skirt, so they read with the
+  lid on: the row A (front tray) strip low, the row B (back tray) strip above it,
+  4 mm apart, as the bins rise from the front-bottom up and back. (The upper strip
+  used to sit on the wall between the trays, reached over tray A; test print 3
+  found it awkward and half hidden by the rail.) They are 0.5 mm deep, so the tape
+  sits below flush and cannot be caught. Neither is on a lid — lids come off and
+  go back the other way round.
 
 ## Bill of materials
 
 | Part | Qty | Print orientation |
 |---|---|---|
-| `body` | 1 | as modelled, flat on its base, no supports. 245 x 194.8 x 189 mm |
+| `body` | 1 | as modelled, flat on its base, no supports. 243 x 213.1 x 189 mm |
 | `pick_lid` | 1 | plate TOP face on the bed, skirt rising at about 46 degrees (`rotate([180 - pick_lid_slope, 0, 0])` — revision 5's export had the sign wrong and stood the lid on its skirt) |
 | `fill_lid` | 1 | flipped, plate top face on the bed; the pull lip is in the plate's plane |
 
@@ -208,12 +243,13 @@ detection, which is on by default in Orca-based slicers.
 Purchased: four stick-on rubber feet, 10 mm; 1/2 inch TZe label tape.
 
 Test print: `build/section/test_print_section_256.3mf` -- full size, on one
-256 mm plate: the right-hand end bay of the body (to z 165, back to where
-hopper B's ramp leaves the top: 49 x 152 x 165 mm), the matching end of the pick
-lid (91 x 139 mm, wide enough to include the right finger notch), a corner of the fill mouth and of the fill lid, and the coupon. About 8 hours
-(500 cm3 of solid against test print 2's 191). `python3 build/maquette/make_plate.py section --export` rebuilds it
-from the sources. This is the one to
-print; see "The full-size section" below. The 0.42 maquette plate
+256 mm plate: the right-hand end bay of the body, cut at the left face of divider
+4 so its left wall is a whole divider, the full height and depth (50.2 x 213 x
+189 mm, hopper A and its flare included), the matching end of the pick lid and of
+the fill lid, and the coupon turned 90 degrees. About 580 cm3 of solid (test print
+3: 503), so roughly 8 hours in PETG. `python3 build/maquette/make_plate.py section
+--export` rebuilds it from the sources. This is the one to print; see "The
+full-size section" below. The 0.42 maquette plate
 (`build/maquette/test_print_plate_256.3mf`) judges shape only.
 `TEST_PRINTS.md` records what each test print showed.
 
@@ -222,41 +258,41 @@ print; see "The full-size section" below. The 0.42 maquette plate
 `calibration_coupon.scad`. One fit depends on your printer rather than the
 geometry: the joining rail in its groove. Test print 1's coupon read 0.50 mm per
 side, but it was printed with a brim that fused into the walls; test print 2
-(no brim) found the block loose on every stub down to 0.30. `rail_clear` is
-0.20 now (D40) and this coupon brackets it: five male rail stubs labelled
--100, -50, 0, +50, +100 (clearances 0.30, 0.25, 0.20, 0.15, 0.10, relative to
-the default) and a loose groove block cut exactly as the body cuts its grooves.
-Turn the block over so the face that was on the bed is UP, and drop it over each
-stub; the one that goes down with hand pressure and does not rock is your fit.
-If it is not "0", that label moves `rail_clear`. Two islands, 124 x 30 mm, no
-supports, no brim.
+(no brim) found the block loose on every stub down to 0.30; test print 3 (Generic
+PETG, no brim) found the "0" stub (0.20) best but slightly tight, and the user
+wants it a little looser. `rail_clear` is 0.215 now (D47), which is a one-number
+change in `params.scad`, and this coupon brackets it in finer steps: five male
+rail stubs labelled -50, -25, 0, +25, +50 (clearances 0.265, 0.24, 0.215, 0.19,
+0.165, relative to the default) and a loose groove block cut exactly as the body
+cuts its grooves. A step under about 0.025 mm is at the printer's resolution
+limit, so these are as fine as it can tell apart. Turn the block over so the face
+that was on the bed is UP, and drop it over each stub; the one that goes down with
+hand pressure and does not rock, and comes back out by hand, is your fit. If it
+is not "0", that label moves `rail_clear`. **The reading holds for the filament it
+was printed in:** PETG reads differently from PLA, so print the unit in the same
+filament, or run the coupon again. Two islands, 124 x 30 mm, no supports, no brim.
 
 ## The full-size section
 
-`fit_section.scad` (`PART` = body, pick_lid, mouth, fill_lid) cuts the real
+`fit_section.scad` (`PART` = body, pick_lid, fill_lid) cuts the real
 parts, so every clearance, wall and bridge is the real one. What to do with it:
 
-1. **Tray A's feed (D36), the test of this revision.** Drop capsules into the
-   chute's open back end: they run down the 40-degree chute onto the tilted
-   floor and pile at the front wall. Take them from the front a few at a time;
-   the rest should follow without being grabbed at.
-2. **Tray B's pile (D33).** Pour real capsules into hopper B through the open
-   top. They run down the ramp, out under the outlet and pile in tray B. The
-   pile must stay below the wall in front of it, with room to spare.
-3. **Pick lid (D38).** Lay the lid end on the section: the lug drops in against
-   the side wall directly behind the stop block, the plate sits flat on the plane,
-   the skirt covers the scalloped front. It must not slide down the slope (it
-   moves 0.5 mm). Lift it by the front notch with one hand, letting it tilt
-   about its back edge, and lower it hinged from the back: neither may jam.
-   Lift it straight off. Try it turned round. This is a lid end on a section,
-   so a pass is provisional for the full lid.
-4. **Groove corner (D39).** Lower a spare rail into the front groove; nothing
-   tears at the break-out.
-5. **Fill lid.** Drop the lid corner into the mouth corner: it should go in
-   without forcing, sit flat on the half divider without rocking, and lift
-   out cleanly.
-6. **Bridges.** The chute ceiling under tray B (45 x 40 mm) and both outlet tops.
-7. **The coupon** as above.
+1. **Filling tray A from the back (D42).** Pour real capsules into hopper A's
+   flared mouth from a bottle, then take them from the front a few at a time: the
+   pile should follow, and the last ones should not lodge in the corner (D41).
+2. **Tray B's pile (D33).** Pour into hopper B: the pile stays below the wall in
+   front of it.
+3. **Pick lid (D38, D44).** Lay the lid end on the section: the lug drops in
+   against the side wall directly behind the stop block and the lid does not
+   slide down the slope. Pinch it and lift it off tilted about its back edge, and
+   lower it back hinged from the back: neither may jam. Try it turned round.
+4. **Groove (D43).** Lower a spare rail into the front groove; nothing tears at
+   the break-out, and the buttress is no longer in the way in the front bin.
+5. **Labels (D45).** Stick 1/2 inch tape on both strips on the front face.
+6. **Fill lid.** Drop the lid end into the mouth: it goes in without forcing,
+   sits flat without rocking, and lifts out cleanly.
+7. **The left wall** (D46) is a whole divider now: handle it.
+8. **The coupon** as above.
 
 ## One plate for the small test print
 
@@ -312,7 +348,7 @@ judge the shape and the lid fits; do not judge the flow from it.
   thumb. Mitigated, not eliminated.
 - The two `NEAR MISS` notes (0.150 mm, 0.144 mm) are both lids' intended
   clearance, explained in `joints.json`.
-- The rail clearance (0.20) is a default pending the new coupon. The fill lid's
+- The rail clearance (0.215) is for PETG and pending the new coupon. The fill lid's
   (0.30) was confirmed by test print 2.
 
 ## Build and verify
@@ -342,7 +378,7 @@ fit. The independent review of revision 8 found tray B's pile above its wall,
 which revision 9 fixes (D33). Test print 2 (full-size section) found the
 lid retention, the row A feed, the bin size, the groove corner and the coupon
 reading that revision 10 fixes. What is *not* verified: that the tilted floor
-feeds, that the new lugs hold and do not jam on a real print, and the rail fit at 0.20; the
+feeds, that the new lugs hold and do not jam on a real print, and the rail fit at 0.215 (a PETG reading); the
 revision 10 section print is built to check all three. The `probes/` directory
 holds the scripts behind every revision 10 number (`lid_retention.py`,
 `corner_thickness.py`, `capacity.py`, `overhang_scan.py`).

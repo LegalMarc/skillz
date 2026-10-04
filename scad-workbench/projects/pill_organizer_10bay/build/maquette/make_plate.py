@@ -27,7 +27,6 @@ EXPORTS = {
     "section": [
         ("build/section/body.stl",     "fit_section.scad", ['PART="body"']),
         ("build/section/pick_lid.stl", "fit_section.scad", ['PART="pick_lid"']),
-        ("build/section/mouth.stl",    "fit_section.scad", ['PART="mouth"']),
         ("build/section/fill_lid.stl", "fit_section.scad", ['PART="fill_lid"']),
         ("build/calibration_coupon.stl", "calibration_coupon.scad", []),
     ],
@@ -53,19 +52,18 @@ PLATES = {
         ("pill_organizer_body_x0.42",     "build/maquette/body.stl",      (15.0, 15.0)),
         ("pill_organizer_pick_lid_x0.42", "build/maquette/pick_lid.stl",  (130.0, 15.0)),
         ("pill_organizer_fill_lid_x0.42", "build/maquette/fill_lid.stl",  (130.0, 90.0)),
-        ("calibration_coupon",            "build/calibration_coupon.stl", (15.0, 150.0)),
+        ("calibration_coupon",            "build/calibration_coupon.stl", (15.0, 160.0)),
     ]),
     # full size: one end bay of the real body back to hopper B's ramp, the end
     # of the real pick lid, a corner of the fill mouth and of the fill lid
-    # revision 10: the body section is 49 x 152 x 165, the lid end about 91 x 143,
-    # the coupon 124 x 30; the coupon sits behind them (y 190)
+    # revision 11: the body section is the whole end bay, about 50 x 213 x 189; the
+    # lid ends sit beside it and the coupon is turned 90 degrees to fit the 246 mm limit
     "section": ("build/section/test_print_section_256.3mf",
-                "full-size end bay + pick lid end + fill mouth and lid corners + calibration coupon", [
+                "full-size end bay + pick lid end + fill lid end + calibration coupon", [
         ("body_section_bay5_full_size",   "build/section/body.stl",       (20.0, 20.0)),
-        ("pick_lid_end_full_size",        "build/section/pick_lid.stl",   (80.0, 20.0)),
-        ("fill_mouth_corner_full_size",   "build/section/mouth.stl",      (190.0, 20.0)),
-        ("fill_lid_corner_full_size",     "build/section/fill_lid.stl",   (190.0, 65.0)),
-        ("calibration_coupon",            "build/calibration_coupon.stl", (20.0, 190.0)),
+        ("pick_lid_end_full_size",        "build/section/pick_lid.stl",   (85.0, 20.0)),
+        ("fill_lid_end_full_size",        "build/section/fill_lid.stl",   (145.0, 20.0)),
+        ("calibration_coupon",            "build/calibration_coupon.stl", (205.0, 20.0, "rot90")),
     ]),
 }
 WHICH = sys.argv[1] if len(sys.argv) > 1 else "maquette"
@@ -75,8 +73,11 @@ OUT, TITLE, PARTS = PLATES[WHICH]
 PLATE, MARGIN, MIN_GAP = 256.0, 10.0, 10.0
 
 objs, items, bb = [], [], {}
-for i, (name, path, (px, py)) in enumerate(PARTS, start=1):
+for i, (name, path, pos) in enumerate(PARTS, start=1):
+    px, py = pos[0], pos[1]
     m = trimesh.load(path, force="mesh")
+    if len(pos) > 2 and pos[2] == "rot90":      # turned 90 degrees about z, to fit the plate
+        m.apply_transform(trimesh.transformations.rotation_matrix(3.141592653589793 / 2, [0, 0, 1]))
     lo, sz = m.bounds[0], m.bounds[1] - m.bounds[0]
     tx, ty, tz = px - lo[0], py - lo[1], -lo[2]
     v = "\n".join(f'<vertex x="{x:.4f}" y="{y:.4f}" z="{z:.4f}"/>' for x, y, z in m.vertices)

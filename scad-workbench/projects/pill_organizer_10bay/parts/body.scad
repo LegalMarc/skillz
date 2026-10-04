@@ -19,7 +19,7 @@
 // Material: PLA or PETG.
 // Print orientation: as modelled, flat on its base, no supports.
 //
-// EXPECTED_BBOX: [245.0, 194.8, 189.0]
+// EXPECTED_BBOX: [243.0, 213.07, 189.0]
 // ============================================================
 
 include <../params.scad>
@@ -51,7 +51,8 @@ function wall_x1(k) = k == 0 ? wall_out
 OUTER = [
     [0,         0],
     [module_d,  0],
-    [module_d,  hopper_rim],
+    [module_d,  flare_zo],                // the back wall leans out above here (D42)
+    [module_d_top, hopper_rim],
     [yB_tray1,  hopper_rim],
     [yB_tray1,  trayB_rim],
     [0,         pickplane_front]
@@ -118,9 +119,10 @@ VOID_A = [
     [yA_tray1,                   z_foot],                      // chute foot: the floor has risen trayA_tilt_deg (D36)
     [yB_tray1,                   z_porch],                     // end of the porch (porch_deg = ramp_deg since D36)
     [yA_hop1,                    chuteA_floor(yA_hop1)],       // one 40 deg climb to the back
-    [yA_hop1,                    fill_seat_z - fill_ledge_w],
-    [yA_hop1 - fill_ledge_w,     fill_seat_z],
-    [yA_hop1 - fill_ledge_w,     hopper_rim + 1],
+    // the back wall's inner face leans out from the floor's end (D42), parallel to the outer
+    [yA_hop1 + flare_dy(fill_seat_z - fill_ledge_w),                  fill_seat_z - fill_ledge_w],
+    [yA_hop1 + flare_dy(fill_seat_z - fill_ledge_w) - fill_ledge_w,   fill_seat_z],
+    [yA_hop1 + flare_dy(fill_seat_z - fill_ledge_w) - fill_ledge_w,   hopper_rim + 1],
     [hopwall_A(fill_seat_z) + fill_ledge_w, hopper_rim + 1],
     [hopwall_A(fill_seat_z) + fill_ledge_w, fill_seat_z],
     [hopwall_A(fill_seat_z - fill_ledge_w), fill_seat_z - fill_ledge_w],
@@ -255,15 +257,30 @@ module vault_roof() {
 // Round the body's four vertical corners (D27). Each cutter is the square
 // corner block minus the corner cylinder, overstepping OUTWARD into air so no
 // cut face lands on the body's own faces.
+module corner_cut_2d(r, nick = 0) {
+    // nick: the circle's centre is pulled this far toward the corner, so the cutter
+    // crosses the faces it rounds instead of lying tangent to them. The sheared (leaning)
+    // cutters need it: their tangent lines coincide with the leaning face (coplanar sliver).
+    difference() {
+        translate([-1, -1]) square([r + 1, r + 1]);
+        translate([r - nick, r - nick]) circle(r = r, $fn = 64);
+    }
+}
 module corner_cuts() {
     r = corner_r;
-    for (c = [[0, 0, 0], [module_w, 0, 90], [module_w, module_d, 180], [0, module_d, 270]])
+    for (c = [[0, 0, 0], [module_w, 0, 90]])
         translate([c[0], c[1], -1]) rotate([0, 0, c[2]])
-            linear_extrude(height = module_h + 2)
-                difference() {
-                    translate([-1, -1]) square([r + 1, r + 1]);
-                    translate([r, r]) circle(r = r, $fn = 64);
-                }
+            linear_extrude(height = module_h + 2) corner_cut_2d(r);
+    // the back corners follow the leaning back wall (D42): a vertical cutter up to
+    // the lean, and above it the same cutter sheared back by the lean's slope
+    for (c = [[module_w, module_d, 180], [0, module_d, 270]])
+        translate([c[0], c[1], -1]) rotate([0, 0, c[2]]) {
+            linear_extrude(height = flare_zo + 1.5) corner_cut_2d(r);
+        }
+    for (c = [[module_w, 180], [0, 270]])
+        multmatrix([[1, 0, 0, 0], [0, 1, flare_tan, module_d - flare_zo * flare_tan], [0, 0, 1, 0], [0, 0, 0, 1]])
+            translate([c[0], 0, flare_zo]) rotate([0, 0, c[1]])
+                linear_extrude(height = module_h - flare_zo + 2) corner_cut_2d(r, 0.03);
 }
 
 // ------------------------------------------------------------
@@ -365,7 +382,8 @@ module rail_boss_one(y, z1, right) {
 OUTER_CLIP = [
     [0,         0],
     [module_d,  0],
-    [module_d,  hopper_rim],
+    [module_d,  flare_zo],                // the back wall leans out above here (D42)
+    [module_d_top, hopper_rim],
     [yB_tray1,  hopper_rim],
     [yB_tray1,  trayB_rim      - boss_clip_drop],
     [0,         pickplane_front - boss_clip_drop]
@@ -405,6 +423,51 @@ module boss_bevels() {
     boss_back_bevel(module_w - wall_out - rail_boss - 1, module_w - wall_out - 0.1);
 }
 
+// Corner beads (D41, revision 11). Test print 3: the last couple of capsules in
+// row A lodge in the 55 degree wedge where the 35 degree floor meets the front wall,
+// standing or lying there, hard to pick up. Three bumps per bay along that corner
+// keep a capsule off the apex: a sphere of bead_r centred ON the floor/wall
+// junction line, so it is solid on one side of the wall and of the floor and shows
+// only as a rounded boss in the wedge. No pocket forms behind it (it is fused to
+// both), and every face it shows looks up or out (it rises from the floor and the
+// wall), so it prints without support. Clipped to the tray: not out through the
+// front face, not below the bed.
+module corner_beads() {
+    if (bead_r > 0)
+        intersection() {
+            union() for (i = [0 : bays - 1])
+                for (f = bead_fracs)
+                    translate([wall_x1(i) + bay_w * f, yA_tray0 + 0.07, base_z + 0.05])   // 0.07 off the wall face: sphere vertices ON the face plane are a coplanar boolean
+                        sphere(r = bead_r, $fn = 48);
+            translate([0, yA_tray0 - 1.0, base_z - 1.5]) cube([module_w, 3 * bead_r, 3 * bead_r]);
+        }
+}
+
+// Vertical fillets where each divider and side wall meets tray A's front wall
+// (revision 11). The flow-void fillets (fillet_r) are rounded in the (y, z) profile
+// only, so the joint between a divider and the front wall was a bare 90 degree T.
+// Test print 3's section split along exactly that joint on its 1.2 mm half-divider
+// (D46 fixes the section); the full module's joint is 2.4 on 2.8 mm and fused, but a
+// bare T is where a layer line wants to open, and it is a square pocket for a capsule
+// end. A tray_fillet_r quarter-round in each of the twelve corners, from the floor up
+// to just under the scallop, fixes both; the scallop cut trims anything above.
+module front_fillets() {
+    r = tray_fillet_r; y0 = yA_tray0;
+    for (i = [0 : bays - 1]) {
+        bx0 = wall_x1(i); bx1 = bx0 + bay_w;
+        translate([0, 0, base_z - 1]) linear_extrude(height = trayA_front_h - 1.0 - (base_z - 1)) {
+            difference() {      // left corner of the bay: the fillet grows toward +x
+                translate([bx0 - 0.3, y0 - 0.3]) square([r + 0.3, r + 0.3]);
+                translate([bx0 + r, y0 + r]) circle(r = r + 0.03, $fn = 48);   // +0.03: crosses the faces, not tangent to them
+            }
+            difference() {      // right corner: toward -x
+                translate([bx1 - r, y0 - 0.3]) square([r + 0.3, r + 0.3]);
+                translate([bx1 - r, y0 + r]) circle(r = r + 0.03, $fn = 48);
+            }
+        }
+    }
+}
+
 // The stop blocks (D38). In each end bay's front corner of tray A, fused to the
 // side wall and to the front wall, a block whose BACK face is perpendicular to
 // the pick plane: it leaves the plane at pick_stop_y and runs pick_stop_depth
@@ -432,12 +495,12 @@ module stop_block_profile() {
 module stop_filler_profile() {   // in (x, z), for the LEFT side; mirrored for the right
     sa = sin(pick_lid_slope); ca = cos(pick_lid_slope);
     zt = pickplane(pick_stop_y) - pick_stop_depth * ca - pick_filler_drop;     // top at the side wall
-    xe = wall_out + rail_boss - pick_filler_inset;                              // end, inside the buttress
+    xe = wall_out + pick_stop_w - 0.3;      // as wide as the stop block (less 0.3, not coplanar with its side): D43 slimmed the buttress to 3 mm, narrower than the block, and a filler to the buttress left a 3 x 6 mm nook beside it
     polygon([[wall_out - weld_embed, base_z - 1], [xe, base_z - 1],
              [xe, zt - (xe - wall_out)], [wall_out, zt], [wall_out - weld_embed, zt]]);
 }
 module stop_filler_left() {
-    y0 = pick_stop_back_y - 0.5; y1 = rail1_boss_y0 + 1.5;
+    y0 = pick_stop_back_y - 0.5; y1 = rail1_boss_y0 + 0.5;
     translate([0, y1, 0]) rotate([90, 0, 0]) linear_extrude(height = y1 - y0) stop_filler_profile();
 }
 module stop_blocks() {
@@ -533,7 +596,7 @@ module foot_pad_cuts() {
 // ------------------------------------------------------------
 module body_geometry() {
     difference() {
-        union() { body_shell(); outlet_chamfers(); vault_roof(); rail_male(); rail_bosses(); stop_blocks(); }
+        union() { body_shell(); outlet_chamfers(); vault_roof(); rail_male(); rail_bosses(); stop_blocks(); corner_beads(); front_fillets(); }
         fill_seat_cut();
         front_scallop_cut();
         stop_trim();

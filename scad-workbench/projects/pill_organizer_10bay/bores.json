@@ -99,28 +99,28 @@
     "name": "rail_groove_front",
     "part": "body",
     "start": [
-      237.3,
-      25.8,
+      238.3,
+      22.8,
       12.0
     ],
     "end": [
-      237.3,
-      25.8,
-      111.0
+      238.3,
+      22.8,
+      106.0
     ],
     "step_mm": 0.5,
-    "_why": "the front joining groove must be open from its floor OUT OF THE TOP of the side wall, or a neighbouring module's rail cannot be lowered in. Its top is the pick plane over tray A, which is highest at the groove's back edge (about 107.2). This line ends at 111, in open air above the plane. D39 thickened the skin behind the groove and lengthened the buttress; this proves the groove is still open end to end."
+    "_why": "the front joining groove must be open from its floor OUT OF THE TOP of the side wall, or a neighbouring module's rail cannot be lowered in. Its top is the pick plane over tray A, which is highest at the groove's back edge (about 102). This line ends at 106, in open air above the plane. D43 slimmed the groove to 3.4 deep and bevelled its front lip; this proves it is still open end to end."
   },
   {
     "name": "rail_groove_back",
     "part": "body",
     "start": [
-      237.3,
+      238.3,
       122.6,
       12.0
     ],
     "end": [
-      237.3,
+      238.3,
       122.6,
       192.0
     ],
@@ -142,5 +142,37 @@
     ],
     "step_mm": 0.5,
     "_why": "down the centre line of bay 3's porch, where the splitter rib stood until revision 8 (D29). A rib put back, or a porch ceiling sagging to the floor, would block this line while leaving the part watertight and single-bodied."
+  },
+  {
+    "name": "hopperA_flare_vertical",
+    "part": "body",
+    "start": [
+      120.0,
+      190.0,
+      165.0
+    ],
+    "end": [
+      120.0,
+      190.0,
+      187.0
+    ],
+    "step_mm": 0.5,
+    "_why": "D42: straight down the middle of hopper A's mouth from above the lid seat to the chute: nothing may close the opening you pour into."
+  },
+  {
+    "name": "hopperA_flare_diagonal",
+    "part": "body",
+    "start": [
+      120.0,
+      193.0,
+      165.0
+    ],
+    "end": [
+      120.0,
+      205.0,
+      186.0
+    ],
+    "step_mm": 0.5,
+    "_why": "D42: along the flared back wall, leaning back at about 30 degrees, from low in the mouth to the seat plane: proves the inner face really is further back than the vertical chute wall it replaced (192), so the funnel exists."
   }
 ]

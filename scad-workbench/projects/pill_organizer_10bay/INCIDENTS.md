@@ -377,3 +377,27 @@ declarations against what they claimed to test and by probing the mesh with
 - **Root cause:** `probes/lid_retention.py` tested exactly the motions its author listed (down-slope, straight up, reversal) and every one passed. The motion people actually make, a tilt about the back edge, was not on the list, and `joints.json` declared no motion, so `motion_sweep.py` was N/A ("nothing in this revision moves"). The README repeated that sentence while the lid was the one part that comes off. A probe covers the cases its author thought of; the declaration of motion is where the others get listed.
 - **Fix:** both stop faces perpendicular to the pick plane (lug and a stop block), so the swinging lug moves along the faces. The back clearance 0.35 -> 1.2 (the top-back corner met the wall at 9 degrees, a second, smaller version of the same miss). The probe now also tilts 0 to 15 degrees about the back edge in 0.25 degree steps with the back edge raised 0, 1 and 3 mm, lifts along the plane's normal, and reports the clearance every degree; `joints.json` declares three removal motions and `motion_sweep.py` runs them.
 - **Already promoted to a rule?** not yet -- candidate: a part that is removed or installed is a moving part; declare its removal path (and the pivot an operator actually uses) as a motion, and do not write "nothing moves" about a design that has a lid.
+
+## Revision 11 -- test print 3
+
+### 2026-10-04 -- the test section's left wall was half a divider and split away from the front wall
+- **Where:** `fit_section.scad` (D46); tray A's divider / front wall joint in the body.
+- **Symptom:** the section's thin left wall cracked easily; photos show a vertical separation from the base up the joint with the front wall.
+- **Root cause:** the section was cut through the MIDDLE of divider 4 (`wall_div / 2`, 1.2 mm), so the fixture's own wall was half the thickness of any wall in the design, on a joint that is a bare 90 degree T (the flow-void fillets exist only in the (y, z) profile, so no divider/front-wall corner has ever had one). Nothing in the model was weak; the test piece was, and the print-quality conclusions drawn from it were partly about the piece.
+- **Fix:** cut at a full divider; 2 mm vertical fillets at all twelve divider/front-wall corners in the module; `probes/corner_thickness.py` checks the joint on the mesh.
+- **Already promoted to a rule?** not yet -- candidate: a test fixture is cut along a wall's face, never through its middle, and every thin wall of a fixture is checked against the design's minimum.
+
+### 2026-10-04 -- three probes of mine measured something other than what they were named for, until I read their first output
+- **Where:** `probes/corner_thickness.py` (horizontal-slice "thin region" test), `probes/capsule_corner.py` (a "wedge" count; dropping a capsule from 44 mm).
+- **Symptom:** the slice test flagged every wall top the sloped plane cuts (a 134 degree edge is thin in a horizontal slice for 2 mm of height), so a design that was fine looked unfixable; the first wedge metric flagged the whole boundary layer along every wall; capsules "dropped" at z 44 never reached the corner because the front wall (55) is above 44.
+- **Root cause:** each probe encoded a hypothesis about what a defect looks like (thin in a slice; narrow; reachable from above) that the geometry violates, and each had been run only on the design it was written for.
+- **Fix:** the break-out zone is asserted on convex edge angle (under 60 degrees over 0.5 mm), the pockets on what a capsule-radius disc cannot reach deeper than a 90 degree cusp (2.3 mm), the capsule slid down the floor instead of dropped. Each was also run on the previous design, where it flagged the real knife edge.
+- **Already promoted to a rule?** not yet -- candidate: a new probe is run once on a design known to have the defect and once on one known not to, before its verdict is trusted.
+
+### 2026-10-04 -- cutters tangent to the faces they round left zero-area slivers, a third time
+- **Where:** the sheared back-corner cutters (D42), the corner beads (D41), the vertical fillets (D46), the break-out bevel and the groove floor cut (D43).
+- **Symptom:** non-watertight bodies of 3 to 230 components, always zero-area pairs, always where a cutter's or sphere's tangent line, equator or flat face coincided with a face of the body.
+- **Root cause:** the same class as the 2026-09-20 coincident-face entry and revision 9's equal radii: a circle tangent to the plane of a face, a sphere with vertices on the wall's plane, a cutter face on the groove floor.
+- **Fix:** each is nudged off the shared plane by 0.03 to 0.25 mm, with a comment saying why; the check is `trimesh` watertight and one body after every geometry edit, which is what found them.
+- **Already promoted to a rule?** partly -- the generalisation: a cutter or added solid never has a face, tangent line, or vertex row ON a face of what it meets; offset it and say so.
+

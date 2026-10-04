@@ -177,12 +177,26 @@ if __name__ == "__main__":
             okk = not sh.any()
             globals()["ok"] = ok and okk
             print(("PASS  " if okk else "FAIL  ") + f"no knife edge (interior angle under 60 degrees, over 0.5 mm long) in the {name} break-out zone")
+        # the divider / front wall joint in tray A (revision 11): the vertical fillet exists
+        # and the joint is at least a divider thick along its diagonal at every height
+        bx0 = P["wall_out"] + 1 * (P["bay_w"] + P["wall_div"])          # bay 2's left face
+        r_f = P["tray_fillet_r"]; y0 = P["yA_tray0"]
+        diag = []
+        for z in (12.0, 25.0, 40.0, 50.0):
+            c = np.array([bx0 + r_f, y0 + r_f, z]) / 1.0
+            p_in = np.array([bx0 + r_f - r_f / np.sqrt(2) + 0.15, y0 + r_f - r_f / np.sqrt(2) + 0.15, z])   # just inside the arc
+            p_out = np.array([bx0 + r_f - r_f / np.sqrt(2) - 0.15, y0 + r_f - r_f / np.sqrt(2) - 0.15, z])  # just outside it, in the void
+            d = run_len(mesh, [bx0 + r_f - 1.2 * r_f, y0 + r_f - 1.2 * r_f, z], [bx0 - 4.0, y0 - 2.8 - 1.0, z], step=0.02)
+            diag.append((z, bool(mesh.contains([p_out])[0]) , d[0][1] if d else 0.0))
+        print("  divider / front wall joint, bay 2's left divider: (z, solid at the fillet's arc, solid run along the diagonal mm):", diag)
         def chk(label, cond):
             global ok
             ok &= bool(cond); print(("PASS  " if cond else "FAIL  ") + label)
         print()
         chk(f"skin behind the groove is >= a divider ({P['wall_div']}) at every height (min {min(skins):.2f})", min(skins) >= P["wall_div"] - 1e-6)
         chk(f"buttress on either side of the groove is >= a divider + 1 mm (min {min(fb):.2f})", min(fb) >= P["wall_div"] + 1.0 - 1e-6)
+        chk("the divider / front wall joint is filleted and over a divider thick along its diagonal at every height",
+            all(d[1] for d in diag) and min(d[2] for d in diag) >= P["wall_div"])
         chk(f"stop block reaches back to y {P['stop_back_y']:.1f} at z=62 (run {r[0][1]:.2f})", r[0][1] >= P["stop_back_y"] - 0.1)
         chk(f"material behind the contact face along the slope is >= 1.5 mm (min {min(q[1] for q in r3):.2f})", min(q[1] for q in r3) >= 1.5)
         chk("front wall and side wall run unbroken across the pillar in X (no gap)", r2[0][1] >= wo + P["pillar_w"] - 0.5)

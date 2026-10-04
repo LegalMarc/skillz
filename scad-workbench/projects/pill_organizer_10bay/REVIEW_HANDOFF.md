@@ -1,3 +1,30 @@
+# Resume note — revision 11 (read this first)
+
+**Where it stands:** revision 11 (test print 3's results, D41-D47) is implemented on
+branch `pill-organizer-rev11`, created from `pill-organizer-rev10` at `0b1af30`; not
+pushed, no PR. Test print 3 (the revision 10 section, Generic PETG) passed on the
+lid, the lug and the row A feed; the changes are beads in tray A's corner (D41),
+hopper A's flare (D42), the slim rail and buttress (D43), no finger notches (D44),
+stacked front labels (D45), a section cut at a full divider that now runs the whole
+end bay (D46) and `rail_clear` 0.215 with a finer PETG coupon (D47). No independent
+review of revision 11 has happened yet.
+
+**Proven:** `validate_scad.sh --all` (14 passed, 0 failed, 3 n/a, 1 advisory),
+`check_rules.py`, and the probes in `probes/`: `lid_retention.py` (a)-(h),
+`corner_thickness.py` (edge-angle scan of the break-out zone, skin and buttress
+thickness, the divider / front wall joint), `capacity.py`, `overhang_scan.py`,
+`capsule_corner.py` (beads, last-bay pockets). **Not proven:** that the beads
+are enough (they hold a capsule about 1 mm up and out of the apex; a filled wedge
+is the stronger fix), that hopper A fills easily by hand, the rail fit at 0.215
+(a PETG reading), and anything about the new section's strength.
+
+**Next step:** an adversarial review of revision 11, then print
+`build/section/test_print_section_256.3mf` (test print 4, about 8 h in PETG, no
+brim) and record it in `TEST_PRINTS.md`; dry the PETG first (heavy stringing on
+test print 3). The notes below this one are from revisions 10 and 9.
+
+---
+
 # Resume note — revision 10 (read this first)
 
 **Where it stands:** revision 10 (test print 2's fixes D36-D40, the review

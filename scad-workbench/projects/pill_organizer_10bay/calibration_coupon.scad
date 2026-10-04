@@ -8,13 +8,19 @@
 // filament come out rather than on the geometry: the joining
 // rail in its groove. Test print 1's coupon (printed with a brim
 // that fused into the walls) read 0.50 per side; test print 2,
-// with no brim, found the block loose on every stub down to 0.30.
-// rail_clear is therefore 0.20 (D40), and this coupon brackets it
-// from 0.30 to 0.10 per side.
+// with no brim, found the block loose on every stub down to 0.30;
+// test print 3 (Generic PETG, no brim) found the "0" stub (0.20)
+// the best but slightly tight: "a little looser, around -10 to -15".
+// rail_clear is therefore 0.215 (D47) and this coupon brackets it
+// in finer steps, 0.265 to 0.165 per side. A step under about
+// 0.025 mm is at the printer's resolution limit, so these five
+// are as fine as the print can tell apart. The reading is for the
+// filament it was printed in: use the same one for the unit, or
+// run the coupon again.
 //
 //   RAIL   a plate with five male rail stubs, widths offset by
-//          -100 .. +100 (microns per side, relative to the default
-//          rail_clear; clearance 0.30 .. 0.10), and a loose groove
+//          -50 .. +50 (microns per side, relative to the default
+//          rail_clear; clearance 0.265 .. 0.165), and a loose groove
 //          block cut exactly as the body cuts its grooves
 //          (rail_clear per side). Turn the block bed-face UP and
 //          drop it over each stub: the one that goes down with
@@ -40,7 +46,7 @@ include <params.scad>
 
 plate_t   = 4.0;
 pitch     = 18.0;
-steps     = [-0.10, -0.05, 0.0, 0.05, 0.10];    // offset applied to the male's half-width
+steps     = [-0.05, -0.025, 0.0, 0.025, 0.05];    // offset applied to the male's half-width
 label_d   = 0.6;
 gap       = 6.0;
 

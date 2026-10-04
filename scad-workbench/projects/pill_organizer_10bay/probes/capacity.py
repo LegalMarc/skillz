@@ -21,7 +21,7 @@ body = parts(("body",))["body"]
 k = int(sys.argv[1]) if len(sys.argv) > 1 else 2
 bw, wd, wo = P["bay_w"], P["wall_div"], 2.8
 x0 = wo + k * (bw + wd)
-mod_d = P["module_d"]
+mod_d = P["module_d_top"]
 # fill region: a prism in (y, z) extruded across the bay
 rimA, rimB, yB1 = P["trayA_rim"], P["trayB_rim"], P["yB_tray1"]
 plane = lambda y: rimA + y / yB1 * (rimB - rimA)

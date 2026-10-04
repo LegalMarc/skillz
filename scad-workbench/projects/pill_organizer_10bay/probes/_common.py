@@ -30,12 +30,12 @@ def params():
             for m in re.finditer(r'PROBE (\w+)=([-\d.eE+]+)', err)}
 
 
-def parts(names=("body", "pick_lid")):
+def parts(names=("body", "pick_lid"), defs=()):
     out = {}
     with tempfile.TemporaryDirectory() as d:
         for n in names:
             p = os.path.join(d, n + ".stl")
-            scad([os.path.join("parts", n + ".scad")], p)
+            scad([a for d in defs for a in ("-D", d)] + [os.path.join("parts", n + ".scad")], p)
             m = trimesh.load(p)
             assert m.is_watertight, n + " is not watertight"
             out[n] = m

@@ -25,23 +25,23 @@
     "name": "rail_buttress_right_back",
     "part": "body",
     "at": [
-      232.4,
+      235.4,
       122.6,
       100.0
     ],
-    "feature": "the skin of the buttress carrying the rear joining groove, between the groove's bottom and the hopper's interior: wall_out + rail_boss - 5.4 = 4.4 thick since D39 (2.4 before)",
+    "feature": "the skin of the buttress carrying the rear joining groove, between the groove's floor and the hopper's interior: 2.4 mm since D43",
     "min_material_mm": 2.0
   },
   {
     "name": "rail_skin_right_front",
     "part": "body",
     "at": [
-      232.4,
-      25.8,
+      235.4,
+      22.8,
       60.0
     ],
-    "feature": "the same skin behind the front groove (D39), the stretch that stood as a thin blade inside tray A where the pick plane cuts the buttress and tore in test prints 1 and 2",
-    "min_material_mm": 4.0
+    "feature": "the skin behind the front groove, between the groove floor and tray A: wall_out + rail_boss - 3.4 = 2.4 mm thick since D43 (a divider; 4.4 in revision 10, 2.4 in 9)",
+    "min_material_mm": 2.0
   },
   {
     "name": "cubby_deck",
@@ -64,5 +64,27 @@
     ],
     "feature": "the deck between the vault ridge of bay 3's chute ceiling and hopper B's floor above it, mid-leg: chute_ceil (3mm) at the ridge, the thinnest the deck under hopper B gets after the vault (D26)",
     "min_material_mm": 2.5
+  },
+  {
+    "name": "hopperA_flared_back_wall",
+    "part": "body",
+    "at": [
+      120.0,
+      204.4,
+      175.0
+    ],
+    "feature": "the leaning back wall behind hopper A (D42): inner face at about 202.8 and outer 206.0 at z 175, so 2.8 mm thick perpendicular to the lean",
+    "min_material_mm": 2.0
+  },
+  {
+    "name": "corner_bead_bay3",
+    "part": "body",
+    "at": [
+      120.0,
+      7.0,
+      8.0
+    ],
+    "feature": "the middle corner bead of bay 3 (D41): a point 2 mm above the floor and 4 mm out from the front wall, in the air of the tray if the bead were missing",
+    "min_material_mm": 2.0
   }
 ]

@@ -19,7 +19,7 @@ bed_x = 256; bed_y = 256; bed_z = 256;
 // D37 (revision 10): 5 mm of plate margin each side in X and Y, so a part's
 // footprint may be 246 mm; height may be 250. This replaces D3's 13 mm margin
 // (243 mm), which the wider, deeper bins no longer fit. The body's footprint is
-// measured INCLUDING the 5 mm joining rail that stands proud of the left face.
+// measured INCLUDING the 3 mm joining rail (5 until D43) that stands proud of the left face.
 plate_margin = 5.0;
 max_part_x = bed_x - 2 * plate_margin;     // 246
 max_part_y = bed_y - 2 * plate_margin;     // 246
@@ -56,14 +56,14 @@ void_top_over = 5.0;        // how far every open-topped void runs PAST the
 // ------------------------------------------------------------
 bays        = 5;
 module_w    = 240.0;        // 230 until D37: bays 42.96 -> 44.96 wide. Footprint with
-                            // the 5 mm rail is 245, inside max_part_x (246)
+                            // the 3 mm rail is 243, inside max_part_x (246)
 inner_w     = module_w - 2 * wall_out;
 bay_w       = (inner_w - (bays - 1) * wall_div) / bays;
 bay_pitch   = bay_w + wall_div;
 function bay_center_x(i) = wall_out + bay_w / 2 + i * bay_pitch;
 
 assert(module_w + rail_out <= max_part_x,
-       "module_w plus the 5 mm joining rail exceeds the plate width less its margins (D37)");
+       "module_w plus the joining rail exceeds the plate width less its margins (D37)");
 assert(bay_w >= pill_len * 1.5,
        "bay_w is under 1.5x pill_len -- a pill cannot lie freely across the bay");
 
@@ -276,6 +276,29 @@ hopper_rim = 189.0;         // 141 until D36: everything behind the porch rose w
 module_h   = hopper_rim;
 
 // ------------------------------------------------------------
+// 4g. Hopper A's pouring flare (D42, revision 11). Test print 3: filling tray A
+// from the back was "a little harder" than tray B: hopper A's mouth is the narrow
+// one (39 mm against B's 63). The back wall of the module, behind hopper A, now
+// leans outward from the end of the chute floor up to the rim, inner and outer faces
+// parallel, so the opening you pour into widens toward the rim. It starts AT the
+// chute floor's end (the floor is not touched, so no pill can rest on a flattened
+// floor) and the whole recess the fill lid sits in is carried back with it, so the lid
+// is simply longer: it still drops into a rectangular recess with fill_lid_clear all
+// round and rests flat. The outer face leans out at flare_deg from vertical, an
+// overhang inside the 45 degree no-support rule. The extra depth is only above
+// flare_zo; the base and the cubby keep module_d.
+// ------------------------------------------------------------
+flare_deg  = 30;
+flare_tan  = tan(flare_deg);
+flare_z0   = chuteA_floor(yA_hop1);                       // 156.2: inner face leans from here
+function flare_dy(z) = max(0, z - flare_z0) * flare_tan;   // how far the inner face has moved back
+flare_th_h = wall_out / cos(flare_deg);                    // horizontal wall thickness along the lean
+flare_zo   = flare_z0 - (flare_th_h - wall_out) / flare_tan;   // where the OUTER face starts to lean
+module_d_top = module_d + max(0, hopper_rim - flare_zo) * flare_tan;   // depth at the rim
+assert(flare_deg >= 20 && flare_deg <= 40,
+       "the hopper A flare is outside 20..40 degrees from vertical (D42): the outer face overhang would pass 45 or the mouth would barely widen");
+
+// ------------------------------------------------------------
 // 4b. Hopper divider lean (D16)
 //
 // Hopper A's mouth was 32mm against hopper B's 70 -- you pour the same charge
@@ -303,7 +326,8 @@ function hopwall_B(z) = hopwall_A(z) - wall_div;
 
 hop_lean_deg  = atan(hopA_lean / (hopper_rim - hopwall_z0));   // 25.7 (19.35 before the vault fix)
 mouthB_w      = hopwall_B(hopper_rim - lid_t) - yB_wall1;             // 62.6
-mouthA_w      = yA_hop1 - hopwall_A(hopper_rim - lid_t);              // 39.4
+mouthA_w      = yA_hop1 + flare_dy(hopper_rim - lid_t) - hopwall_A(hopper_rim - lid_t);   // 53.0 under the lid (39.4 before D42)
+mouthA_rim    = yA_hop1 + flare_dy(hopper_rim) - hopwall_A(hopper_rim);                  // 56.3 at the rim
 mouth_ratio   = mouthB_w / mouthA_w;                           // 1.59, about 3:2
 
 assert(hop_lean_deg < 40,
@@ -312,8 +336,10 @@ assert(hopwall_A(rampB(yB_hop1)) - yB_hop1 >= wall_div - 1e-6,
        "the hopper divider is thinner than wall_div where hopper B's ramp ends -- the lean starts below the ramp's end");
 assert(hopper_rim - hopwall_z0 >= 10.0,
        "the hopper divider springs from less than 10mm under the rim: the lean would run out of height (hopwall_z0 is a max() that contains rampB's end, so it cannot be asserted against it)");
-assert(mouth_ratio > 1.3 && mouth_ratio < 1.9,
-       "the two fill mouths are no longer within the 3:2 band the lean exists to hit");
+assert(mouth_ratio > 1.0 && mouth_ratio < 1.9,
+       "hopper A's mouth is wider than hopper B's, or the two have drifted past 1.9:1 (D16 aimed for 3:2; the D42 flare brings hopper A up to about 1.1:1 on purpose)");
+assert(mouthA_rim >= 55.0,
+       "hopper A's mouth at the rim is under 55mm front to back (D42)");
 assert(mouthA_w > pill_len + 8 && mouthB_w > pill_len + 8,
        "a fill mouth is too narrow to pour a bottle into");
 
@@ -345,7 +371,7 @@ assert(porch_deg >= ramp_deg - 1e-6,
        "the porch is shallower than the ramp -- it carries a stagnant wedge that tray A cannot feed over (D36)");
 assert(trayA_tilt_deg >= repose_hi_deg && trayA_tilt_deg < ramp_deg,
        "tray A's floor is not steeper than the top of the repose range, or it is steeper than the ramp it is fed by (D36)");
-assert(module_d <= max_part_y && module_h <= max_part_z,
+assert(module_d_top <= max_part_y && module_h <= max_part_z,
        "the module no longer fits the usable bed");
 
 tray_step = trayB_rim - trayA_rim;                       //  81.59
@@ -529,7 +555,7 @@ assert(cubby_lip_h < cubby_h_back * 0.6,
 // 5. Hopper mouths (both at the back, both at hopper_rim -> ONE flat lid)
 // ------------------------------------------------------------
 hop_mouth_y0 = yB_wall1;                                 //  87.6
-hop_mouth_y1 = yA_hop1;                                  // 192.0
+hop_mouth_y1 = yA_hop1 + flare_dy(hopper_rim - lid_t);             // 199.7: the recess follows the flare to the seat plane
 hop_mouth_d  = hop_mouth_y1 - hop_mouth_y0;              // 104.4
 
 // ------------------------------------------------------------
@@ -690,6 +716,9 @@ rail_lead = 3.0;
 rail_boss = 3.0;
 rail_boss_margin = 4.0;         // buttress beyond the groove tip, each side, in Y
 rail_boss_w = rail_tip_w + 2 * rail_boss_margin;   // buttress footprint in Y (14)
+// D41 corner beads: bead_r is set from the measured lift in probes/capsule_corner.py
+bead_r     = 8.0;           // 0 removes them
+bead_fracs = [0.25, 0.5, 0.75];   // across each bay, fraction of the clear width
 boss_bevel = 1.5;           // the same bevel on the buttress's back-top edge (D43)
 groove_chamfer = 1.5;        // 45 degree bevel round the rail-1 groove's break-out through the plane (H2): the
                             // lip in front of it was a 46 degree knife edge that tore in test prints 1 and 2
@@ -838,6 +867,7 @@ pick_front_h    = 0.6;
 // ------------------------------------------------------------
 // Label recesses: section 4c, beside the scalloped front wall they sit under.
 
+tray_fillet_r = 2.0;        // vertical fillets where dividers meet tray A's front wall (revision 11)
 fillet_r  = 2.0;            // internal: every flow-void corner (opening pass)
 
 // External edges (D27). Nothing a hand or a sleeve meets is left sharp: the

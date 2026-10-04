@@ -68,8 +68,12 @@ fit, on a coupon printed with a brim that fused into the walls. The brim and
 its elephant foot narrowed the groove, so the loosest stub felt right. With
 no brim the true fit is below 0.30.
 
-## Test print 3 — planned, revision 10
+## Test print 3 — 2026-10-04, revision 10
 
+**Printer:** Elegoo Centauri Carbon 2, **Generic PETG** profile, no brim, no
+supports, about 7 hours. Stringing was heavy in the groove, the bins and the lid:
+a filament-drying and retraction matter (dry the PETG, tune retraction), not a
+design change.
 **Printed:** `build/section/test_print_section_256.3mf`: the right-hand end bay
 of the body to z 165 (49 x 152 x 165 mm), the matching pick-lid end (91 x 139
 mm, cut back far enough to include the right finger notch, so its left part
@@ -101,6 +105,27 @@ is a 91 mm end with one lug and one notch, on a body section 49 mm wide, so it
 tests the stop faces, the clearances and the back-edge swing, not how the whole
 229 mm lid balances in one hand.
 
+### Results
+
+| Check | Result | Change, revision 11 |
+|---|---|---|
+| Row A refills (D36) | **Yes, appropriately.** The 35 degree floor and the 40 degree chute work. The last couple of (larger) capsules lodged in the pocket at the front-bottom corner of tray A, where the floor meets the front wall, standing or lying there, hard to grab | Corner beads (D41) |
+| Filling tray B from hopper B | Very easy | None |
+| Filling tray A from the back | "A little harder" (on the section, the chute's cut-open back end; on the full module hopper A's mouth is the narrow one, about 41 against B's 61) | Hopper A flares for pouring (D42) |
+| Bin size | Not raised again | None |
+| Pick lid on | Fits on nicely; **the lug ("nub") keeps it properly seated: pass** | Lug and stop block unchanged |
+| Pick lid off | Lifts off fine. The user does not want finger notches or anything hung from it: they pinch it between thumb and forefinger | Notches removed (D44) |
+| Section lid piece | The big overhang (widened in revision 10 to include a notch) was confusing | Back to the section's width (D46) |
+| Rail and groove | Look overbuilt ("lock and key"); the buttress protrudes too far into the front bin. The user suggested the rail match the vertical dividers | Slim rail, groove and buttress (D43) |
+| Section left wall | The thin LEFT wall cracked easily: the 1.2 mm half-divider split away from the front wall, a vertical separation up from the base at the divider/front-wall junction. Not a full-module defect | Cut at a full divider (D46); fillets at every divider/front-wall junction in the full module |
+| Labels | The upper strip, on the wall between the trays and reached over tray A, is awkward and partly hidden by the rail and groove | Both labels on the front face (D45) |
+| Back cubby | The back pocket with a low retaining wall is wanted (it holds a chapstick or two). It exists in the full design (`cubby_lip_h` 30); the section just did not include it | No change; the revision 11 section shows its opening |
+| Coupon, block bed-face up (Generic PETG) | The "0" stub (0.20 per side) fit best but slightly tight; wanted a little looser, around -10 to -15 (0.21 to 0.215), still snug but able to move back out | `rail_clear` 0.215 and a finer coupon (D47). **The reading is for PETG:** the final unit should be printed in the same filament, or the coupon re-run |
+| Fill-lid corner | Drops in and fits nicely at 0.30, again | None |
+| Groove corner (D39) | Not reported as torn | Bevel kept, slimmed with the rail (D43) |
+| Bridges, tray A floor | Not reported | None |
+| Stringing | Heavy in the groove, the bins and the lid | Slicer/filament: dry the PETG, tune retraction |
+
 Watch items from the final review of revision 10 (no change made; act only if
 the print shows a problem):
 
@@ -108,3 +133,27 @@ the print shows a problem):
 |---|---|---|
 | Rail-1 buttress, back-top edge inside tray A (about x 234, y 37, z 112) | A 46 degree edge, 7 mm long, under the lid. Chipping or a ragged edge | Add a 1 mm chamfer there |
 | Groove mouth in the side-wall top | The D39 chamfer widens it to about 17 mm. A capsule dropped there with the lid off can fall into the groove, as it could before | Note it; a cap or narrower chamfer is a revision 11 question |
+
+## Test print 4 — planned, revision 11
+
+**Printed:** `build/section/test_print_section_256.3mf`: the right-hand end bay cut at
+the left face of divider 4, the whole height and depth (50.2 x 213 x 189 mm), the
+matching pick-lid end and fill-lid end at the section's own width, and the coupon
+turned 90 degrees. About 580 cm3 of solid: expect about 8 hours in PETG. Dry the
+filament first. Slicer settings as test print 3 (no brim, no supports).
+
+| Check | What to do | Pass |
+|---|---|---|
+| Fill tray A from the back (D42) | Pour from a bottle into hopper A's flared mouth | Easier than tray B was last time (mouth 57 mm under the lid, 60 at the rim, against B's 63 on the module); nothing spills over the flare |
+| Row A refills (D36) | Take capsules from the front a few at a time | As test print 3: the pile follows |
+| The last capsules (D41) | Run tray A down to the last few, including the larger ones | None lodges in the front-bottom corner; each can be picked without scraping. If one still does, the answer is a filled wedge, not bigger beads |
+| Front-right corner of tray A | Look at the stop block, filler, buttress and beads together | No lump a capsule wedges against (the probe finds no pocket over 3 mm); no gap narrower than a capsule that is deeper than a cusp |
+| Pick lid on / off (D38, D44) | Seat the lid end; pinch the skirt and plate edge and lift | Seats by its lug as before; lifts off between thumb and forefinger without a notch |
+| Rail and groove (D43) | Lower a spare rail into the front groove; slide the coupon block | Stiff enough; nothing tears at the break-out; the buttress no longer gets in the way in the front bin |
+| Coupon (D47, PETG) | Block bed-face up over each stub | Report the label that goes down by hand and comes back out, snug but free; centre is 0.215 |
+| Labels (D45) | Stick 1/2 inch tape on both strips | Both on the front face, the back-row (B) strip above the front-row (A) strip, both visible with the lid on |
+| Left wall (D46) | Handle the section | The left wall (a whole divider) does not crack; the divider / front wall corners have a fillet |
+| Fill-lid end (D30) | Drop it into the mouth | Fits at 0.30 with the longer lid (121 mm); lifts out cleanly |
+| Cubby opening | Look at the back | Low retaining wall (30 mm) across a pocket that takes a chapstick or two |
+| Stringing | Look at the groove, bins and lid | Much less than test print 3 once the filament is dry |
+
