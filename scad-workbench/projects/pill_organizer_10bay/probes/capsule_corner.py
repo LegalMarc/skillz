@@ -1,29 +1,28 @@
 #!/usr/bin/env python3
-"""D41 probe: do the corner beads lift a capsule off tray A's floor, and do they
-(with the stop block, the filler and the buttress) leave a place for a capsule
-to wedge?
+"""D41 probe: do the corner beads do their job, and can a capsule wedge in tray A's corners?
 
-The capsule is a 26 x 11 mm cylinder with hemispherical ends (params: pill_len,
-pill_dia), modelled as its axis segment: it is free at a pose when every sampled
-axis point is at least the radius from the body mesh. It is dropped from above at
-each (x, y) until it touches (the lowest free z), then the pose with the lowest
-centre is its rest, which is where a capsule sliding down the 35 degree floor
-ends up. Run with the beads (bead_r from params) and without (-D bead_r=0).
+The beads (revision 11 review) are three small half-round ribs per bay, radius 2.5, from the
+front wall along the floor, hemispherical ends. Their job, in the user's words: something to
+push a capsule's end against so it tips and can be grabbed. This measures that on the real
+mesh. A capsule is a 26 x 11 mm cylinder with hemispherical ends (pill_len, pill_dia), modelled
+as its axis segment on a 0.4 mm distance field of the body.
 
-  ALONG X  (axis parallel to the front wall, the "lying in the corner" case):
-           lift = height of the capsule's underside above the floor at rest.
-  ALONG Y  (axis toward the wall, an end in the corner): how close to the wall the
-           capsule's centre gets, and the height of its front end above the floor.
-  DIAGONALS 45 and 135 degrees in plan.
-  END BAY  the same poses over the last bay (stop block, filler, buttress, side
-           wall): the rest pose of each is listed, and a pose is a WEDGE if the
-           capsule rests with its underside on the floor (not lifted) AND an end or
-           side is within 1 mm of two non-floor features at once at a spot where
-           the free width is under a capsule diameter. The check reports how many
-           of the scanned poses are wedges and where.
+  END PUSH   a capsule lying along the FALL LINE (axis parallel to the 35 degree floor,
+             perpendicular to the wall, its lower end toward the wall) is slid down the
+             floor, centred on a rib, between two ribs, and over the bay's edge, until it
+             stops. Reported: where its lower end stops (distance of the tip from the wall,
+             with and without ribs), where it touches the rib (the contact normal on the end
+             cap, and the contact's height above the capsule's axis: positive = above, a
+             contact BELOW the axis pushes the end UP and tips the capsule), and how far the
+             end is lifted off the floor.
+  ALONG X    the same for a capsule lying along the wall, pushed ALONG X into a rib: where
+             its end meets the rib and at what height on the cap.
+  GAP        a capsule cannot wedge between two ribs: the clear gap is narrower than a
+             capsule (asserted in params) and the end-push poses between two ribs are listed.
+  LAST BAY   pockets deeper than 3 mm in the right-hand corner (stop block, filler,
+             buttress, side wall, ribs) that a capsule end cannot reach.
 
-    python3 probes/capsule_corner.py            # beads as built, middle bay and last bay
-    python3 probes/capsule_corner.py 6 7 8 9    # lift vs bead radius (middle bay, along X)
+    python3 probes/capsule_corner.py
 """
 import sys
 import numpy as np
@@ -54,7 +53,7 @@ class World:
     def __init__(self, mesh, x0, x1):
         from scipy.ndimage import distance_transform_edt
         self.lo = np.array([x0 - 2.0, -1.0, -1.0])
-        hi = np.array([x1 + 2.0, 30.0, 50.0])
+        hi = np.array([x1 + 2.0, 40.0, 60.0])        # well past anything a capsule reaches: the crop closes the mesh with solid faces here
         box = trimesh.creation.box(extents=hi - self.lo)
         box.apply_translation((hi + self.lo) / 2)
         crop = trimesh.boolean.intersection([mesh, box], engine="manifold")
@@ -143,17 +142,88 @@ def print_middle(name, res):
               f"centre y {min(ys):.2f} .. {max(ys):.2f}")
 
 
+FALL = np.array([0.0, np.cos(TILT), np.sin(TILT)])       # up the floor, away from the wall
+NF = np.array([0.0, -np.sin(TILT), np.cos(TILT)])        # the floor's normal
+
+
+def slide_down(world, x, y0=24.0, dy=0.1):
+    """a capsule lying along the fall line, resting on the floor at floor-line position y0,
+    slid toward the wall until the next step is blocked. Returns its centre, or None."""
+    hover = 0.5     # the floor is a staircase of 0.4 mm voxels at 35 degrees: ride half a millimetre above it
+    def centre(y):
+        return np.array([x, y, floor_z(y)]) + (R + hover) * NF
+    y = y0
+    if not world.free(centre(y), FALL):
+        return None
+    while world.free(centre(y - dy), FALL):
+        y -= dy
+        if y < WO - 1:
+            break
+    return centre(y)
+
+
+def contact_on_cap(world, c):
+    """where the lower end cap of a fall-line capsule at centre c touches something that is not
+    the floor or the front wall: the mean point, its height above the axis (along the floor normal;
+    negative = below the axis, which pushes the end UP) and its elevation angle."""
+    low = c - HALF * FALL
+    pts = []
+    for th in np.linspace(0, np.pi / 2, 19):
+        for ph in np.linspace(0, 2 * np.pi, 48, endpoint=False):
+            # a direction on the cap hemisphere facing the wall (-FALL), built in an orthonormal frame
+            u = np.array([1.0, 0, 0]); v = np.cross(FALL, u)
+            dirn = -np.cos(th) * FALL + np.sin(th) * (np.cos(ph) * u + np.sin(ph) * v)
+            p = low + (R + 0.05) * dirn
+            if world.dist(p[None, :])[0] > 0.9:
+                continue
+            # not the floor: the point is more than 0.9 mm above the floor plane; not the wall: > 0.9 from y = 2.8
+            above = (p[2] - floor_z(p[1])) * np.cos(TILT)
+            if above < 0.9 or p[1] < WO + 0.9:
+                continue
+            pts.append((p, dirn))
+    if not pts:
+        return None
+    p = np.mean([q[0] for q in pts], axis=0)
+    h = float(np.mean([R * np.dot(q[1], NF) for q in pts]))      # height above the axis, floor-normal direction
+    elev = float(np.degrees(np.arcsin(np.clip(np.mean([np.dot(q[1], NF) for q in pts]), -1, 1))))
+    return p, h, elev, len(pts)
+
+
+def end_push(mesh_b, mesh_n, bay=2):
+    x0 = WO + bay * (BW + WD)
+    wb = World(mesh_b, x0, x0 + BW); wn = World(mesh_n, x0, x0 + BW)
+    pitch = BW * 0.25
+    rib_x = [x0 + pitch * k for k in (1, 2, 3)]
+    cases = [("centred on rib 2", rib_x[1]), ("centred in the gap between ribs 2 and 3", rib_x[1] + pitch / 2),
+             ("centred on rib 1", rib_x[0]), ("beside rib 1, against the divider (centre 5.6 from it)", x0 + 5.6)]
+    rows = []
+    for name, x in cases:
+        cb = slide_down(wb, x); cn = slide_down(wn, x)
+        if cb is None or cn is None:
+            rows.append((name, None)); continue
+        tip_b = (cb - (HALF + R) * FALL)[1] - WO; tip_n = (cn - (HALF + R) * FALL)[1] - WO
+        lift_b = float(((cb - HALF * FALL)[2] - floor_z((cb - HALF * FALL)[1])) * np.cos(TILT) - R) - 0.5   # less the 0.5 hover
+        con = contact_on_cap(wb, cb)
+        rows.append((name, (tip_n, tip_b, lift_b, con)))
+    return rows
+
+
 if __name__ == "__main__":
-    if len(sys.argv) > 1:
-        for r in sys.argv[1:]:
-            m = parts(("body",), defs=[f"bead_r={r}"])["body"]
-            res = middle(m, orients=("x",))
-            print_middle(f"bead_r {r}", res)
-        sys.exit(0)
     no_b = parts(("body",), defs=["bead_r=0"])["body"]
     with_b = parts(("body",))["body"]
-    print(f"bead_r {P['bead_r']}; pill {26} x {11}; floor {35} deg")
-    print("MIDDLE BAY (bay 2)")
+    print(f"bead_r {P['bead_r']}, bead_len {P['bead_len']}; pill 26 x 11; floor 35 deg; clear gap between ribs "
+          f"{BW * 0.25 - 2 * P['bead_r']:.2f} mm (capsule diameter 11)")
+    print("\nEND PUSH: a capsule lying along the fall line is slid down the floor toward the front wall (middle bay)")
+    ok_push = True
+    for name, r in end_push(with_b, no_b):
+        if r is None:
+            print(f"  {name}: could not be placed"); continue
+        tip_n, tip_b, lift_b, con = r
+        print(f"  {name}: its tip stops {tip_b:5.2f} mm from the wall (without ribs {tip_n:5.2f}, where the capsule meets the wall)"
+              + (f"; touches a rib at {con[2]:+.0f} deg elevation, {con[1]:+.2f} mm from the axis (negative = below it: pushes the end UP), {con[3]} sample points" if con else "; touches no rib (stopped by the wall or floor)"))
+        if "on rib" in name:
+            ok_push &= (tip_b - tip_n) > 1.0 and con is not None and con[1] < 0     # held out, and touched BELOW the axis
+    print("\nMIDDLE BAY, rest poses of a capsule lying along the wall and others (no ribs vs ribs)")
     a = middle(no_b, orients=("x", "y", "d45", "d135"))
     print_middle("no beads", a)
     b = middle(with_b, orients=("x", "y", "d45", "d135"))
@@ -210,6 +280,6 @@ if __name__ == "__main__":
         print("    ", r_)
     print("  note: the capsule axis is held horizontal in the model, so only ALONG X (parallel to the contour lines of the 35 degree floor) is a true rest pose;"
           "\n        the other orientations are reported for the record (a capsule lying along Y really tilts with the floor).")
-    print(f"\nRESULT: beads lift a capsule lying along X by {lift:.2f} mm at worst "
-          f"(without beads {min(a['x'][2]):.2f}); last-bay slots: {len(wedges)}")
-    sys.exit(0 if (lift >= 1.5 and not wedges) else 1)
+    print(f"\nRESULT: a capsule on a rib is held out from the wall and pushed up from below the axis: {ok_push}; "
+          f"capsule along X lifted {lift:.2f} mm at worst (without ribs {min(a['x'][2]):.2f}); last-bay pockets: {len(wedges)}")
+    sys.exit(0 if (ok_push and not wedges) else 1)

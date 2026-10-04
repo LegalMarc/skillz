@@ -1,7 +1,7 @@
 module_w 240.0; slices every 2 mm, thin = under 2.0 mm, window = right 26 mm x front 45 mm
  z      thin regions  total mm2  largest mm2   regions over 4 mm2 (x, y, area)
    6.0     0           0.0       0.0     []
-   8.0     0           0.0       0.0     []
+   8.0     1           0.6       0.6     []
   10.0     2           0.9       0.5     []
   12.0     2           0.9       0.5     []
   14.0     2           0.9       0.5     []
@@ -38,9 +38,9 @@ module_w 240.0; slices every 2 mm, thin = under 2.0 mm, window = right 26 mm x f
   76.0     2           0.9       0.5     []
   78.0     3           1.5       0.6     []
   80.0     3           7.1       6.2     [(234.5, 3.9, 6.2)]
-  82.0     2           0.9       0.5     []
+  82.0     3           1.4       0.5     []
   84.0     2           0.9       0.5     []
-  86.0     2           0.9       0.5     []
+  86.0     3           1.4       0.5     []
   88.0     2           0.9       0.5     []
   90.0     2           0.9       0.5     []
   92.0     2           0.9       0.5     []
@@ -49,15 +49,15 @@ module_w 240.0; slices every 2 mm, thin = under 2.0 mm, window = right 26 mm x f
   98.0     1           0.5       0.5     []
  100.0     1           0.5       0.5     []
  102.0     0           0.0       0.0     []
- 104.0     1           3.1       3.1     []
+ 104.0     1           4.1       4.1     [(235.7, 29.1, 4.1)]
 
 largest thin region in any slice: 23.8 mm2   (flap if it persists over 4.0 mm2)
 
-break-out zone, right side, slices every 0.25 mm from z 76 to 116: 9 thin regions of >= 0.6 mm2 (the dovetail lips' own 0.48 mm2 tips are below that); the tallest stands 1.00 mm (at z, x, y = (104.22, 236.0, 28.8)); all of them: [(94.22, 236.8, 18.7, 0.79), (94.47, 237.6, 19.0, 0.91), (94.72, 239.1, 19.5, 3.84), (94.97, 239.4, 19.7, 2.25), (95.22, 239.7, 19.9, 0.85), (103.47, 235.4, 28.8, 4.71), (103.72, 235.5, 29.0, 4.51), (103.97, 235.7, 28.9, 3.36), (104.22, 236.0, 28.8, 1.02)]
-      (informational) tallest thin standing region 1.00 mm
+break-out zone, right side, horizontal slices every 0.25 mm from z 76 to 116, thin = under 2.35 mm: 462 thin regions of >= 0.2 mm2; 0 are none of the named features
+PASS  every thin region (under the skin's thickness) in the right break-out zone is a named feature
 
-break-out zone, left side, slices every 0.25 mm from z 76 to 88: 0 thin regions of >= 0.6 mm2 (the dovetail lips' own 0.48 mm2 tips are below that); the tallest stands 0.00 mm
-      (informational) tallest thin standing region 0.00 mm
+break-out zone, left side, horizontal slices every 0.25 mm from z 76 to 88, thin = under 2.35 mm: 184 thin regions of >= 0.2 mm2; 0 are none of the named features
+PASS  every thin region (under the skin's thickness) in the left break-out zone is a named feature
 
 line measurements (solid runs along the line: start point, length mm):
   skin, along X at y=22.8, z=30:  [([234.2, 22.8, 30.0], np.float64(2.4))]
@@ -69,16 +69,21 @@ line measurements (solid runs along the line: start point, length mm):
   material behind the contact face, along the slope from the face (x=234.2):  [([234.2, 0.01, 71.47], np.float64(9.08))]
   front wall + side wall, along X at y=1.4, z=62:  [([231.2, 1.4, 62.0], np.float64(8.8))]
 
-right break-out zone: 4 convex edges under 80 degrees ([(72, 1.59), (46, 0.1), (49, 0.28), (71, 1.3)] deg, mm); 0 under 60 degrees and over 0.5 mm long
+right break-out zone: 4 convex edges under 80 degrees ([(72, 1.06), (46, 0.1), (49, 0.07), (71, 0.8)] deg, mm); 0 under 60 degrees and over 0.5 mm long
 PASS  no knife edge (interior angle under 60 degrees, over 0.5 mm long) in the right break-out zone
 
 left break-out zone: 0 convex edges under 80 degrees ([] deg, mm); 0 under 60 degrees and over 0.5 mm long
 PASS  no knife edge (interior angle under 60 degrees, over 0.5 mm long) in the left break-out zone
   divider / front wall joint, bay 2's left divider: (z, solid at the fillet's arc, solid run along the diagonal mm): [(12.0, True, np.float64(3.49)), (25.0, True, np.float64(3.49)), (40.0, True, np.float64(3.49)), (50.0, True, np.float64(3.49))]
+skin 2.4 mm thick, middle at x=235.4; front lip top vs highest skin top over the groove's width:
+  at groove floor +0.2 : lip edge y  19.66, front lip top z   94.81, skin top max z   97.08 -> skin stands  2.26 mm above the lip (0.94 x its thickness)
+  at mid groove        : lip edge y  20.26, front lip top z   95.39, skin top max z   97.08 -> skin stands  1.69 mm above the lip (0.70 x its thickness)
+  at mouth -0.3        : lip edge y  20.68, front lip top z   95.79, skin top max z   97.08 -> skin stands  1.28 mm above the lip (0.53 x its thickness)
 
 PASS  skin behind the groove is >= a divider (2.4) at every height (min 2.40)
 PASS  buttress on either side of the groove is >= a divider + 1 mm (min 3.81)
 PASS  the divider / front wall joint is filleted and over a divider thick along its diagonal at every height
+PASS  the skin stands at most 1 x its thickness above the front lip beside the groove (worst 2.26 mm of 2.4)
 PASS  stop block reaches back to y 10.0 at z=62 (run 14.00)
 PASS  material behind the contact face along the slope is >= 1.5 mm (min 9.08)
 PASS  front wall and side wall run unbroken across the pillar in X (no gap)

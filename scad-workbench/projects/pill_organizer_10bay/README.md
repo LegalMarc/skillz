@@ -9,9 +9,9 @@ rows at the front under one sloped lid.
 
 **Revision 11.** Eleven revisions, forty-seven recorded decisions (`plan.md`).
 Revision 11 is test print 3 (the revision 10 section, in Generic PETG): row A
-refills now, the lid and its lug work, and what was left was small. Three corner
-beads per bay keep the last capsules out of the wedge where tray A's floor meets
-the front wall (D41); hopper A's back wall flares 30 degrees so the narrow back
+refills now, the lid and its lug work, and what was left was small. Three small
+half-round ribs per bay in the corner where tray A's floor meets the front wall
+give a lodged capsule's end something to push against (D41); hopper A's back wall flares 30 degrees so the narrow back
 mouth is easier to pour into (D42, mouth 39 -> 57 mm); the rail, groove and
 buttress are slimmed to about a divider, the buttress protruding 3 mm into the bay
 instead of 7 (D43); the pick lid has no finger notches, you pinch it (D44); both
@@ -40,7 +40,7 @@ revision 9 fixed tray B's pile.
 
 | | |
 |---|---|
-| Overall | 243 x 213.1 x 189 mm (the 243 includes the 3 mm joining rail; 194.8 deep below z 155, the back wall leans out above; the plate allows 246 x 246 x 250) |
+| Overall | 243 x 213.0 x 189 mm (the 243 includes the 3 mm joining rail; 194.8 deep below z 155, the back wall leans out above; the plate allows 246 x 246 x 250) |
 | Bays | 10, two rows of 5, 44.96 mm clear each, trays 40 mm deep |
 | Capacity, middle bay | **438 mL front row, 200 mL back row**; end bays 428 / 198. About 3.2 L total, geometric maximum |
 | Printed parts | **3 designs, 3 pieces**, no hardware |
@@ -103,19 +103,23 @@ the wedge to work.
   opening remains above it. About 1.8 L of what was solid infill is usable
   space. (The pick lid does not fit in it: it is 144 mm long.)
 - **Corner beads** (D41). The floor meets the front wall in a 55 degree wedge, and
-  the last, larger capsules lodged in it on test print 3. Three spheres of 8 mm
-  radius per bay, centred on the floor/wall junction at a quarter, half and three
-  quarters of the bay, show as rounded bosses in the corner: overlapping, fused to
-  both surfaces, nothing behind them, all faces looking up or out. They hold a
-  capsule lying along the wall up off the apex and out of the wedge. They are
-  modest by nature (see `calculations.md` for the measured effect); the next print
-  says whether they are enough.
+  the last, larger capsules lodged in it on test print 3. Three small ribs per bay,
+  each a half-round of 2.5 mm radius (5 mm across) running 13 mm out from the front
+  wall along the floor and ending in a hemisphere, at a quarter, half and three
+  quarters of the bay, with 6.2 mm clear between them (a capsule is 11). They are
+  for pushing a capsule's end against: on the mesh, a capsule slid toward the wall
+  along the floor stops with its tip 4.8 mm out (0.7 without) against a rib end, which
+  touches it 3.9 mm below its axis, so the push lifts that end; between two ribs it
+  nests in the channel and lifts straight out. A capsule lying along the wall rests
+  on the ribs 2.25 mm up. (The first try, overlapping 8 mm spheres, was a ramp; the
+  user asked for small discrete beads.) Nothing is behind a rib, and they print without
+  support.
 - **Hopper A's mouth flares** (D42). The back wall of the module leans out at 30
   degrees from vertical from the chute floor's end up to the rim, so the opening
   you pour into widens toward the top: 57 mm front to back under the lid (39
   before), 60 at the rim, 49 between the seat ledges (33 before). The chute floor
   is untouched. The fill lid's recess follows the flare, so the lid is 121 mm long
-  (104) and still drops in with 0.3 mm all round. The module is 214 mm deep at the
+  (104) and still drops in with 0.3 mm all round. The module is 213 mm deep at the
   rim; the back wall's outer face leans 30 degrees, an overhang inside the 45
   degree rule.
 - **The fill mouths are 63 and 57 mm now (about 1.1:1; 63 and 39 before D42).** The wall between them leans
@@ -183,8 +187,14 @@ the wedge to work.
   and 3.6 mm at the root, the groove 3.4 deep, and the buttress behind the front
   groove protrudes 3 mm into the bay (7 before) and is 14 mm long; the skin between
   the groove and tray A is 2.4 mm, a divider, and the groove's front lip is bevelled
-  1.5 mm where it meets the sloped plane (D39's lesson: no thin blade, no knife
-  edge). Test print 3 found the old rail overbuilt; the dovetail slope is unchanged.
+  1 mm where it meets the sloped plane (D39's lesson: no thin blade, no knife edge).
+  The plane rises toward the back, which would have left the skin standing up to
+  6.4 mm (2.6 times its own thickness) above the front lip beside it, so the skin's top
+  is trimmed flat to one skin thickness above that lip: it stands 2.3, 1.7 and 1.3 mm
+  above it at the groove's tip, middle and mouth. `probes/corner_thickness.py` checks
+  that, the edge angles, and every thin region in the break-out zone (all named
+  features, listed in `calculations.md`). Test print 3 found the old rail overbuilt;
+  the dovetail slope is unchanged.
 
 ## Two things that were forced, not chosen
 
@@ -220,7 +230,7 @@ it is laid. Every wall over both trays dies on that plane.
 
 | Part | Qty | Print orientation |
 |---|---|---|
-| `body` | 1 | as modelled, flat on its base, no supports. 243 x 213.1 x 189 mm |
+| `body` | 1 | as modelled, flat on its base, no supports. 243 x 213.0 x 189 mm |
 | `pick_lid` | 1 | plate TOP face on the bed, skirt rising at about 46 degrees (`rotate([180 - pick_lid_slope, 0, 0])` — revision 5's export had the sign wrong and stood the lid on its skirt) |
 | `fill_lid` | 1 | flipped, plate top face on the bed; the pull lip is in the plate's plane |
 

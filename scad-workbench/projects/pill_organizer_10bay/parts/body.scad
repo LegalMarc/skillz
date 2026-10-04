@@ -19,7 +19,7 @@
 // Material: PLA or PETG.
 // Print orientation: as modelled, flat on its base, no supports.
 //
-// EXPECTED_BBOX: [243.0, 213.07, 189.0]
+// EXPECTED_BBOX: [243.0, 213.01, 189.0]
 // ============================================================
 
 include <../params.scad>
@@ -275,7 +275,7 @@ module corner_cuts() {
     // the lean, and above it the same cutter sheared back by the lean's slope
     for (c = [[module_w, module_d, 180], [0, module_d, 270]])
         translate([c[0], c[1], -1]) rotate([0, 0, c[2]]) {
-            linear_extrude(height = flare_zo + 1.5) corner_cut_2d(r);
+            linear_extrude(height = flare_zo + 1) corner_cut_2d(r);   // top at flare_zo exactly, where the sheared cutter above starts with the same section (a top 0.5 higher left a 0.8 mm2 ledge)
         }
     for (c = [[module_w, 180], [0, 270]])
         multmatrix([[1, 0, 0, 0], [0, 1, flare_tan, module_d - flare_zo * flare_tan], [0, 0, 1, 0], [0, 0, 0, 1]])
@@ -423,23 +423,31 @@ module boss_bevels() {
     boss_back_bevel(module_w - wall_out - rail_boss - 1, module_w - wall_out - 0.1);
 }
 
-// Corner beads (D41, revision 11). Test print 3: the last couple of capsules in
-// row A lodge in the 55 degree wedge where the 35 degree floor meets the front wall,
-// standing or lying there, hard to pick up. Three bumps per bay along that corner
-// keep a capsule off the apex: a sphere of bead_r centred ON the floor/wall
-// junction line, so it is solid on one side of the wall and of the floor and shows
-// only as a rounded boss in the wedge. No pocket forms behind it (it is fused to
-// both), and every face it shows looks up or out (it rises from the floor and the
-// wall), so it prints without support. Clipped to the tray: not out through the
-// front face, not below the bed.
+// Corner beads (D41, revision 11, redesigned after the review). Test print 3: the last
+// capsules in row A lodge in the 55 degree wedge where the 35 degree floor meets the
+// front wall. Three small beads per bay, each a short half-round rib with a hemispherical
+// end: radius bead_r, its axis ON the floor surface, running from the front wall out
+// along the fall line for bead_len. They are for pushing a capsule's end against (it
+// rides up the rib's side and tips), not a ramp. Attached to the wall and the floor, so
+// nothing is behind them; their sides are vertical to the layers and their ends face up
+// and out, so they print without support; the 6.2 mm clear gaps between ribs are narrower
+// than a capsule (11), so no capsule can wedge between two. Clipped to the tray: not out
+// through the front face, not below the bed.
 module corner_beads() {
     if (bead_r > 0)
         intersection() {
             union() for (i = [0 : bays - 1])
-                for (f = bead_fracs)
-                    translate([wall_x1(i) + bay_w * f, yA_tray0 + 0.07, base_z + 0.05])   // 0.07 off the wall face: sphere vertices ON the face plane are a coplanar boolean
-                        sphere(r = bead_r, $fn = 48);
-            translate([0, yA_tray0 - 1.0, base_z - 1.5]) cube([module_w, 3 * bead_r, 3 * bead_r]);
+                for (f = bead_fracs) {
+                    // J: the floor/wall junction under the bead's axis, nudged off the wall's face and
+                    // up off the floor's surface so no sphere vertex row lies ON either plane
+                    J = [wall_x1(i) + bay_w * f, yA_tray0 + 0.07, base_z + 0.05];
+                    translate(J) hull() {
+                        sphere(r = bead_r, $fn = 32);
+                        translate([0, (bead_len - bead_r) * cos(trayA_tilt_deg), (bead_len - bead_r) * sin(trayA_tilt_deg)])
+                            sphere(r = bead_r, $fn = 32);
+                    }
+                }
+            translate([0, yA_tray0 - 1.0, base_z - 1.5]) cube([module_w, bead_len + 4, 3 * bead_r + bead_len]);
         }
 }
 
@@ -552,6 +560,24 @@ module rail_socket_cut() {
 module groove_outline() {
     rail_trapezoid(rail_root_w, rail_tip_w, rail_out + rail_depth_clear, rail_clear);
 }
+// The skin's free height (revision 11 review K1). The plane rises 0.96 mm per mm toward
+// the back, so over the groove's width the skin's top climbed up to 6.4 mm (2.6 x its
+// own thickness) above the front lip beside it: a 2.4 mm wall standing free on its
+// outer side. Its top is trimmed flat to skin_cap_z, no more than rail_skin above the
+// front lip's lowest top (which is the clipped buttress, pick_plane - boss_clip_drop,
+// at the groove's tip depth, 0.5 mm in front of the flank). The back lip is not
+// touched, so the trimmed skin ends in a step up to it, a 90 degree inside corner; the
+// front lip is not touched. The cutter reaches skin_trim_over past the groove floor
+// into the groove's own air, so no cutter face lies on the skin's outer face; at the
+// back it clips the back lip's lowest 0.4 mm by at most 0.14 mm (named in calculations.md).
+module skin_trim() {
+    y0 = rail1_y - rail_tip_w / 2 - rail_clear + 0.4;
+    y1 = rail1_y + rail_tip_w / 2 + rail_clear + 0.15;     // +0.15: not on the back flank's edge line at the groove floor (a coplanar edge)
+    x0 = module_w - wall_out - rail_boss - 1;
+    x1 = module_w - rail_out - rail_depth_clear + skin_trim_over;
+    translate([x0, y0, skin_cap_z]) cube([x1 - x0, y1 - y0, 60]);
+}
+
 module rail1_countersink() {
     c = groove_chamfer;
     sl = (trayB_rim - pickplane_front) / yB_tray1;
@@ -561,7 +587,7 @@ module rail1_countersink() {
                 translate([0, 0, -c]) linear_extrude(height = 0.01) groove_outline();
                 translate([0, 0, 3]) linear_extrude(height = 0.01) offset(delta = c + 3) groove_outline();
             }
-        translate([module_w - rail_out - rail_depth_clear + 0.25, 0, 0]) cube([rail_out + 10, 400, 400]);   // 0.25 off the floor: a cutter face ON the groove floor is a coplanar boolean
+        translate([module_w - rail_out - rail_depth_clear + 0.06, 0, 0]) cube([rail_out + 10, 400, 400]);   // 0.06 off the floor: a cutter face ON the groove floor is a coplanar boolean; the 0.06 strip of un-bevelled lip left beside the floor is below the nozzle
         // front flank only: the back lip meets the plane at 134 degrees and needs no bevel
         translate([module_w - 20, -1, 0]) cube([40, rail1_y + 1, 400]);
     }
@@ -603,6 +629,7 @@ module body_geometry() {
         rail_socket_cut();
         rail1_countersink();
         boss_bevels();
+        skin_trim();
         label_cuts();
         foot_pad_cuts();
         corner_cuts();

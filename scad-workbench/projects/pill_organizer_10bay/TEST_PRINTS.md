@@ -146,7 +146,7 @@ filament first. Slicer settings as test print 3 (no brim, no supports).
 |---|---|---|
 | Fill tray A from the back (D42) | Pour from a bottle into hopper A's flared mouth | Easier than tray B was last time (mouth 57 mm under the lid, 60 at the rim, against B's 63 on the module); nothing spills over the flare |
 | Row A refills (D36) | Take capsules from the front a few at a time | As test print 3: the pile follows |
-| The last capsules (D41) | Run tray A down to the last few, including the larger ones | None lodges in the front-bottom corner; each can be picked without scraping. If one still does, the answer is a filled wedge, not bigger beads |
+| The last capsules (D41) | Run tray A down to the last few, including the larger ones. Where one lodges at the wall, push its end along the floor against a rib (three small half-round ribs per bay, 5 mm across) | The end rides up the rib and the capsule tips so a finger can take it; none stays flat in the corner. If one still does, the answer is a filled wedge, not bigger ribs |
 | Front-right corner of tray A | Look at the stop block, filler, buttress and beads together | No lump a capsule wedges against (the probe finds no pocket over 3 mm); no gap narrower than a capsule that is deeper than a cusp |
 | Pick lid on / off (D38, D44) | Seat the lid end; pinch the skirt and plate edge and lift | Seats by its lug as before; lifts off between thumb and forefinger without a notch |
 | Rail and groove (D43) | Lower a spare rail into the front groove; slide the coupon block | Stiff enough; nothing tears at the break-out; the buttress no longer gets in the way in the front bin |

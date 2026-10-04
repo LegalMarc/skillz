@@ -600,35 +600,39 @@ labelled by the offset from the default: -100, -50, 0, +50, +100.
 
 ## Revision 11 (test print 3)
 
-### Derived: corner beads (D41)
+### Derived: corner beads (D41, redesigned after the review)
 
 Tray A's floor meets the front wall in a wedge: the floor rises toward the back at
 35 degrees, the wall is vertical, so the void's angle at the junction is 55 degrees.
 A size-00 capsule (11 mm diameter, radius 5.5) lying along the wall touches wall and
-floor with its axis at `5.5 / sin(27.5) = 11.9` mm from the junction line.
+floor with its axis at `5.5 / sin(27.5) = 11.9` mm from the junction line, and touches
+the floor `5.5 / tan(27.5) = 10.6` mm from the wall along it.
 
 | Quantity | Formula | Value |
 |---|---|---|
-| Bead | sphere on the junction line, `bead_r`, at 1/4, 1/2, 3/4 of the bay | r = 8, pitch 11.2 (adjacent beads overlap, so no gap takes a capsule end) |
-| Radius at which a bead first touches a capsule in the wedge | `11.9 - 5.5` | 6.4 |
-| Capsule held up off the floor at a bead peak, resting on wall and beads | `z = 3 + sqrt((5.5 + r)^2 - 5.5^2)`, floor clearance `(z - 6.85) x cos 35 - 5.5` | r = 7: 0.5; r = 8: 1.4; r = 9: 2.3 mm |
-| Above about r = 8.6 | the capsule rests on bead and floor instead of wall and bead | it is moved out of the wedge (centre 8.1 -> 11.3 mm from the wall at r = 10) rather than raised |
+| Bead | a half-round rib, axis on the floor surface from the front wall, radius `bead_r`, length `bead_len`, hemispherical end | r = 2.5 (5 across), 13 long: past the 10.6 mm line where the capsule meets the floor |
+| Positions, clear gap | 1/4, 1/2, 3/4 of the bay; `bay_w / 4 - 2 bead_r`, asserted under a capsule's diameter and over 3 | pitch 11.2, gap 6.2 |
+| Why 2.5 | the capsule's end cap has radius 5.5; a rib of radius r, its axis on the floor and the cap resting on the floor, is touched where the cap centre is `5.5 + r` from the rib axis, i.e. `sqrt((5.5 + r)^2 - 5.5^2)` = 5.8 mm to the side for r = 2.5, at an elevation of `atan(5.5 / 5.8)` = 43 degrees above the floor (the probe reads 46) | the push is mostly sideways and 43-46 degrees up: it lifts the end. Much bigger and the rib is a ramp to rest on (the first try, 8 mm spheres) |
 
-Measured on the mesh (`probes/capsule_corner.py`, a 26 x 11 mm capsule as its axis
-segment on a 0.4 mm voxel distance field; so the values are good to about 0.3 mm), a
-capsule that slides down the floor and comes to rest in the middle bay: along X,
-the underside is 0.81 mm above the floor with the beads against 0.28 without
-(voxel noise; the analytic peak figure above is 1.4), and its rest moves 0.8 mm
-further from the wall; along Y and at 45 degrees it already rests clear of the
-wedge (end against the wall, or crosswise) and the beads change nothing. So the
-beads do what a bump of this size can: keep a capsule from settling into the apex
-and hold it about a millimetre up. They do not make a lodged capsule easy to grab
-by themselves. If the next print shows they are not enough, a filled wedge (a
-continuous 45 degree ramp along the corner) is the stronger fix. Slices of the last
-bay's corner (stop block, filler, buttress, side wall) at z 26 to 48 mm show no
-pocket deeper than 3 mm that a capsule end cannot reach (every 90 degree corner
-leaves a cusp of 2.3 mm); the filler was widened to the stop block's width after the
-slimmer buttress left a 3 x 6 mm nook beside it.
+Measured on the mesh (`probes/capsule_corner.py`; the capsule as its axis segment on a
+0.4 mm voxel distance field, so good to about 0.3 mm; the capsule rides 0.5 mm above the
+floor because the voxelised floor is a staircase), middle bay:
+
+| Case | Tip from the wall, with / without ribs | Contact on the capsule |
+|---|---|---|
+| Along the fall line, centred on rib 1 or rib 2 | **4.8 / 0.7 mm** | the rib's end, 3.9 mm below the axis, 46 degrees elevation: pushes the end UP |
+| Along the fall line, centred in the gap between two ribs | 0.7 / 0.7 | the two ribs' shoulders, 1.8 mm below the axis, 19 degrees: nests in the channel and lifts straight out (nothing above the axis), so it does not wedge |
+| Along the fall line, beside rib 1 against the divider | 0.7 / 0.7 | rib 1's flank, 0.9 mm below, 10 degrees |
+| Lying along the wall | underside 2.25 mm above the floor (0.28 without) | rests on the ribs: the passive part, which a rib row of 11 mm pitch cannot avoid under a 26 mm capsule |
+
+The sign convention the review used ("contact above the axis") applies to a force on the
+cap from a bead higher than the axis; here the beads are low, so the contact is BELOW the
+axis and the reaction on the capsule points up, which is what lifts it. Slices of the last
+bay's corner (stop block, filler, buttress, side wall, ribs) at z 26 to 48 mm show no pocket
+deeper than 3 mm that a capsule end cannot reach (every 90 degree corner leaves a cusp of
+2.3 mm); the filler was widened to the stop block's width after the slimmer buttress left a
+3 x 6 mm nook beside it. If the next print shows the ribs are not enough, a filled
+45 degree ramp along the corner is the stronger fix.
 
 ### Derived: hopper A's flare (D42)
 
@@ -636,12 +640,12 @@ slimmer buttress left a 3 x 6 mm nook beside it.
 |---|---|---|
 | Lean | `flare_deg` from vertical, inner face from the chute floor's end `(192.0, 156.2)` | 30 degrees |
 | Inner face at the seat plane (z 186) | `192 + (186 - 156.2) x tan 30` | 209.2 (192.0 before) |
-| Outer face | parallel, 3.23 mm horizontally (2.8 normal), starting at z 155.5 | 194.8 at z 155.5, 214.2 at the rim |
+| Outer face | parallel, 3.18 mm horizontally (2.75 normal), starting at z 155.55, the back edge of the cubby's ceiling | 194.8 at z 155.55, 213.0 at the rim |
 | Mouth A, front to back | inner face less the leaning divider | 56.6 under the lid (39.4), 59.7 at the rim, 48.9 between the seat ledges (33.4) |
 | Mouth B | | 62.6; B : A = 1.11 (was 1.59) |
 | Fill lid | `hop_mouth_d - 2 x 0.30` | 121.0 long (104), 233.8 wide, 3 thick |
 | Outer overhang | | 30 degrees from vertical, inside the 45 rule |
-| Footprint | | 243 x 214.2 x 189 (limit 246 x 246 x 250); 243 = 240 + the 3 mm rail |
+| Footprint | | 243 x 213.0 x 189 (limit 246 x 246 x 250); 243 = 240 + the 3 mm rail |
 
 The chute floor is not touched: it ends at its 40 degrees and the wall carries on at
 60 from horizontal, so no floor shallower than the ramp appears and nothing rests on
@@ -658,7 +662,7 @@ it. The back corners' rounding follows the lean (a sheared cutter, nicked 0.03).
 | Buttress length `rail_boss_w` | 23 | 14 |
 | Skin, groove floor to tray A | 4.4 | 2.4 (= wall_div) |
 | Buttress either side of the groove (`margin - rail_clear`) | 5.8 | 3.8 |
-| Groove front-lip bevel `groove_chamfer` / buttress back bevel `boss_bevel` | 3.0 / none | 1.5 / 1.5 |
+| Groove front-lip bevel `groove_chamfer` / buttress back bevel `boss_bevel` | 3.0 / none | 1.0 / 1.0 |
 | `rail_clear` | 0.20 | 0.215 |
 
 The dovetail's flank slope (0.4) is unchanged. The lug (x 3.3 to 7.3, y 5.6 to 11.8)
@@ -677,7 +681,7 @@ along the corner's diagonal is 3.49 mm at each, above the divider's 2.4.
 
 | Row | Middle bay | End bays | vs 147.4 mL | Days at one/day |
 |---|---|---|---|---|
-| Row A, front tray, crossing chute, flared hopper | **437.7 mL** | 427.9 / 428.3 | 2.97x | 266 |
+| Row A, front tray, crossing chute, flared hopper | **438.2 mL** | 428.4 / 428.8 | 2.97x | 266 |
 | Row B, back tray, plain ramp | **200.2 mL** | 198.3 | 1.36x | 122 |
 
 Row A gained 10 mL from the flare and lost a little to the beads, fillets and stop
@@ -688,6 +692,49 @@ unchanged by this revision.
 
 `fit_section.scad` now cuts at `wall_x0(4)`, the left face of divider 4, so the left
 wall is the whole 2.4 mm divider; it runs the whole height and depth. Body 50.2 x
-213.1 x 189 mm, 523.5 cm3; pick-lid end 49.7 x 139.3 x 22.7 (21.4 cm3); fill-lid end
+213.0 x 189 mm, 523.5 cm3; pick-lid end 49.7 x 139.3 x 22.7 (21.4 cm3); fill-lid end
 45.9 x 121.0 x 3 (16.5 cm3); coupon 124 x 30 turned 90 degrees. Total with the coupon
 about 579 cm3, against 503 for test print 3 (about 7 h in PETG): expect about 8 h.
+
+### Revision 11 review (K1-K4)
+
+**K1, the skin's free height** (`probes/skin_free_height.py`, vertical rays in YZ on the real
+mesh at the skin's middle x = 235.4 and at three depths across the groove):
+
+| At | Front lip top | Skin top (max over the groove's width) | Skin above the lip, before | after |
+|---|---|---|---|---|
+| groove floor + 0.2 | 94.81 | 97.08 | 6.35 mm (2.65 x the skin) | **2.26 mm (0.94 x)** |
+| mid groove | 95.39 | 97.08 | 6.03 (2.51 x) | **1.69 (0.70 x)** |
+| mouth - 0.3 | 95.79 | 97.08 | 5.24 (2.18 x) | **1.28 (0.53 x)** |
+
+The plane rises 0.96 mm per mm toward the back, so a skin that follows it over a groove 6.4
+mm wide climbs 6.1 mm above the front lip. `skin_cap_z` trims the skin's top flat, one skin
+thickness above the lowest front-lip top; the back lip is not touched, so the skin ends in a
+90 degree inside corner against it, and the front lip is not touched. The trim reaches
+0.4 mm past the groove floor into the groove's own air, so it clips the back lip's lowest
+corner by at most 0.14 mm. The front-lip bevel went from 1.5 to 1.0 mm (the lips stay
+higher); the countersink starts 0.06 mm off the groove floor, leaving a 0.06 mm strip of
+un-bevelled lip beside it, below what the nozzle can print.
+
+**K2, thin regions in horizontal slices** (the failing check in `probes/corner_thickness.py`
+slices the break-out zone every 0.25 mm and opens each slice with a 2.35 mm disc, i.e.
+nothing thinner than the 2.4 skin may survive; 465 regions of 0.2 mm2 or more on the right,
+184 on the left; every one is one of these):
+
+| Named feature | Where | Size | Why it is not a defect |
+|---|---|---|---|
+| Convex plan corner | every 90 degree vertical edge of the buttress and wall, at every height | 0.30 mm2 (`r^2 (1 - pi/4)`) | an opening always shaves a square corner |
+| Dovetail lip tip | the lips' 70 degree wedge at the outer face (x 239.6, y 20.3 and 25.3), every height | 0.64 mm2 | geometry of the dovetail, present since revision 3 |
+| Lip tip meeting the bevel | within 2.5 mm of the outer face | up to 5 mm2, 1.25 mm tall | the bevel run-out crossing the wedge tip |
+| Grazing slice of the front-lip bevel | y 18.6-19.7, x 236.4-238.4, z 93.97-95.2 (the K2 regions: 7.6 mm2 at x 238.4, 2.8 at x 239.1) | 1.25 mm of height | the bevel, measured in the plane's frame, is 2.4 degrees from horizontal, so a horizontal slice within a millimetre of its height shows only a sheet of lip; below it the lip is solid, 3.5 mm in y |
+| Grazing slice of the buttress's back-top bevel | x 235.4-235.8, y 28.7-29.0, z 103.2-104.0 (the K2 region: 5.4 mm2) | 1 mm of height | the same, on the 1 mm bevel at the buttress's back |
+
+The edge-angle test is the one that says "no knife edge": no convex edge under 60 degrees
+and over 0.5 mm long in either zone (the sharpest are the 46 degree edges where the groove
+floor meets the plane, 0.1 mm long, and the lips' 70 degree wedge).
+
+**K4, the flat sliver.** The 0.8 mm2 downward-facing flat at z 156 came from the lower back-
+corner cutter ending 0.5 mm above the sheared one that starts the lean: it left a ledge.
+It now ends where the sheared cutter starts (`flare_zo`), which is the back edge of the
+cubby's ceiling (155.55), and an assert ties the two. 0.1 mm2 remains (below the nozzle).
+

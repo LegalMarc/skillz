@@ -293,7 +293,11 @@ flare_tan  = tan(flare_deg);
 flare_z0   = chuteA_floor(yA_hop1);                       // 156.2: inner face leans from here
 function flare_dy(z) = max(0, z - flare_z0) * flare_tan;   // how far the inner face has moved back
 flare_th_h = wall_out / cos(flare_deg);                    // horizontal wall thickness along the lean
-flare_zo   = flare_z0 - (flare_th_h - wall_out) / flare_tan;   // where the OUTER face starts to lean
+// where the OUTER face starts to lean: at the back edge of the cubby's ceiling (the 45 degree
+// plane meets the back face 3 mm under the chute floor there), so the cubby's edge and the
+// lean share one point and no 0.8 mm2 flat sliver is left between them (review K4). The
+// matching assert is next to the cubby, which is defined after this.
+flare_zo   = chuteA_floor(module_d) - 3.0;
 module_d_top = module_d + max(0, hopper_rim - flare_zo) * flare_tan;   // depth at the rim
 assert(flare_deg >= 20 && flare_deg <= 40,
        "the hopper A flare is outside 20..40 degrees from vertical (D42): the outer face overhang would pass 45 or the mouth would barely widen");
@@ -326,9 +330,9 @@ function hopwall_B(z) = hopwall_A(z) - wall_div;
 
 hop_lean_deg  = atan(hopA_lean / (hopper_rim - hopwall_z0));   // 25.7 (19.35 before the vault fix)
 mouthB_w      = hopwall_B(hopper_rim - lid_t) - yB_wall1;             // 62.6
-mouthA_w      = yA_hop1 + flare_dy(hopper_rim - lid_t) - hopwall_A(hopper_rim - lid_t);   // 53.0 under the lid (39.4 before D42)
-mouthA_rim    = yA_hop1 + flare_dy(hopper_rim) - hopwall_A(hopper_rim);                  // 56.3 at the rim
-mouth_ratio   = mouthB_w / mouthA_w;                           // 1.59, about 3:2
+mouthA_w      = yA_hop1 + flare_dy(hopper_rim - lid_t) - hopwall_A(hopper_rim - lid_t);   // 56.6 under the lid (39.4 before D42)
+mouthA_rim    = yA_hop1 + flare_dy(hopper_rim) - hopwall_A(hopper_rim);                  // 59.7 at the rim
+mouth_ratio   = mouthB_w / mouthA_w;                           // 1.11 since D42 (1.59, about 3:2, before it)
 
 assert(hop_lean_deg < 40,
        "the hopper divider leans past the FDM overhang band -- its front face would need support");
@@ -336,8 +340,9 @@ assert(hopwall_A(rampB(yB_hop1)) - yB_hop1 >= wall_div - 1e-6,
        "the hopper divider is thinner than wall_div where hopper B's ramp ends -- the lean starts below the ramp's end");
 assert(hopper_rim - hopwall_z0 >= 10.0,
        "the hopper divider springs from less than 10mm under the rim: the lean would run out of height (hopwall_z0 is a max() that contains rampB's end, so it cannot be asserted against it)");
-assert(mouth_ratio > 1.0 && mouth_ratio < 1.9,
-       "hopper A's mouth is wider than hopper B's, or the two have drifted past 1.9:1 (D16 aimed for 3:2; the D42 flare brings hopper A up to about 1.1:1 on purpose)");
+// D16's 3:2 band assert is retired (review K3): the flare (D42) sets hopper A's mouth
+// directly, to at least 55 mm at the rim, so the ratio is a consequence (1.11), not a target.
+// A band on it would only repeat the next assert or fail for the wrong reason.
 assert(mouthA_rim >= 55.0,
        "hopper A's mouth at the rim is under 55mm front to back (D42)");
 assert(mouthA_w > pill_len + 8 && mouthB_w > pill_len + 8,
@@ -434,8 +439,7 @@ label_cut_over  = 1.0;      // the cut starts this far OUTSIDE the face, never i
 assert(label_w < bay_w - 4,
        "the label recess is wider than the bay leaves room for");
 assert(label_gap >= 3.0, "the two label strips are closer than 3mm");
-assert(label_b_center + label_h / 2 + 2 < pick_lid_skirt_bot,
-       "the upper label strip runs up under the lid skirt");
+// (the upper strip vs the lid skirt is asserted once, in section 7 with the skirt)
 assert(min(wall_out, wall_div) - label_z >= 1.8,
        "the label recess is cut so deep it leaves a wall thinner than 1.8mm");
 assert(label_z_center - label_h / 2 > 2,
@@ -527,6 +531,13 @@ cubby_y0   = module_d - cubby_d;
 function cubby_ceil_z(y) = chuteA_floor(module_d) - cubby_ceil
                          - (module_d - y) * tan(cubby_ceil_deg);
 cubby_h_back  = cubby_ceil_z(module_d) - base_t;
+assert(abs(flare_zo - cubby_ceil_z(module_d)) < 1e-6,
+       "the flare's outer lean no longer starts at the back edge of the cubby's ceiling (K4)");
+// normal thickness of the leaning back wall: the horizontal gap between the two lean lines
+// (outer through (module_d, flare_zo), inner through (yA_hop1, flare_z0)) times cos(flare_deg)
+flare_wall_t = ((module_d - yA_hop1) + (flare_z0 - flare_zo) * flare_tan) * cos(flare_deg);
+assert(flare_wall_t >= wall_out - 0.2,
+       "the leaning back wall behind hopper A is more than 0.2mm thinner than wall_out");
 cubby_h_front = cubby_ceil_z(cubby_y0) - base_t;
 // A retaining lip across the opening, so whatever is in there stays in there
 // when the module is slid around the bench. You reach in over it rather than
@@ -555,8 +566,8 @@ assert(cubby_lip_h < cubby_h_back * 0.6,
 // 5. Hopper mouths (both at the back, both at hopper_rim -> ONE flat lid)
 // ------------------------------------------------------------
 hop_mouth_y0 = yB_wall1;                                 //  87.6
-hop_mouth_y1 = yA_hop1 + flare_dy(hopper_rim - lid_t);             // 199.7: the recess follows the flare to the seat plane
-hop_mouth_d  = hop_mouth_y1 - hop_mouth_y0;              // 104.4
+hop_mouth_y1 = yA_hop1 + flare_dy(hopper_rim - lid_t);             // 209.2: the recess follows the flare to the lid's underside
+hop_mouth_d  = hop_mouth_y1 - hop_mouth_y0;              // 121.6
 
 // ------------------------------------------------------------
 // 6. Capacity
@@ -716,11 +727,23 @@ rail_lead = 3.0;
 rail_boss = 3.0;
 rail_boss_margin = 4.0;         // buttress beyond the groove tip, each side, in Y
 rail_boss_w = rail_tip_w + 2 * rail_boss_margin;   // buttress footprint in Y (14)
-// D41 corner beads: bead_r is set from the measured lift in probes/capsule_corner.py
-bead_r     = 8.0;           // 0 removes them
+// D41 corner beads (revision 11, redesigned after the review): three small half-round ribs
+// per bay, radius bead_r (2.5, 5 mm across), bead_len long from the front wall along the floor,
+// hemispherical ends. 2.5 because: the beads are for pushing a capsule's end against, and a
+// capsule's end cap is 5.5 in radius, so a rib of 2.5 meets it low on the cap (the contact
+// normal then points up and out at about 45 degrees, which lifts the end: probes/capsule_corner.py);
+// a larger rib becomes a ramp the capsule simply rests on (revision 11's first try, 8 mm).
+// bead_len 13 reaches past the line (10.6 mm from the wall along the floor) where a capsule
+// in the wedge touches the floor. The pitch is bay_w / 4, so the clear gap between ribs
+// is pitch - 2 bead_r = 6.2 mm, narrower than a capsule (11): none wedges between two.
+bead_r     = 2.5;           // 0 removes them
+bead_len   = 13.0;
 bead_fracs = [0.25, 0.5, 0.75];   // across each bay, fraction of the clear width
-boss_bevel = 1.5;           // the same bevel on the buttress's back-top edge (D43)
-groove_chamfer = 1.5;        // 45 degree bevel round the rail-1 groove's break-out through the plane (H2): the
+bead_gap   = bay_w * 0.25 - 2 * bead_r;
+assert(bead_r == 0 || (bead_gap < pill_dia && bead_gap > 3.0),
+       "the gap between corner beads is not narrower than a capsule, or is under 3mm (D41)");
+boss_bevel = 1.0;           // the same bevel on the buttress's back-top edge (D43)
+groove_chamfer = 1.0;        // 45 degree bevel round the rail-1 groove's break-out through the plane (H2): the
                             // lip in front of it was a 46 degree knife edge that tore in test prints 1 and 2
 rail_skin = rail_boss + wall_out - rail_out - rail_depth_clear;   // 2.4, groove bottom to tray A
 // Rail 1's buttress is clipped by the outer silhouette rather than capped at a
@@ -754,6 +777,11 @@ rail2_y      = (yB_wall1 + yB_hop1) / 2;                   // 122.6, mid hopper 
 rail2_soc_z1 = hopper_rim + 1.0;                           // 190.0
 rail2_z1     = 112.0;
 
+skin_trim_over = 0.4;       // the skin-top trim reaches this far past the groove floor, into the groove's air
+// the lowest front-lip top beside the groove (at the tip depth, 0.5 mm in front of the flank, where
+// the buttress is clipped boss_clip_drop under the plane or the bevel has taken groove_chamfer - 0.5,
+// whichever is deeper) plus one skin thickness, less 0.1
+skin_cap_z = pickplane(rail1_y - rail_tip_w / 2 - rail_clear - 0.5) - max(boss_clip_drop, groove_chamfer - 0.5) + rail_skin - 0.1;
 rail_sep  = rail2_y - rail1_y;                             //  99.8
 
 assert(rail1_soc_z1 > rail1_z1 + rail_lead && rail2_soc_z1 > rail2_z1 + rail_lead,
@@ -765,6 +793,9 @@ assert(rail1_z1 + rail_lead < pickplane(rail1_y - rail_tip_w / 2),
        "the front male rail stands proud of the pick plane on its own module");
 assert(rail1_y + rail_boss_w / 2 < yA_tray1,
        "rail 1's buttress reaches back into the chute mouth");
+// rail_skin is wall_out + rail_boss - rail_out - rail_depth_clear and is exactly wall_div today:
+// the assert has ZERO margin, on purpose (the skin is as stiff as a divider and no stiffer), so
+// any change that thins it fails here; it does not protect against a change that thickens it.
 assert(rail_skin >= wall_div - 1e-6,
        "the skin between the rail-1 groove and tray A is thinner than a divider (D43)");
 // material left either side of the groove at its widest (its tip, grown by rail_clear)

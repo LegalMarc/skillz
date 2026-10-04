@@ -25,7 +25,8 @@ from shapely.ops import unary_union
 from _common import params, parts
 
 THIN = 2.0
-TIP = 0.6         # mm2: the 70 degree lip tips of the dovetail (0.48 mm2, the same at every height) are below this
+TIP = 0.2         # mm2: the 70 degree lip tips of the dovetail (0.48 mm2, the same at every height) are below this
+THIN_SKIN = 2.35    # the skin is 2.4: nothing thinner may stand in the break-out zone
 SLIVER = 4.0      # mm2: below this a thin region is a wedge tip, not a flap
 
 
@@ -61,7 +62,7 @@ def run(mesh, module_w, zmax):
     return rows
 
 
-def breakout_scan(mesh, mw, rail1_y, zlo, zhi, side="right", step=0.25):
+def breakout_scan(mesh, mw, rail1_y, zlo, zhi, side="right", step=0.25, thin=None):
     """Fine slices (<= 0.5 mm) through the rail-1 groove's break-out zone: the
     18 mm of Y round the groove, the outer 9-10 mm of X on that side, from the
     plane's height at the buttress front to above the groove's top. Returns the
@@ -75,8 +76,9 @@ def breakout_scan(mesh, mw, rail1_y, zlo, zhi, side="right", step=0.25):
             continue
         # thin regions of the WHOLE slice, then clipped to the zone: clipping first
         # would invent thin slivers at the zone's own edges
-        thin = full.difference(full.buffer(-THIN / 2).buffer(THIN / 2)).intersection(win)
-        for g in getattr(thin, "geoms", [thin]):
+        t_ = THIN_SKIN if thin is None else thin
+        thin_ = full.difference(full.buffer(-t_ / 2).buffer(t_ / 2)).intersection(win)
+        for g in getattr(thin_, "geoms", [thin_]):
             if g.area >= TIP:
                 out.append((round(float(z), 2), round(g.centroid.x, 1), round(g.centroid.y, 1), round(g.area, 2)))
     return out
@@ -120,23 +122,38 @@ if __name__ == "__main__":
             # the left face carries the MALE rail, which has no break-out; its tapered lead
             # (the top 3 mm) ends in a small flat and is excluded
             th = breakout_scan(mesh, mw, y1, zlo, zhi if side == "right" else P["rail1_z1"] - 4.0, side)
-            # a thin region only counts if it stands: it must recur, within 1 mm of the
-            # same place, in MIN_RUN consecutive slices (1 mm of height). A lone slice is
-            # where a chamfer's lower corner meets the dovetail lip, 0.5 mm tall, not an edge.
-            run, longest, where = {}, 0, None
+            # Thin regions of the whole slice (opening radius THIN_SKIN/2: nothing thinner than the
+            # skin survives it), clipped to the zone. Every region must be one of these named features;
+            # anything else FAILS. (1) the convex plan corners of the buttress and wall, which an
+            # opening always shaves to r^2 (1 - pi/4) = 0.30 mm2 per 90 degree corner, wherever they
+            # are cut by the sloped plane; (2) the dovetail lips' 70 degree wedge tips at the outer
+            # face, 0.64 mm2 and below, the same at every height; (3) where the 1 mm bevel and the
+            # sloped plane run out across one of those wedge tips: within 2.5 mm of the outer face,
+            # at most 5 mm2 and 1.5 mm tall. Nothing else may be thin.
+            unnamed = []
             for z, x, y, a_ in th:
-                key = next((k for k in run if abs(k[0] - x) < 1 and abs(k[1] - y) < 1 and abs(run[k][1] - (z - 0.25)) < 0.01), None)
-                n = (run.pop(key)[0] + 1) if key else 1
-                run[(x, y)] = (n, z)
-                if n > longest: longest, where = n, (z, x, y)
-            print(f"\nbreak-out zone, {side} side, slices every 0.25 mm from z {zlo:.0f} to {zhi if side == 'right' else P['rail1_z1'] - 4:.0f}: "
-                  f"{len(th)} thin regions of >= {TIP} mm2 (the dovetail lips' own 0.48 mm2 tips are below that); "
-                  f"the tallest stands {longest * 0.25:.2f} mm" + (f" (at z, x, y = {where}); all of them: {th}" if th else ""))
-            # informational: horizontal slices of ANY wall top cut by the sloped plane show a
-            # thin wedge (a 134 degree top edge is thin in a horizontal slice for ~2 mm of
-            # height), so the slice result is reported, not asserted. The assertion is the
-            # edge scan below: no convex edge sharper than 60 degrees inside the zone.
-            print(f"      (informational) tallest thin standing region {longest * 0.25:.2f} mm")
+                corner = a_ <= 0.31
+                lip_tip = a_ <= 0.70 and ((side == "right" and x >= mw - 0.8) or (side == "left" and x <= -2.0))
+                runout = a_ <= 5.0 and ((side == "right" and x >= mw - 2.5) or (side == "left" and x <= -2.0))
+                # (4) a horizontal slice GRAZING a bevel: the 45 degree bevel measured in the plane's own
+                # frame is 2.4 degrees from horizontal in the body (the plane rises 0.96 per mm, the
+                # bevel falls 1 per mm), so a slice within a millimetre of its height shows the
+                # lip's end as a sliver although the lip under it is solid: the front lip's bevel near the groove,
+                # and the buttress's back-top bevel.
+                gf = (side == "right" and zp(y1 - P["rail_tip_w"] / 2 - P["rail_clear"]) - P["groove_chamfer"] - 1.5 <= z
+                      <= zp(y1 - P["rail_root_w"] / 2 - P["rail_clear"]) and y1 - P["rail_tip_w"] / 2 - 2.5 <= y <= y1)
+                gb = (side == "right" and zp(y1 + P["rail_boss_w"] / 2) - 0.2 - P["boss_bevel"] - 1.5 <= z
+                      <= zp(y1 + P["rail_boss_w"] / 2) and y >= y1 + P["rail_boss_w"] / 2 - 3.0)
+                if not (corner or lip_tip or runout or gf or gb):
+                    unnamed.append((z, x, y, a_))
+            print(f"\nbreak-out zone, {side} side, horizontal slices every 0.25 mm from z {zlo:.0f} to "
+                  f"{zhi if side == 'right' else P['rail1_z1'] - 4:.0f}, thin = under {THIN_SKIN:.2f} mm: "
+                  f"{len(th)} thin regions of >= {TIP} mm2; {len(unnamed)} are none of the named features")
+            if unnamed:
+                print("      unnamed:", unnamed[:12])
+            okh = not unnamed
+            ok &= okh
+            print(("PASS  " if okh else "FAIL  ") + f"every thin region (under the skin's thickness) in the {side} break-out zone is a named feature")
     if P is not None:
         y = P["rail1_y"]; wo = P["wall_out"]; ro = P["rail_out"]
         print("\nline measurements (solid runs along the line: start point, length mm):")
@@ -189,6 +206,8 @@ if __name__ == "__main__":
             d = run_len(mesh, [bx0 + r_f - 1.2 * r_f, y0 + r_f - 1.2 * r_f, z], [bx0 - 4.0, y0 - 2.8 - 1.0, z], step=0.02)
             diag.append((z, bool(mesh.contains([p_out])[0]) , d[0][1] if d else 0.0))
         print("  divider / front wall joint, bay 2's left divider: (z, solid at the fillet's arc, solid run along the diagonal mm):", diag)
+        from skin_free_height import measure as skin_measure
+        worst_free, skin_t = skin_measure(mesh, P, verbose=True)
         def chk(label, cond):
             global ok
             ok &= bool(cond); print(("PASS  " if cond else "FAIL  ") + label)
@@ -197,6 +216,7 @@ if __name__ == "__main__":
         chk(f"buttress on either side of the groove is >= a divider + 1 mm (min {min(fb):.2f})", min(fb) >= P["wall_div"] + 1.0 - 1e-6)
         chk("the divider / front wall joint is filleted and over a divider thick along its diagonal at every height",
             all(d[1] for d in diag) and min(d[2] for d in diag) >= P["wall_div"])
+        chk(f"the skin stands at most 1 x its thickness above the front lip beside the groove (worst {worst_free:.2f} mm of {skin_t})", worst_free <= skin_t + 0.05)
         chk(f"stop block reaches back to y {P['stop_back_y']:.1f} at z=62 (run {r[0][1]:.2f})", r[0][1] >= P["stop_back_y"] - 0.1)
         chk(f"material behind the contact face along the slope is >= 1.5 mm (min {min(q[1] for q in r3):.2f})", min(q[1] for q in r3) >= 1.5)
         chk("front wall and side wall run unbroken across the pillar in X (no gap)", r2[0][1] >= wo + P["pillar_w"] - 0.5)

@@ -13,9 +13,10 @@ review of revision 11 has happened yet.
 `check_rules.py`, and the probes in `probes/`: `lid_retention.py` (a)-(h),
 `corner_thickness.py` (edge-angle scan of the break-out zone, skin and buttress
 thickness, the divider / front wall joint), `capacity.py`, `overhang_scan.py`,
-`capsule_corner.py` (beads, last-bay pockets). **Not proven:** that the beads
-are enough (they hold a capsule about 1 mm up and out of the apex; a filled wedge
-is the stronger fix), that hopper A fills easily by hand, the rail fit at 0.215
+`capsule_corner.py` (the rib beads, last-bay pockets), `skin_free_height.py` (the rail skin's
+free height). **Not proven:** that the three small ribs per bay are enough (they hold a capsule
+lying along the fall line 4.1 mm out from the wall and push its end up; a filled wedge is the
+stronger fix), that hopper A fills easily by hand, the rail fit at 0.215
 (a PETG reading), and anything about the new section's strength.
 
 **Next step:** an adversarial review of revision 11, then print

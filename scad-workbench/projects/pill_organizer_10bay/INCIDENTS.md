@@ -401,3 +401,10 @@ declarations against what they claimed to test and by probing the mesh with
 - **Fix:** each is nudged off the shared plane by 0.03 to 0.25 mm, with a comment saying why; the check is `trimesh` watertight and one body after every geometry edit, which is what found them.
 - **Already promoted to a rule?** partly -- the generalisation: a cutter or added solid never has a face, tangent line, or vertex row ON a face of what it meets; offset it and say so.
 
+### 2026-10-04 -- a sloped top left a 2.4 mm wall standing up to 6.4 mm free beside the groove, and the check I wrote for it only passed because it measured the wrong thing
+- **Where:** `parts/body.scad` rail-1 groove, `probes/corner_thickness.py` (revision 11 review, K1).
+- **Symptom:** the review rastered the real mesh in YZ at the skin and across the groove and found the skin (2.4 mm) 6.4, 6.0 and 5.2 mm above the front lip beside it, 2.2 to 2.7 times its own thickness, the same free blade that tore in test prints 1 and 2. My probe said "no knife edge" and passed.
+- **Root cause:** the pick plane rises 0.96 mm per mm toward the back, so any wall that spans a gap along the slope (here the 6.4 mm of the groove) climbs that much above whatever stands at the gap's front edge. The probe tested edge ANGLE and horizontal slices, neither of which sees a wall's height above its neighbour; and the horizontal-slice test I had dropped (it flagged every wall top the plane cuts) was the only one that could have.
+- **Fix:** the skin's top is trimmed to one skin thickness above the lowest front-lip top; the check now measures exactly that (`probes/skin_free_height.py`: 6.35 / 6.03 / 5.24 mm before, 2.26 / 1.69 / 1.28 after) and the slice test is back as a failing check with every exception named in `calculations.md`.
+- **Already promoted to a rule?** not yet -- candidate: when a probe is relaxed because it flags harmless things, replace it with a check that names the harmless things; deleting the coverage is how the real defect gets through.
+
