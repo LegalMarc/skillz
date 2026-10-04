@@ -1,0 +1,21 @@
+pick plane 43.76 deg; lug clearance 0.5 mm; asserted engagement 7.32 mm
+
+PASS  (b) at rest: lid does not intersect the body   overlap 0.000 mm3
+
+PASS  (a) slid 1 mm down the plane intersects the body   overlap 9.21 mm3
+PASS  (a) slid 2 mm down the plane intersects the body   overlap 40.65 mm3
+PASS  (a) slid 5 mm down the plane intersects the body   overlap 124.37 mm3
+PASS  (a) first contact within 1 mm of travel   first contact at 0.709 mm (expected 0.692 = clearance / cos(slope))
+      overlap region at 2 mm: z 71.94 .. 79.68 (height 7.74 mm), x 3.3 .. 236.7, y 1.86 .. 2.80
+
+PASS  (c) lifts straight up 30 mm (31 poses, 1 mm steps) with no intersection   worst overlap 0.000 mm3
+PASS      sideways -0.45 mm is still free   overlap 0.000 mm3
+PASS      sideways +0.45 mm is still free   overlap 0.000 mm3
+PASS      sideways -0.80 mm is blocked by a lug or the side wall   overlap 10.42 mm3
+PASS      sideways +0.80 mm is blocked by a lug or the side wall   overlap 10.42 mm3
+
+PASS  (d) turned 180 degrees about the plane normal: intersects the body   overlap 2562.1 mm3
+PASS  (d) no in-plane position within +-60 mm along the slope lets it seat   min overlap over the scan 1101.6 mm3; free positions []
+      reversed lid meets the body at y 69.4 .. 100.2, z 142.2 .. 146.1
+
+RESULT: ALL PASS
