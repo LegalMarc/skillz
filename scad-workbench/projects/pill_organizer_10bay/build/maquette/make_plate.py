@@ -9,7 +9,7 @@
 "final" writes build/final/final_{body,pick_lid,fill_lid}_256.3mf, one part each,
 centred on the plate at z = 0, from build/print_ready/{body,pick_lid,fill_lid}.stl
 (which --export re-renders from print_export.scad), and checks every part against
-its STL and against the 10..246 mm limits.
+its STL and against the 5..251 mm usable footprint.
 
 Run from the project directory (needs OPENSCAD_BIN: source
 ~/.local/opt/openscad/env.sh). With --export the STLs the plate is made of are
@@ -84,6 +84,10 @@ FINAL = [   # (3mf, object name, stl)
     ("build/final/final_fill_lid_256.3mf", "pill_organizer_fill_lid", "build/print_ready/fill_lid.stl"),
 ]
 PLATE, MARGIN, MIN_GAP = 256.0, 10.0, 10.0
+# the final plates carry ONE part, so the limit is the printer's usable footprint (params.scad max_part_x/y:
+# 5 mm of margin each side), not the 10 mm the multi-part test plates keep between parts. The 243 mm body
+# (with its rail) cannot lie within 10..246.
+FINAL_MARGIN = 5.0
 
 CT = '''<?xml version="1.0" encoding="UTF-8"?>
 <Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">
@@ -127,7 +131,7 @@ def final_plates():
         m = trimesh.load(stl, force="mesh")
         assert m.is_watertight, stl + " is not watertight"
         lo, sz = m.bounds[0], m.bounds[1] - m.bounds[0]
-        assert sz[0] <= PLATE - 2 * MARGIN and sz[1] <= PLATE - 2 * MARGIN, (name, sz)
+        assert sz[0] <= PLATE - 2 * FINAL_MARGIN and sz[1] <= PLATE - 2 * FINAL_MARGIN, (name, sz)
         tx, ty, tz = PLATE / 2 - sz[0] / 2 - lo[0], PLATE / 2 - sz[1] / 2 - lo[1], -lo[2]
         item = f'<item objectid="1" transform="1 0 0 0 1 0 0 0 1 {tx:.4f} {ty:.4f} {tz:.4f}"/>'
         write_3mf(out, f"pill_organizer_10bay final print: {name}, 256 x 256",
@@ -138,7 +142,7 @@ def final_plates():
 
 def verify_3mf(path, name, stl_mesh):
     """Read the 3MF back and compare it to its STL: same size, same volume, same triangle count,
-    inside 10..246 mm in X and Y, on the bed in Z."""
+    inside the 5..251 mm usable footprint in X and Y, on the bed in Z."""
     import re
     with zipfile.ZipFile(path) as z:
         xml = z.read("3D/3dmodel.model").decode()
@@ -154,7 +158,7 @@ def verify_3mf(path, name, stl_mesh):
     assert abs(m.volume - stl_mesh.volume) < 1e-4 * stl_mesh.volume, (m.volume, stl_mesh.volume)
     assert len(m.faces) == len(stl_mesh.faces), (len(m.faces), len(stl_mesh.faces))
     assert m.is_watertight
-    assert lo[0] >= 10 and lo[1] >= 10 and hi[0] <= 246 and hi[1] <= 246 and abs(lo[2]) < 1e-3, (lo, hi)
+    assert lo[0] >= FINAL_MARGIN and lo[1] >= FINAL_MARGIN and hi[0] <= PLATE - FINAL_MARGIN and hi[1] <= PLATE - FINAL_MARGIN and abs(lo[2]) < 1e-3, (lo, hi)
     print(f"  verified {name}: {sz[0]:.1f} x {sz[1]:.1f} x {sz[2]:.1f} mm, x {lo[0]:.1f}..{hi[0]:.1f}, y {lo[1]:.1f}..{hi[1]:.1f}, "
           f"{m.volume / 1000:.1f} cm3, {len(m.faces)} triangles, matches its STL")
 

@@ -38,22 +38,22 @@ module_w 240.0; slices every 2 mm, thin = under 2.0 mm, window = right 26 mm x f
   76.0     2           0.9       0.5     []
   78.0     3           1.5       0.6     []
   80.0     3           7.1       6.2     [(234.5, 3.9, 6.2)]
-  82.0     3           1.4       0.5     []
+  82.0     2           0.9       0.5     []
   84.0     2           0.9       0.5     []
-  86.0     3           1.4       0.5     []
+  86.0     2           0.9       0.5     []
   88.0     2           0.9       0.5     []
   90.0     2           0.9       0.5     []
   92.0     2           0.9       0.5     []
-  94.0     2           0.9       0.5     []
+  94.0     2           1.0       0.6     []
   96.0     1           0.5       0.5     []
   98.0     1           0.5       0.5     []
- 100.0     1           0.5       0.5     []
+ 100.0     1           0.3       0.3     []
  102.0     0           0.0       0.0     []
  104.0     1           4.1       4.1     [(235.7, 29.1, 4.1)]
 
 largest thin region in any slice: 23.8 mm2   (flap if it persists over 4.0 mm2)
 
-break-out zone, right side, horizontal slices every 0.25 mm from z 76 to 116, thin = under 2.35 mm: 462 thin regions of >= 0.2 mm2; 0 are none of the named features
+break-out zone, right side, horizontal slices every 0.25 mm from z 76 to 116, thin = under 2.35 mm: 422 thin regions of >= 0.2 mm2; 0 are none of the named features
 PASS  every thin region (under the skin's thickness) in the right break-out zone is a named feature
 
 break-out zone, left side, horizontal slices every 0.25 mm from z 76 to 88, thin = under 2.35 mm: 184 thin regions of >= 0.2 mm2; 0 are none of the named features
@@ -67,9 +67,9 @@ line measurements (solid runs along the line: start point, length mm):
   buttress either side of the groove, along Y at x=236.7, z=60:  [([236.7, 5.0, 60.0], np.float64(14.62)), ([236.7, 25.98, 60.0], np.float64(3.81))]
   stop block + front wall, along Y at x=234.2, z=62:  [([234.2, 0.0, 62.0], np.float64(14.0))]
   material behind the contact face, along the slope from the face (x=234.2):  [([234.2, 0.01, 71.47], np.float64(9.08))]
-  front wall + side wall, along X at y=1.4, z=62:  [([231.2, 1.4, 62.0], np.float64(8.8))]
+  front wall + side wall, along X at y=1.4, z=62:  [([231.2, 1.4, 62.0], np.float64(8.75))]
 
-right break-out zone: 4 convex edges under 80 degrees ([(72, 1.06), (46, 0.1), (49, 0.07), (71, 0.8)] deg, mm); 0 under 60 degrees and over 0.5 mm long
+right break-out zone: 7 convex edges under 80 degrees ([(63, 0.36), (57, 0.34), (52, 0.15), (78, 0.39), (46, 0.1), (49, 0.07), (71, 0.8)] deg, mm); 0 under 60 degrees and over 0.5 mm long
 PASS  no knife edge (interior angle under 60 degrees, over 0.5 mm long) in the right break-out zone
 
 left break-out zone: 0 convex edges under 80 degrees ([] deg, mm); 0 under 60 degrees and over 0.5 mm long
@@ -78,7 +78,7 @@ PASS  no knife edge (interior angle under 60 degrees, over 0.5 mm long) in the l
 skin 2.4 mm thick, middle at x=235.4; front lip top vs highest skin top over the groove's width:
   at groove floor +0.2 : lip edge y  19.66, front lip top z   94.81, skin top max z   97.08 -> skin stands  2.26 mm above the lip (0.94 x its thickness)
   at mid groove        : lip edge y  20.26, front lip top z   95.39, skin top max z   97.08 -> skin stands  1.69 mm above the lip (0.70 x its thickness)
-  at mouth -0.3        : lip edge y  20.68, front lip top z   95.79, skin top max z   97.08 -> skin stands  1.28 mm above the lip (0.53 x its thickness)
+  at mouth -0.3        : lip edge y  20.68, front lip top z   95.51, skin top max z   97.08 -> skin stands  1.57 mm above the lip (0.65 x its thickness)
 
 PASS  skin behind the groove is >= a divider (2.4) at every height (min 2.40)
 PASS  buttress on either side of the groove is >= a divider + 1 mm (min 3.81)
