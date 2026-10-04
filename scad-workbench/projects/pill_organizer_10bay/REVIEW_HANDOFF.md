@@ -1,10 +1,14 @@
 # Resume note — revision 10 (read this first)
 
-**Where it stands:** revision 10 (test print 2's fixes, D36-D40, plus the review-of-revision-10 fixes F1-F8: perpendicular stop faces, motion declared) is implemented
-on branch `pill_organizer_rev10`, not pushed, no PR. Parts, params, probes,
-docs, print-ready STLs, maquette and section plates, and previews are
-regenerated. The review below this note was written for revision 9 and is kept
-for its method; the revision 10 review has not happened.
+**Where it stands:** revision 10 (test print 2's fixes D36-D40, the review
+fixes F1-F8, G1-G7 and H1-H2) is implemented on branch
+`pill-organizer-rev10`, not pushed, no PR. An independent deep-tier review
+approved it at `e04b514` (COVERAGE 14 passed, 0 failed, 3 n/a, 1 advisory;
+all probes pass). Two low items are left as watch rows in `TEST_PRINTS.md`
+(test print 3) rather than changed. Next step: slice and print
+`build/section/test_print_section_256.3mf` (test print 3, about 8 h, no brim,
+no supports), then record the results in `TEST_PRINTS.md`. The review below
+this note was written for revision 9 and is kept for its method.
 
 **Proven (commands in `README.md` "Build and verify"):** the suite
 (`validate_scad.sh --all`, `check_rules.py`), and four probes in `probes/` run
