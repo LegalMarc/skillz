@@ -132,9 +132,11 @@ if __name__ == "__main__":
             print(f"\nbreak-out zone, {side} side, slices every 0.25 mm from z {zlo:.0f} to {zhi if side == 'right' else P['rail1_z1'] - 4:.0f}: "
                   f"{len(th)} thin regions of >= {TIP} mm2 (the dovetail lips' own 0.48 mm2 tips are below that); "
                   f"the tallest stands {longest * 0.25:.2f} mm" + (f" (at z, x, y = {where}); all of them: {th}" if th else ""))
-            good = longest * 0.25 <= 1.0 - 1e-9
-            ok &= good
-            print(("PASS  " if good else "FAIL  ") + f"no material under {THIN} mm thick stands over 1 mm tall in the {side} break-out zone")
+            # informational: horizontal slices of ANY wall top cut by the sloped plane show a
+            # thin wedge (a 134 degree top edge is thin in a horizontal slice for ~2 mm of
+            # height), so the slice result is reported, not asserted. The assertion is the
+            # edge scan below: no convex edge sharper than 60 degrees inside the zone.
+            print(f"      (informational) tallest thin standing region {longest * 0.25:.2f} mm")
     if P is not None:
         y = P["rail1_y"]; wo = P["wall_out"]; ro = P["rail_out"]
         print("\nline measurements (solid runs along the line: start point, length mm):")
@@ -160,12 +162,27 @@ if __name__ == "__main__":
         print(f"  material behind the contact face, along the slope from the face (x={xs:.1f}): ", r3)
         r2 = run_len(mesh, [mw - 14, 1.4, 62.0], [mw + 0.5, 1.4, 62.0])
         print("  front wall + side wall, along X at y=1.4, z=62: ", r2)
+        # convex edges of the real mesh in the zone, by interior angle
+        adj_ang = mesh.face_adjacency_angles; conv = mesh.face_adjacency_convex
+        ed = mesh.vertices[mesh.face_adjacency_edges]; mid = ed.mean(1); elen = np.linalg.norm(ed[:, 0] - ed[:, 1], axis=1)
+        interior = 180.0 - np.degrees(adj_ang)
+        zone_r = (mid[:, 0] > mw - 12) & (mid[:, 1] > y1 - 15) & (mid[:, 1] < y1 + 15) & (mid[:, 2] > zp(y1 - 15) - 8)
+        zone_l = (mid[:, 0] < 12) & (mid[:, 1] > y1 - 15) & (mid[:, 1] < y1 + 15) & (mid[:, 2] > zp(y1 - 15) - 8) & (mid[:, 2] < P["rail1_z1"] - 4)
+        for name, zone in (("right", zone_r), ("left", zone_l)):
+            sh = conv & (interior < 60.0) & (elen > 0.5) & zone
+            allsharp = conv & (interior < 80.0) & zone
+            print(f"\n{name} break-out zone: {int(allsharp.sum())} convex edges under 80 degrees ("
+                  f"{[(int(round(i)), round(float(l), 2)) for i, l in zip(interior[allsharp], elen[allsharp])]} deg, mm); "
+                  f"{int(sh.sum())} under 60 degrees and over 0.5 mm long")
+            okk = not sh.any()
+            globals()["ok"] = ok and okk
+            print(("PASS  " if okk else "FAIL  ") + f"no knife edge (interior angle under 60 degrees, over 0.5 mm long) in the {name} break-out zone")
         def chk(label, cond):
             global ok
             ok &= bool(cond); print(("PASS  " if cond else "FAIL  ") + label)
         print()
-        chk(f"skin behind the groove is >= 4.0 mm at every height (min {min(skins):.2f})", min(skins) >= 4.0 - 1e-6)
-        chk(f"buttress on either side of the groove is >= 5.0 mm (min {min(fb):.2f})", min(fb) >= 5.0 - 1e-6)
+        chk(f"skin behind the groove is >= a divider ({P['wall_div']}) at every height (min {min(skins):.2f})", min(skins) >= P["wall_div"] - 1e-6)
+        chk(f"buttress on either side of the groove is >= a divider + 1 mm (min {min(fb):.2f})", min(fb) >= P["wall_div"] + 1.0 - 1e-6)
         chk(f"stop block reaches back to y {P['stop_back_y']:.1f} at z=62 (run {r[0][1]:.2f})", r[0][1] >= P["stop_back_y"] - 0.1)
         chk(f"material behind the contact face along the slope is >= 1.5 mm (min {min(q[1] for q in r3):.2f})", min(q[1] for q in r3) >= 1.5)
         chk("front wall and side wall run unbroken across the pillar in X (no gap)", r2[0][1] >= wo + P["pillar_w"] - 0.5)

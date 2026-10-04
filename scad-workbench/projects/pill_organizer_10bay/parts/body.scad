@@ -371,6 +371,23 @@ OUTER_CLIP = [
     [0,         pickplane_front - boss_clip_drop]
 ];
 
+// The rail-1 buttress's back face is vertical and its top is the sloped plane, so
+// where they meet is the same 46 degree edge every wall's back face has with this
+// plane; here it sits next to the groove that tore in test prints 1 and 2, so it
+// is bevelled like the groove's front lip (D43): boss_bevel x boss_bevel in the
+// plane's own frame, which leaves a 90 degree or wider edge.
+module boss_back_bevel(x0, x1) {
+    c = boss_bevel; y1 = rail1_y + rail_boss_w / 2;
+    ya = y1 - c * cos(pick_lid_slope);                          // c along the top surface
+    A = [ya, pickplane(y1) - boss_clip_drop - c * sin(pick_lid_slope)];
+    B = [y1, pickplane(y1) - boss_clip_drop - c];
+    d = B - A;
+    // the half-plane above the line AB, extended past both ends: it crosses the
+    // boss's top at A and ends in the air behind the back face, so no cutter face
+    // lies on a face of the boss
+    L1 = A - 2 * d; L2 = B + 2 * d;
+    yz_extrude(x0, x1) polygon([L1, L2, [L2[0], L2[1] + 10], [L1[0], L1[1] + 10]]);
+}
 module rail_bosses() {
     intersection() {
         union() {
@@ -381,6 +398,11 @@ module rail_bosses() {
         }
         yz_extrude(0, module_w) polygon(OUTER_CLIP);
     }
+}
+// cut from the finished body, only in the bay (0.1 off the side wall's inner face)
+module boss_bevels() {
+    boss_back_bevel(wall_out + 0.1, wall_out + rail_boss + 1);
+    boss_back_bevel(module_w - wall_out - rail_boss - 1, module_w - wall_out - 0.1);
 }
 
 // The stop blocks (D38). In each end bay's front corner of tray A, fused to the
@@ -476,7 +498,9 @@ module rail1_countersink() {
                 translate([0, 0, -c]) linear_extrude(height = 0.01) groove_outline();
                 translate([0, 0, 3]) linear_extrude(height = 0.01) offset(delta = c + 3) groove_outline();
             }
-        translate([module_w - rail_out - rail_depth_clear, 0, 0]) cube([rail_out + 10, 400, 400]);
+        translate([module_w - rail_out - rail_depth_clear + 0.25, 0, 0]) cube([rail_out + 10, 400, 400]);   // 0.25 off the floor: a cutter face ON the groove floor is a coplanar boolean
+        // front flank only: the back lip meets the plane at 134 degrees and needs no bevel
+        translate([module_w - 20, -1, 0]) cube([40, rail1_y + 1, 400]);
     }
 }
 
@@ -490,11 +514,9 @@ module rail1_countersink() {
 module label_cuts() {
     for (i = [0 : bays - 1]) {
         cx = bay_center_x(i);
-        translate([cx - label_w / 2, -label_cut_over, label_z_center - label_h / 2])
-            cube([label_w, label_cut_over + label_z, label_h]);
-        translate([cx - label_w / 2, yA_tray1 - label_cut_over,
-                   label_b_center - label_h / 2])
-            cube([label_w, label_cut_over + label_z, label_h]);
+        for (zc = [label_z_center, label_b_center])      // row A low, row B above it
+            translate([cx - label_w / 2, -label_cut_over, zc - label_h / 2])
+                cube([label_w, label_cut_over + label_z, label_h]);
     }
 }
 
@@ -517,6 +539,7 @@ module body_geometry() {
         stop_trim();
         rail_socket_cut();
         rail1_countersink();
+        boss_bevels();
         label_cuts();
         foot_pad_cuts();
         corner_cuts();

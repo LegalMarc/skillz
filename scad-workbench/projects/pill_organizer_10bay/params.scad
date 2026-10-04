@@ -395,16 +395,21 @@ label_clear     = 0.6;      // tape sits in the recess without being pushed
 label_h         = label_tape_w + label_clear;            //  12.6
 label_w         = 36.0;
 label_z         = 0.5;      // recess depth; tape is about 0.16 thick
-label_z_center  = 13.0;     // lower strip, centre height on the front face
-labelB_z0 = chuteA_ceil(yA_tray1);                       //  67.0, chute mouth top
-labelB_z1 = pickplane(yA_tray1);                         //  pick plane over that wall
-label_b_center = (labelB_z0 + labelB_z1) / 2;
+// D45 (revision 11): both labels on the module's flat front face, below the skirt,
+// stacked: the row A (front tray) label low, the row B (back tray) label above it,
+// as the trays stack from the front-bottom up and back. The upper strip on the wall
+// between the trays (D19) is gone: reaching over tray A for it was awkward and the
+// rail buttress half hid it.
+label_gap       = 4.0;      // between the two strips
+label_z_center  = 14.0;     // row A strip, centre height on the front face
+label_b_center  = label_z_center + label_h + label_gap;          // row B strip, 30.6
 label_cut_over  = 1.0;      // the cut starts this far OUTSIDE the face, never inside it
 
 assert(label_w < bay_w - 4,
        "the label recess is wider than the bay leaves room for");
-assert(labelB_z1 - labelB_z0 > label_h + 6,
-       "the wall between the trays is too short to carry a tape label");
+assert(label_gap >= 3.0, "the two label strips are closer than 3mm");
+assert(label_b_center + label_h / 2 + 2 < pick_lid_skirt_bot,
+       "the upper label strip runs up under the lid skirt");
 assert(min(wall_out, wall_div) - label_z >= 1.8,
        "the label recess is cut so deep it leaves a wall thinner than 1.8mm");
 assert(label_z_center - label_h / 2 > 2,
@@ -576,33 +581,13 @@ assert(pick_lid_slope > 17.0 && pick_lid_slope <= 45.0,
 // by probes/lid_retention.py (g).
 assert(pick_lid_skirt_over >= 3.0,
        "the lid skirt overlaps the scalloped front wall by under 3mm, so it will not hide the scallop");
-assert(pick_lid_skirt_bot > label_z_center + label_h / 2 + 2,
+assert(pick_lid_skirt_bot > label_b_center + label_h / 2 + 2,
        "the lid skirt covers the bay labels");
 
-// Finger notches in the skirt (D22). The lid comes off with a straight lift --
-// its back edge is 0.35mm from the wall behind tray B, so tilting it about
-// that edge lets the top-back corner meet that wall after about 5 degrees
-// (probes/lid_retention.py (e) tilts it 0-15 degrees and reports where each
-// part meets) -- and a 229mm plate hung 0.35mm off the front face gives
-// nothing to lift by. Two rounded slots
-// in the skirt's bottom edge, one under each hand, leave a 3mm ceiling to
-// hook a fingertip under. Their top runs a little above the scalloped wall,
-// so the notch shows a sliver of tray, but stays above the pill line.
-pick_notch_w   = 22.0;
-pick_notch_h   = 8.0;
-pick_notch_r   = 4.0;
-pick_notch_under = 6.0;     // the notch polygon starts this far below the skirt's
-                            // bottom, past its own rounding, so the notch is full
-                            // width where it meets the edge (was 2: 0.5mm feathers)
-pick_notch_top = pick_lid_skirt_bot + pick_notch_h;              //  54.0
-pick_notch_x   = [bay_center_x(1), bay_center_x(bays - 2)];      // bays 2 and 4
-
-assert(pick_notch_top > trayA_pile_front + 5,
-       "a skirt notch opens the front below the pill line -- pills would roll out through it");
-assert(pick_notch_top < trayA_front_h + 3,
-       "a skirt notch runs so far above the scalloped wall that it stops closing the scallop");
-assert(pick_notch_w < bay_w - 6 && pick_notch_r * 2 < pick_notch_w,
-       "a skirt notch is wider than a bay's share of the skirt, or its rounding has eaten it");
+// No finger notches (D44, revision 11; D22 superseded). Test print 3: the lid comes
+// off fine and the user pinches it between thumb and forefinger; nothing is cut
+// into or hung from it. It comes off tilted about its back edge or straight up,
+// then forward (probes/lid_retention.py (e), (e2), (f), (h)).
 
 // ------------------------------------------------------------
 // 8. Fill lid (drops into the hopper mouth, flush with the rim, held by
@@ -673,15 +658,13 @@ assert(fill_seat_z - fill_ledge_t > rampB(yB_hop1)
 // ------------------------------------------------------------
 // 9. Joining rails (D5)
 // ------------------------------------------------------------
-rail_root_w = 7.0;
-rail_tip_w  = 11.0;
-rail_out    = 5.0;
-rail_clear  = 0.20;        // 0.35 -> 0.50 at D31 (test print 1), 0.50 -> 0.20 at D40 (test print 2).
-                           // Test print 1's coupon was printed with a brim that fused into the
-                           // walls and narrowed the groove, so its loosest stub read as the
-                           // best fit. Test print 2, no brim: the block was loose on every stub,
-                           // including 0.30. 0.20 is a default pending the new coupon, which
-                           // brackets 0.30 .. 0.10
+rail_root_w = 3.6;        // D43: 1.5 x wall_div (7 until revision 11)
+rail_tip_w  = 6.0;         // 11 until revision 11; flank slope unchanged (0.4)
+rail_out    = 3.0;         // 5 until revision 11: about the divider thickness
+rail_clear  = 0.215;       // 0.35 -> 0.50 (D31) -> 0.20 (D40) -> 0.215 (D47). Test print 3's coupon: the "0"
+                           // stub (0.20) fit best but slightly tight; "a little looser, around -10 to -15,
+                           // still snug but able to move it back out". The coupon is re-centred on this,
+                           // in 0.025 steps, so the next reading is a one-parameter change.
 rail_depth_clear = 0.40;
 
 assert(rail_tip_w > rail_root_w && rail_root_w > 0,
@@ -695,19 +678,22 @@ rail_z0   = 10.0;
 // is exactly what jams the neighbour's groove (revision 7 review, finding 2).
 rail_lead_bot = rail_out;
 rail_lead = 3.0;
-// D39: the buttress behind the rail-1 groove. The groove is cut 5.4 deep into
-// wall_out + rail_boss; what is left between its bottom and tray A's interior is
-// the SKIN, rail_boss - 2.6 thick on the right. At boss 5 that was 2.4 mm, and
-// where the pick plane cuts the buttress below the groove's break-out the skin
-// stood alone as a thin blade inside tray A: it tore in test prints 1 and 2. At
-// boss 7 it is 4.4. The buttress is also 23 mm long in Y, not 19, so the
-// material in front of and behind the groove is 5.5 mm, not 3.5.
-rail_boss = 7.0;
-rail_boss_margin = 6.0;         // buttress beyond the groove tip, each side, in Y
-rail_boss_w = rail_tip_w + 2 * rail_boss_margin;   // buttress footprint in Y (23)
-groove_chamfer = 3.0;        // 45 degree bevel round the rail-1 groove's break-out through the plane (H2): the
+// D43 (revision 11, supersedes D39's numbers): the buttress behind the rail-1
+// groove protrudes rail_boss = 3 mm into the bay beyond the side wall's inner face
+// (was 7: "the buttress protrudes too far into the front bin", and the
+// lock-and-key looked overbuilt). The groove is cut rail_out + rail_depth_clear =
+// 3.4 deep into wall_out + rail_boss = 5.8, leaving a SKIN of 2.4 = wall_div, as
+// stiff as the dividers (which feel stiff enough at 15% infill). Either side of the
+// groove the buttress is rail_boss_margin - rail_clear = 3.8 mm. D39's lesson stands:
+// where the pick plane cuts the buttress the skin must not stand as a thin blade,
+// so no region under 2 mm may stand over 1 mm tall there (probes/corner_thickness.py).
+rail_boss = 3.0;
+rail_boss_margin = 4.0;         // buttress beyond the groove tip, each side, in Y
+rail_boss_w = rail_tip_w + 2 * rail_boss_margin;   // buttress footprint in Y (14)
+boss_bevel = 1.5;           // the same bevel on the buttress's back-top edge (D43)
+groove_chamfer = 1.5;        // 45 degree bevel round the rail-1 groove's break-out through the plane (H2): the
                             // lip in front of it was a 46 degree knife edge that tore in test prints 1 and 2
-rail_skin = rail_boss + wall_out - rail_out - rail_depth_clear;   // 4.4, groove bottom to tray A
+rail_skin = rail_boss + wall_out - rail_out - rail_depth_clear;   // 2.4, groove bottom to tray A
 // Rail 1's buttress is clipped by the outer silhouette rather than capped at a
 // guessed height. Over tray A that silhouette IS the pick plane, so the clip
 // lands the buttress top exactly on the shell's own top face -- two coplanar
@@ -721,8 +707,7 @@ assert(boss_clip_drop > 0 && boss_clip_drop < 0.5,
 // Rail 1 sits under tray A, not under tray B. Under tray B it would stand in
 // the porch and narrow one lane of an end bay below the single-file rule; tray
 // A is a pick pocket, where a 5mm buttress in one corner costs nothing.
-rail1_y      = (yA_tray0 + yA_tray1) / 2 + 3.0;            //  25.8, mid tray A + 3: the stop block and
-                                                           // lug need 8 mm in front of the buttress
+rail1_y      = (yA_tray0 + yA_tray1) / 2;                  //  22.8, mid tray A
 // A dovetail groove is entered from above, so it has to break out of the top
 // of the wall that carries it -- and over tray A that top is the pick plane,
 // which is HIGHEST at the groove's back edge. Revision 3 capped this groove at
@@ -751,12 +736,12 @@ assert(rail1_z1 + rail_lead < pickplane(rail1_y - rail_tip_w / 2),
        "the front male rail stands proud of the pick plane on its own module");
 assert(rail1_y + rail_boss_w / 2 < yA_tray1,
        "rail 1's buttress reaches back into the chute mouth");
-assert(rail_skin >= 4.0,
-       "the skin between the rail-1 groove and tray A is under 4mm: it stands as a thin blade where the pick plane cuts the buttress (D39)");
+assert(rail_skin >= wall_div - 1e-6,
+       "the skin between the rail-1 groove and tray A is thinner than a divider (D43)");
 // material left either side of the groove at its widest (its tip, grown by rail_clear)
-rail_boss_side = rail_boss_margin - rail_clear;      // 5.8
-assert(rail_boss_side >= 5.0,
-       "the buttress leaves under 5mm of material either side of the rail groove at its widest (D39); measured on the mesh by probes/corner_thickness.py");
+rail_boss_side = rail_boss_margin - rail_clear;      // 3.8
+assert(rail_boss_side >= wall_div + 1.0 - 1e-6,
+       "the buttress leaves under a divider plus 1mm of material either side of the rail groove at its widest (D43); measured on the mesh by probes/corner_thickness.py");
 assert(bay_w - rail_boss >= pill_len,
        "the rail buttress narrows an end bay below one pill length");
 assert(rail_sep > 50, "the two rails are too close together to resist yaw");

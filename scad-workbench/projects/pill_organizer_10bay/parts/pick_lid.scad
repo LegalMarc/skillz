@@ -27,9 +27,8 @@
 //
 // The skirt closes the scalloped front wall, which is cut well below the plane
 // so the front tray is open to the front once the lid is lifted, and carries
-// the embossed "FRONT". Two finger notches in its bottom edge (D22) are what
-// you lift by: a fingertip hooks under each notch's ceiling. They are grips,
-// not alignment features.
+// the embossed "FRONT". It has no finger notches or anything hung from it (D44):
+// you pinch it between thumb and forefinger.
 //
 // Local origin: the module's front-bottom-left outer corner,
 // offset in X only. This part is modelled IN ASSEMBLED
@@ -45,11 +44,11 @@
 //   lays the plate flat with the skirt pointing DOWN (INCIDENTS).
 //   NOT as modelled.
 //
-// To remove: lift it by the finger notches. It may tilt about its back edge
-//   (1.2 mm from the wall behind tray B; swept clear to 15 degrees) or come
-//   straight up or along the plane's normal; none of these touches the stop
-//   blocks after the first few millimetres (probes/lid_retention.py, joints.json
-//   motion). Nothing to unclip.
+// To remove: pinch the skirt and plate edge between thumb and forefinger and lift.
+//   It may tilt about its back edge (1.2 mm from the wall behind tray B; swept
+//   clear to 15 degrees) or come straight up or along the plane's normal, then
+//   forward; none of these touches the stop blocks after the first few
+//   millimetres (probes/lid_retention.py, joints.json motion). Nothing to unclip.
 //
 // EXPECTED_BBOX: [239.0, 87.6, 111.63]
 // ============================================================
@@ -125,25 +124,9 @@ module pick_end_chamfers() {
                 cube([a, 400, a], center = true);
 }
 
-// Finger notches (D22): rounded-top slots up into the skirt's bottom edge,
-// cut clear through it in Y, starting below the skirt so no cut face lands on
-// the skirt's own bottom face. X positions come from the body's bay centres,
-// less the lid's own X offset in the layout.
-module pick_notches() {
-    r = pick_notch_r;
-    for (cx = pick_notch_x) {
-        x0 = cx - lid_dx_local - pick_notch_w / 2;
-        xz_extrude(hook_front - 1, hook_back + 1)
-            offset(r = r) offset(delta = -r)
-                polygon([[x0,                pick_lid_skirt_bot - pick_notch_under],
-                         [x0 + pick_notch_w, pick_lid_skirt_bot - pick_notch_under],
-                         [x0 + pick_notch_w, pick_notch_top],
-                         [x0,                pick_notch_top]]);
-    }
-}
-// layout.scad offsets the lid by lid_dx in X; the notches must stay centred
-// on the BODY's bays, so the same offset is taken off here. Kept in step by the
-// assert in layout.scad.
+// layout.scad offsets the lid by lid_dx in X; the lugs and the FRONT mark are
+// placed on the BODY's coordinates, so the same offset is taken off here. Kept in
+// step by the assert in layout.scad.
 lid_dx_local = (module_w - pick_lid_w) / 2;                 // 0.5
 
 // Retention lugs (D32, D34, D38): one under each end of the plate, hanging into
@@ -172,7 +155,7 @@ module pick_lugs() {
 }
 
 // "FRONT" (D38), embossed pick_front_h proud of the skirt's outer face (y = -3),
-// centred on the lid, between the two finger notches. rotate([90, 0, 0]) stands
+// centred on the lid. rotate([90, 0, 0]) stands
 // the text up facing -Y with its baseline along +X, so it reads left to right
 // from the front; the extrusion then runs toward -Y, away from the skirt. It
 // overlaps 0.4 mm into the skirt so the union is volumetric.
@@ -189,7 +172,6 @@ module pick_front_mark() {
 module pick_lid_geometry() {
     difference() {
         union() { pick_plate(); pick_hook(); pick_lugs(); pick_front_mark(); }
-        pick_notches();
         pick_end_chamfers();
     }
 }
