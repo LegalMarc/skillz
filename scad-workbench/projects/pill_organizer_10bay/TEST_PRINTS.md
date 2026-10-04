@@ -67,3 +67,26 @@ direction of the stop; revision 10 adds a probe that does.
 fit, on a coupon printed with a brim that fused into the walls. The brim and
 its elephant foot narrowed the groove, so the loosest stub felt right. With
 no brim the true fit is below 0.30.
+
+## Test print 3 — planned, revision 10
+
+**Printed:** `build/section/test_print_section_256.3mf`: the right-hand end bay
+of the body to z 160 (49 x 146 x 160 mm), the matching pick-lid end, the fill
+mouth and lid corners, and the coupon. No brim, no supports. It is about 2.5x
+the volume of test print 2's plate (469 vs 191 cm3 of solid): expect 7 to 8
+hours. Slicer settings as test print 2.
+
+| Check | What to do | Pass |
+|---|---|---|
+| Row A refills (D36) | Pour capsules into the chute's open back end. When tray A is full, take capsules from the front, a few at a time | The pile follows the front: capsules slide forward from the chute and from the back of the tray without being grabbed at. Note any that rest on the floor |
+| Row A pile depth | Look at tray A full | About 41 mm deep at the front wall, 8 mm under the wall's top; no capsule over it at rest |
+| Row B (D33) | Pour into hopper B | Pile stays in tray B, below the wall in front of it |
+| Pick lid stays on (D38) | Lay the lid end on the section, lugs dropping behind the pillar | Lugs go in without forcing; the lid does not slide down the slope; it moves under 1 mm before stopping against the pillar |
+| Pick lid lifts | Lift it straight up by the finger notch | Comes off without catching on the pillar or buttress |
+| Pick lid reversed | Try to fit it turned round | It cannot sit flat; the skirt hits the wall behind tray B |
+| "FRONT" | Look at the skirt | Legible, no stringing, printed without support |
+| Groove corner (D39) | Lower a spare rail into the front groove from above, handle the section | Nothing tears or cracks at the break-out; no flap inside tray A |
+| Groove fit (D40) | Coupon: turn the block over, drop it over each stub | Report the label that goes down by hand without rocking (0.20 default = "0") |
+| Fill-lid corner | As test print 2 | Unchanged at 0.30 |
+| Bridges | Chute ceiling under tray B (now 45 x 40 mm), both outlet tops | No sag over 1 mm |
+| Tray A floor | Look at the 35 degree floor | Clean, no layer artefacts that hold capsules |

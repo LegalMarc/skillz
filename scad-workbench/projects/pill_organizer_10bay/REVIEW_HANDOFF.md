@@ -1,3 +1,28 @@
+# Resume note — revision 10 (read this first)
+
+**Where it stands:** revision 10 (test print 2's fixes, D36-D40) is implemented
+on branch `pill_organizer_rev10`, not pushed, no PR. Parts, params, probes,
+docs, print-ready STLs, maquette and section plates, and previews are
+regenerated. The review below this note was written for revision 9 and is kept
+for its method; the revision 10 review has not happened.
+
+**Proven (commands in `README.md` "Build and verify"):** the suite
+(`validate_scad.sh --all`, `check_rules.py`), and four probes in `probes/` run
+with `source ~/.local/opt/openscad/env.sh; python3 probes/<name>.py`:
+`lid_retention.py` (retention, lift, reversal), `corner_thickness.py` (groove
+skin and buttress), `capacity.py` (per-bay mL), `overhang_scan.py` (print
+faces).
+
+**Not proven:** that tilted tray A (35 degrees) feeds real capsules; that the
+lugs hold on a printed lid; the rail fit at 0.20. Test print 3, see
+`TEST_PRINTS.md`, is built to answer those.
+
+**Next step:** an adversarial review of revision 10 (start with D36's height
+chain: tray A rim 77 vs plane under 45 degrees vs wall retention), then print
+`build/section/test_print_section_256.3mf` (no brim, 7-8 h).
+
+---
+
 # Review handoff — pill_organizer_10bay, revision 9
 
 For a fresh session asked to review this design critically. It is written to be

@@ -347,3 +347,26 @@ declarations against what they claimed to test and by probing the mesh with
 - **Root cause:** the vertical corner round and the top-edge round met on one tangent line -- a coincident edge, the same class as a coplanar face.
 - **Fix:** corner_r 1.2, and an assert that the two differ by more than 0.1.
 - **Already promoted to a rule?** not yet -- candidate: two rounds that meet at a corner must have different radii.
+
+## Revision 10 -- test print 2
+
+### 2026-10-03 -- the pick lid's "retention" retained nothing, in the one direction that matters
+- **Where:** `params.scad` (`pick_lid_hook_h`, the "hook is over-designed" and "too shallow to retain" asserts), `parts/pick_lid.scad` header, D17, README "Two things that were forced".
+- **Symptom:** test print 2: the lid slid straight off the 44 degree pick plane. Every gate was green, and revisions 4 to 9 each restated the claim ("the skirt cannot pass the front face, so it stops the lid sliding down its own slope").
+- **Root cause:** the skirt hangs OUTSIDE the front face, 0.35 mm clear. Sliding down the plane moves the lid forward and down, which takes the skirt AWAY from that face; the claim was true only of sliding backward, up the slope. The D34 lugs hang into tray A about 19 mm above the 30 mm front wall and clear it too. Only friction (about 17 degrees PLA on PLA) was left. No check could see it: the collision check is one static pose, `motion_sweep` was skipped because "nothing in this revision moves", and the asserts compared a hook height against a number, not a face against a direction. The design note was read as evidence and never as a claim to test.
+- **Fix:** D38. Pillars of the front wall in the end bays, lugs directly behind them, and `probes/lid_retention.py`, which MOVES the assembled lid down the plane by 1, 2 and 5 mm and requires an exact boolean intersection with the body, requires none at rest, none along a 30 mm straight lift, and none that lets a 180 degree reversal seat.
+- **Already promoted to a rule?** not yet -- candidate: a part said to be retained must be moved in the direction it would escape, by a scripted probe that fails when nothing stops it; a note, an assert on a height, or a static collision check is not evidence of retention. State the direction of the stop and the face that provides it.
+
+### 2026-10-03 -- the front groove's break-out left a 2.4 mm blade inside tray A, and the corner at the front was a 2.4 mm fin
+- **Where:** `params.scad` `rail_boss`, `rail_boss_w`; `parts/body.scad` `front_scallop_cut`.
+- **Symptom:** test prints 1 and 2: the corner where the front rail groove breaks out through the pick plane tore, and a thin flap inside tray A cracked. The first print was dismissed as 0.42 scale; the second was full size.
+- **Root cause:** the groove is cut 5.4 deep into a wall plus a 5 mm buttress, leaving a 2.4 mm skin between its bottom and tray A. The pick plane cuts the buttress lower in front than behind, so above the front part the skin stood alone as a 2.4 mm blade open to the groove on one side. A 2.4 mm wall passes every thin-wall check (0.8 mm threshold); the defect was a wall that was thin for its height, free on one side, and loaded by a rail being lowered past it. The end bays' scallop also took 0.4 mm off the side wall's front tip, leaving a 2.4 mm fin at the front corner.
+- **Fix:** D39 (skin 4.4 mm, buttress 23 mm long) and D38's pillar. `probes/corner_thickness.py` measures the skin and the buttress either side of the groove with the mesh itself and fails below 4.0 / 5.0 mm.
+- **Already promoted to a rule?** not yet -- candidate: a thin-wall threshold is not a strength check; features that stand free on one side and get loaded (a groove's skin, a lip) need a thickness-to-height rule and a physical load case, and a feature that failed in a print must be measured, not merely thickened.
+
+### 2026-10-03 -- the coupon read the wrong clearance, because a brim fused into its walls
+- **Where:** `calibration_coupon.scad`, D31 (`rail_clear` 0.50).
+- **Symptom:** test print 2 (no brim): the groove block was loose on every stub, including the 0.30 one, where test print 1 had said 0.50 was best.
+- **Root cause:** test print 1's coupon was printed with a brim. It fused into the walls and its first layers narrowed the groove, so the loosest stub felt right. The coupon's own header warned about exactly this, after the print.
+- **Fix:** D40: `rail_clear` 0.20, coupon 0.30 .. 0.10, no-brim instruction already in the README and coupon.
+- **Already promoted to a rule?** not yet -- candidate: a calibration print records its slicer settings with the reading, and a reading from a print that deviated from the stated settings is discarded, not used.
