@@ -542,10 +542,12 @@ cubby_h_front = cubby_ceil_z(cubby_y0) - base_t;
 // A retaining lip across the opening, so whatever is in there stays in there
 // when the module is slid around the bench. You reach in over it rather than
 // sliding things out. It is simply the bottom of the back wall, left uncut.
-// Level with the cubby's shallow end, so the forward part is a shelf you can
-// see into, not a well you fish in (D21; the 42 of revision 5 stood 12mm
-// above a 30mm shallow end).
-cubby_lip_h = 30.0;
+// Its top stands cubby_lip_top (76) above the bench (D50, the user's decision,
+// superseding D21's 30): the back of the cubby is a deep pocket that holds
+// upright items (lip balm, a pill cutter). That puts the lip above the cubby's
+// shallow end on purpose, so the front of the cubby is a well.
+cubby_lip_top = 76.0;
+cubby_lip_h = cubby_lip_top - base_t;
 
 assert(cubby_y0 > yB_tray1 + 10,
        "the cubby reaches forward into the porch, where the chute floor is too low to leave a deck");
@@ -557,8 +559,13 @@ assert(cubby_ceil >= 3.0,
        "the deck between the cubby and the chute is thinner than a printed floor");
 assert(cubby_lip_h + base_t < cubby_ceil_z(module_d) - 25,
        "the retaining lip leaves under 25mm of clear opening above it");
-assert(cubby_lip_h <= cubby_h_front + 0.5,
-       "the retaining lip stands above the cubby's own shallow end -- the front becomes a well");
+// D50: the lip stands 73 mm over the floor, so the cubby's floor in front of it is a well
+// (the user's decision, superseding D21's "a shelf you see into"). Two things still have to
+// hold for it to be a pocket and not a sealed box: the lip stays under the ceiling at the
+// shallow end (which is 83 mm tall, so by about 10 mm), and the lip is a horizontal,
+// up-facing step (a bridge-free edge: it is the uncut bottom of the back wall).
+assert(cubby_lip_h <= cubby_h_front - 5,
+       "the retaining lip comes within 5mm of the cubby's ceiling at the shallow end: the front of the pocket is sealed off from the back");
 assert(cubby_lip_h < cubby_h_back * 0.6,
        "the retaining lip takes more than 60% of the cubby's opening height");
 

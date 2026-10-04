@@ -119,7 +119,7 @@ tests the stop faces, the clearances and the back-edge swing, not how the whole
 | Rail and groove | Look overbuilt ("lock and key"); the buttress protrudes too far into the front bin. The user suggested the rail match the vertical dividers | Slim rail, groove and buttress (D43) |
 | Section left wall | The thin LEFT wall cracked easily: the 1.2 mm half-divider split away from the front wall, a vertical separation up from the base at the divider/front-wall junction. Not a full-module defect | Cut at a full divider (D46); fillets at every divider/front-wall junction in the full module |
 | Labels | The upper strip, on the wall between the trays and reached over tray A, is awkward and partly hidden by the rail and groove | Both labels on the front face (D45) |
-| Back cubby | The back pocket with a low retaining wall is wanted (it holds a chapstick or two). It exists in the full design (`cubby_lip_h` 30); the section just did not include it | No change; the revision 11 section shows its opening |
+| Back cubby | The back pocket with a low retaining wall is wanted (it holds a chapstick or two). It exists in the full design (`cubby_lip_h` 30 then, 73 since D50); the section just did not include it | No change; the revision 11 section shows its opening |
 | Coupon, block bed-face up (Generic PETG) | The "0" stub (0.20 per side) fit best but slightly tight; wanted a little looser, around -10 to -15 (0.21 to 0.215), still snug but able to move back out | `rail_clear` 0.215 and a finer coupon (D47). **The reading is for PETG:** the final unit should be printed in the same filament, or the coupon re-run |
 | Fill-lid corner | Drops in and fits nicely at 0.30, again | None |
 | Groove corner (D39) | Not reported as torn | Bevel kept, slimmed with the rail (D43) |
@@ -179,6 +179,7 @@ was skipped, so the revision 11 features below have never been printed; the edge
 | Bed chamfer (D48) | body base and the four foot-pad recess mouths | A 0.5 mm bevel on the first layers; a 10 mm stick-on foot enters its recess | Raise `bed_chamfer` toward 0.6 |
 | Side-face rounds (D48) | both side faces, along the pick plane, the step and the rim | Smooth rounds, no ragged edge, no thin shell | |
 | Scallop, mouth and cubby chamfers (D48) | front wall floors, fill-mouth rim, cubby mouth | Clean 45-degree faces; the scallop chamfer fades out up the corner arcs | |
+| Cubby lip (D50) | the back wall's bottom 76 mm, across the cubby mouth | A 2.8 mm wall standing 76 mm above the bed with a clean 0.5 mm chamfer on its top edge, no wobble or tear while printing; the pocket behind it takes a lip balm and a pill cutter upright | Thicken the lip or lower `cubby_lip_top` |
 | Lid fit | pick lid on the body | Seats on its lugs, no jam on lift (probes pass; first time with the rounded side faces under the lid's ends) | |
 | Fill lid | in the mouth | 0.30 all round, lifts out by the lip; the lip's underside bevel is a fingertip rest | |
 | Stringing | groove, bins, lids | Much less than test print 3 once the PETG is dry | Dry longer; tune retraction |

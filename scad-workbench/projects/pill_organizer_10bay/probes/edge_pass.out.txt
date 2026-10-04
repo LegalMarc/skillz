@@ -21,7 +21,7 @@ PASS  the scallop floor itself is still at trayA_front_h in the middle of the wa
 PASS  cubby floor / front wall corner is filleted (a point in the corner, 0.25 mm from both faces, is solid)
 PASS  cubby floor / side wall corner is filleted
 PASS  cubby mouth chamfer, left side edge: [2.75, 194.75, 100.0] is cut away, [2.0, 194.75, 100.0] stays
-PASS  cubby mouth chamfer, lip top: [120.0, 194.75, 32.95] is cut away, [120.0, 194.75, 32.2] stays
+PASS  cubby mouth chamfer, lip top: [120.0, 194.75, 75.95] is cut away, [120.0, 194.75, 75.2] stays
 PASS  tray B front wall / divider corner is filleted (a point 0.25 mm from both faces is solid)
 
 pick lid (as modelled: assembled orientation)

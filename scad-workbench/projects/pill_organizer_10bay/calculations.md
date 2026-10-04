@@ -317,13 +317,15 @@ fill; a pour stops when the pile reaches the mouth.
 | Quantity | Formula | Value |
 |---|---|---|
 | Depth in Y from the back face | `cubby_d` | 70.0 |
-| Width | `inner_w`, both side walls left full | 224.4 |
+| Width | `inner_w`, both side walls left full | 234.4 |
 | Ceiling | its own plane at `cubby_ceil_deg = 45`, anchored `cubby_ceil` under the chute floor at the back face | — |
-| Height at the shallow end | `at y = 100.8` | 33.1 |
-| Height at the back face | `at y = 170.8` | 103.1 |
+| Height at the shallow end | `at y = 100.8` | 82.6 |
+| Height at the back face | `at y = 170.8` | 152.6 |
 | Deck between cubby and chute | back face / cubby front | 3.0 / 14.3 |
-| Retaining lip across the opening | `cubby_lip_h`, level with the shallow end | 30.0 |
-| Clear opening above the lip | | 73.1 |
+| Retaining lip across the opening | `cubby_lip_h = cubby_lip_top - base_t`, top at z `cubby_lip_top` = 76 (D50, supersedes D21's 30) | 73.0 |
+| Clear opening above the lip | `cubby_h_back - cubby_lip_h` (the ceiling at the back face is z 155.55) | 79.55 |
+| Lip under the ceiling at the shallow end | `cubby_h_front - cubby_lip_h`, asserted >= 5 | 9.6 |
+| Body volume, mesh | before / after D50 (the lip wall is 2.8 thick, 234.4 wide, 43 taller) | 2281.3 / 2309.6 cm3 |
 | Cubby volume | trapezoid x width | about 1.07 L |
 | Solid volume, body | rev 5 / rev 6 / rev 7 | 929.3 / 1049.4 / **1138.1 cm3** |
 
@@ -764,10 +766,10 @@ tests every T row on the real meshes.
 | B11 | Fill mouth rim, outside (the step, the back lean, the sides) | round r 1.5 / square | **E** / **T** by B4, B5 | |
 | B12 | Fill-lid seat ledges, divider tops at the seat plane, the lid's 0.30 recess walls | square | **K** | the lid rests on them; the 0.30 fit |
 | B13 | Pull-lip notch (the wall cut down to the seat across 34 mm), its vertical edges and its floor edge | square | **L** | the finger works under the lid's lip, not on these edges; they bound the lip's clearance of 2 mm per side. Named as the one hand-reached edge left square |
-| B14 | Cubby mouth in the back face: both side edges and the lip's top edge | square | **T** 0.5 mm 45 degree chamfer (a cone of the mouth, its top on the 45 degree ceiling less 0.05) | where a hand goes in. 0.5: the side walls are 2.8 wide and lose 1.5 to the outer round (0.8 of flat left) |
+| B14 | Cubby mouth in the back face: both side edges and the lip's top edge (z 76 since D50; the cone's low edge follows `cubby_lip_h`, nothing else changed) | square | **T** 0.5 mm 45 degree chamfer (a cone of the mouth, its top on the 45 degree ceiling less 0.05) | where a hand goes in. 0.5: the side walls are 2.8 wide and lose 1.5 to the outer round (0.8 of flat left) |
 | B15 | Cubby mouth, ceiling edge (135 degrees) | obtuse | **E** | |
 | B16 | Cubby inside corners: floor / front wall, floor / side walls, ceiling / side walls, ceiling / front wall | square | **T** 2 mm fillet, three-dimensional (the void is dilated by a ball) | easier cleaning |
-| B17 | Cubby lip, inner top edge | square | **L** | it is the lip's inside edge, 2.8 wide and 30 high; accessories lie against it flat |
+| B17 | Cubby lip, inner top edge | square | **L** | it is the lip's inside edge, 2.8 wide and 73 high (D50); accessories lie against it flat |
 | B18 | Male rail and groove edges (dovetail profile, lead-in cone, rail undersides, groove countersink and bevels) | as D28, D39, D43 | **K** | the coupon must still match; the rail-1 groove bevels are the K1/K2-verified geometry |
 | B19 | Label recess edges | square | **K** | the recess is 0.5 deep and the tape is 0.16: a bevel would fill it |
 | B20 | Stop block, filler, lug contact faces and their 0.5 mm clearance, the lid lug sweep | square | **K** | D38 |

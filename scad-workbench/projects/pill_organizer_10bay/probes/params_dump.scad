@@ -62,6 +62,7 @@ echo(str("PROBE scallop_chamfer=", scallop_chamfer));
 echo(str("PROBE mouth_chamfer=", mouth_chamfer));
 echo(str("PROBE cubby_chamfer=", cubby_chamfer));
 echo(str("PROBE cubby_fillet_r=", cubby_fillet_r));
+echo(str("PROBE cubby_lip_h=", cubby_lip_h));
 echo(str("PROBE pick_under_chamfer=", pick_under_chamfer));
 echo(str("PROBE pick_skirt_chamfer=", pick_skirt_chamfer));
 echo(str("PROBE fill_lip_chamfer=", fill_lip_chamfer));

@@ -18,6 +18,12 @@ never been printed (`TEST_PRINTS.md`, "Final print"). Judgement calls: the plate
 5..251 mm, not the 10..246 asked for (the body is 243 wide); the side-face round runs through
 the rail-1 break-out zone (the K2 probe still passes: 0 unnamed thin regions, 0 knife edges).
 
+**D50 addendum (last change before the print):** the cubby's retaining lip now tops out at
+z 76 (`cubby_lip_top`; was 33), by user decision, for a deep back pocket. Only the 2.8 mm back
+wall grew (body +28.3 cm3, 2309.6 cm3 total); the mouth chamfer and fillets follow it, the D42
+flare and capacities are unchanged, and `probes/edge_pass.py` now reads the lip height from
+`cubby_lip_h` (it had 30 hard-coded). Only the body plate (`final_body_256.3mf`) changed.
+
 **Next step:** an adversarial review of revision 12 (start with `outer_solid()` in
 `parts/body.scad` and the audit table's K and L rows), then print the three plates, body first,
 dried PETG, no brim, no supports.

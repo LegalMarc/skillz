@@ -84,7 +84,7 @@ chk(f"cubby floor / front wall corner is filleted (a point in the corner, {0.25}
     body.contains([[120.0, cy + 0.25, bt + 0.25]])[0])
 chk("cubby floor / side wall corner is filleted",
     body.contains([[wo + 0.25, 160.0, bt + 0.25]])[0])
-cc = P["cubby_chamfer"]; md = P["module_d"]; zl = bt + 30.0
+cc = P["cubby_chamfer"]; md = P["module_d"]; zl = bt + P["cubby_lip_h"]
 removed(body, [wo - 0.05, md - 0.05, 100.0], [wo - cc - 0.3, md - 0.05, 100.0], "cubby mouth chamfer, left side edge")
 removed(body, [120.0, md - 0.05, zl - 0.05], [120.0, md - 0.05, zl - cc - 0.3], "cubby mouth chamfer, lip top")
 

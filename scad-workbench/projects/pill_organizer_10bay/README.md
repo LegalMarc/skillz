@@ -109,9 +109,10 @@ the wedge to work.
   refill. One void the full inner width, 70 mm deep, 83 mm tall at its shallow
   end and 153 mm at the back, opening through the **back face only** so both
   side walls stay full. Its ceiling is a 45-degree plane, the conservative FDM
-  overhang limit, and a 30 mm lip across the opening — level with the shallow
-  end — keeps the contents in when you slide the module about; 123 mm of clear
-  opening remains above it. About 1.8 L of what was solid infill is usable
+  overhang limit, and a 76 mm lip across the opening (D50: a deep back pocket
+  for upright things like lip balm and a pill cutter; the front of the cubby is
+  a well) keeps the contents in when you slide the module about; 79.5 mm of
+  clear opening remains above it. About 1.8 L of what was solid infill is usable
   space. (The pick lid does not fit in it: it is 144 mm long.)
 - **Corner beads** (D41). The floor meets the front wall in a 55 degree wedge, and
   the last, larger capsules lodged in it on test print 3. Three small ribs per bay,
