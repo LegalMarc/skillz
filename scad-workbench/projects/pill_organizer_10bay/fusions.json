@@ -39,6 +39,6 @@
       "pick_plate",
       "pick_lugs"
     ],
-    "reason": "each locating lug reaches 1mm up into the plate along its full length, so it welds volumetrically instead of meeting the underside on a plane (D32)"
+    "reason": "each retention lug reaches 1.5mm up into the plate along its full length, so it welds volumetrically instead of meeting the underside on a plane (D32, D38)"
   }
 ]

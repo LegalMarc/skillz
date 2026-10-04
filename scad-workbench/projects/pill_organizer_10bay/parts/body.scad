@@ -18,7 +18,7 @@
 // Material: PLA or PETG.
 // Print orientation: as modelled, flat on its base, no supports.
 //
-// EXPECTED_BBOX: [235.0, 170.8, 141.0]
+// EXPECTED_BBOX: [245.0, 194.8, 189.0]
 // ============================================================
 
 include <../params.scad>
@@ -107,15 +107,15 @@ MOUTH = [
 // VOID_A -- tray A, the crossing chute, and hopper A. One
 // continuous void: the chute IS hopper A's lower half, so the
 // volume the crossing costs in height it gives back in capacity.
-// The floor breaks once, at tray B's back wall, from the
-// porch_deg porch onto the ramp_deg climb. Along the climb the
-// ceiling runs parallel to the floor (vaulted, D26); under tray B
-// it is flat (D29).
+// The floor breaks once, at the chute foot, from the tilted tray A
+// floor (trayA_tilt_deg, D36) onto the 40 degree chute.
+// Along the climb behind tray B the ceiling runs parallel to the floor
+// (vaulted, D26); under tray B it is flat (D29).
 // ------------------------------------------------------------
 VOID_A = [
-    [yA_tray0,                   base_z],
-    [yA_tray1,                   base_z],                      // chute foot
-    [yB_tray1,                   z_porch],                     // end of the porch
+    [yA_tray0,                   base_z],                      // tray A's floor at the front wall
+    [yA_tray1,                   z_foot],                      // chute foot: the floor has risen trayA_tilt_deg (D36)
+    [yB_tray1,                   z_porch],                     // end of the porch (porch_deg = ramp_deg since D36)
     [yA_hop1,                    chuteA_floor(yA_hop1)],       // one 40 deg climb to the back
     [yA_hop1,                    fill_seat_z - fill_ledge_w],
     [yA_hop1 - fill_ledge_w,     fill_seat_z],
@@ -299,7 +299,12 @@ module fill_seat_cut() {
 module front_scallop_cut() {
     r = trayA_scallop_r;
     for (i = [0 : bays - 1]) {
-        x0 = wall_x1(i) - scallop_over; x1 = x0 + bay_w + 2 * scallop_over;
+        // The two end bays stop pillar_w short of their side wall (D38): the
+        // front wall stays at the full pick-plane height there and the pick
+        // lid's lug drops in behind it. No scallop_over on that side, since the
+        // cut then ends in the middle of the front wall, on no face of its own.
+        x0 = i == 0         ? wall_x1(i) + pillar_w : wall_x1(i) - scallop_over;
+        x1 = i == bays - 1  ? wall_x1(i) + bay_w - pillar_w : wall_x1(i) + bay_w + scallop_over;
         xz_extrude(-1, wall_out + 1)
             offset(r = r)
                 polygon([[x0 + r, trayA_front_h + r],

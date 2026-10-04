@@ -20,7 +20,7 @@
 //   bends across its layer lines. To lift: hook a fingertip under
 //   the pull lip, which stands out over tray B's air.
 //
-// EXPECTED_BBOX: [223.8, 111.8, 3.0]
+// EXPECTED_BBOX: [233.8, 111.8, 3.0]
 // ============================================================
 
 include <../params.scad>

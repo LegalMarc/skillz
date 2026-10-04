@@ -6,18 +6,20 @@
 //
 // One fit in this design depends on how your printer and
 // filament come out rather than on the geometry: the joining
-// rail in its groove. Test print 1's coupon put the best fit at
-// its -0.15 stub, the end of its range, so rail_clear went from
-// 0.35 to 0.50 (D31). This coupon brackets 0.50 from 0.30 to
-// 0.60 per side, to confirm it or move it once more.
+// rail in its groove. Test print 1's coupon (printed with a brim
+// that fused into the walls) read 0.50 per side; test print 2,
+// with no brim, found the block loose on every stub down to 0.30.
+// rail_clear is therefore 0.20 (D40), and this coupon brackets it
+// from 0.30 to 0.10 per side.
 //
 //   RAIL   a plate with five male rail stubs, widths offset by
-//          -100 .. +200 (microns per side; clearance 0.60 .. 0.30),
-//          and a loose groove block cut exactly as the body cuts
-//          its grooves (rail_clear per side). Turn the block
-//          bed-face UP and drop it over each stub: the one that
-//          goes down with hand pressure and does not rock is your
-//          fit. If it is not "0", tell the designer the label.
+//          -100 .. +100 (microns per side, relative to the default
+//          rail_clear; clearance 0.30 .. 0.10), and a loose groove
+//          block cut exactly as the body cuts its grooves
+//          (rail_clear per side). Turn the block bed-face UP and
+//          drop it over each stub: the one that goes down with
+//          hand pressure and does not rock is your fit. If it is
+//          not "0", tell the designer the label.
 //          The groove's bed-face mouth is chamfered 0.5mm so the
 //          first layers' squash (elephant's foot) does not read
 //          as a tight fit -- but enter from the other face anyway.
@@ -38,7 +40,7 @@ include <params.scad>
 
 plate_t   = 4.0;
 pitch     = 18.0;
-steps     = [-0.10, -0.05, 0.0, 0.10, 0.20];    // offset applied to the male's half-width
+steps     = [-0.10, -0.05, 0.0, 0.05, 0.10];    // offset applied to the male's half-width
 label_d   = 0.6;
 gap       = 6.0;
 

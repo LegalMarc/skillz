@@ -1,44 +1,66 @@
 [
   {
-    "name": "pick_lid_skirt_catch",
+    "name": "pick_lid_pillar_left",
     "part": "body",
     "at": [
-      92.32,
+      5.3,
       1.4,
-      38.0
+      62.0
     ],
-    "feature": "a bay divider's share of the front face, above the scallop line -- what the pick lid's skirt catches on, and the only thing stopping the lid sliding down its own 39.9 degree plane",
-    "min_material_mm": 1.2
+    "feature": "the left pillar: the end bay's stretch of front wall that is NOT scalloped (D38), full pick-plane height beside the side wall. Its back face is what the pick lid's left lug stops against; the lid has nothing else that stops it sliding down its 43.8 degree plane (the skirt hangs outside the front face and does not)",
+    "min_material_mm": 2.4
+  },
+  {
+    "name": "pick_lid_pillar_right",
+    "part": "body",
+    "at": [
+      234.7,
+      1.4,
+      62.0
+    ],
+    "feature": "the right pillar, mirror of the left (D38)",
+    "min_material_mm": 2.4
   },
   {
     "name": "rail_buttress_right_back",
     "part": "body",
     "at": [
-      223.4,
-      98.6,
+      232.4,
+      122.6,
       100.0
     ],
-    "feature": "buttress carrying the rear joining groove, which is cut deeper than the side wall is thick",
+    "feature": "the skin of the buttress carrying the rear joining groove, between the groove's bottom and the hopper's interior: wall_out + rail_boss - 5.4 = 4.4 thick since D39 (2.4 before)",
     "min_material_mm": 2.0
+  },
+  {
+    "name": "rail_skin_right_front",
+    "part": "body",
+    "at": [
+      232.4,
+      22.8,
+      60.0
+    ],
+    "feature": "the same skin behind the front groove (D39), the stretch that stood as a thin blade inside tray A where the pick plane cuts the buttress and tore in test prints 1 and 2",
+    "min_material_mm": 4.0
   },
   {
     "name": "cubby_deck",
     "part": "body",
     "at": [
-      115.0,
+      120.0,
       135.0,
-      74.7
+      102.0
     ],
-    "feature": "the deck between the accessory cubby and the crossing chute above it -- 3mm at the back face, thickening to 14 at the cubby's front because the cubby ceiling runs at 45 degrees while the chute floor runs at 40 (D21); here, mid-cubby, it is about 8.8",
+    "feature": "the deck between the accessory cubby and the crossing chute above it -- 3mm at the back face, thickening toward the front because the cubby ceiling runs at 45 degrees while the chute floor runs at 40 (D21); here, mid-cubby, it is about 12.7",
     "min_material_mm": 6.0
   },
   {
     "name": "vault_deck",
     "part": "body",
     "at": [
-      115.0,
+      120.0,
       100.0,
-      91.2
+      120.9
     ],
     "feature": "the deck between the vault ridge of bay 3's chute ceiling and hopper B's floor above it, mid-leg: chute_ceil (3mm) at the ridge, the thinnest the deck under hopper B gets after the vault (D26)",
     "min_material_mm": 2.5

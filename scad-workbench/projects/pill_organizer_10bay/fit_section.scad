@@ -11,25 +11,33 @@
 //
 //   PART="body"     the right-hand end of the body, full size: bay 5
 //                   from the middle of divider 4 to the right side
-//                   wall, up to z 100 and back to where hopper B's
-//                   ramp rises through that height, so hopper B is
-//                   a closed funnel open only at the top. Pour real
-//                   capsules in: they run down the ramp, out under
-//                   the outlet and pile in tray B, which is the pile
-//                   D33 moved -- it must stay below the wall in front
-//                   of it. Drop more in the chute's open back end and
-//                   they run down the porch into tray A. Tray A with its
-//                   scalloped front and label recess, the mouth into
-//                   tray A with its chamfered corners, the flat porch
-//                   bridge (D29), tray B, the opening into hopper B,
-//                   the start of the vaulted chute in cross-section,
-//                   and the front joining groove breaking out
-//                   through the top (the corner test print 1 tore).
+//                   wall, up to z 160 (a little above tray B's rim) and
+//                   back to where hopper B's ramp rises through that
+//                   height, so hopper B is a closed funnel open only
+//                   at the top. Pour real capsules in: they run down
+//                   the ramp, out under the outlet and pile in tray B
+//                   -- it must stay below the wall in front of it
+//                   (D33). Drop more in the chute's open back end and
+//                   they run down the 40 degree chute (D36) onto tray
+//                   A's tilted floor and should keep sliding forward as
+//                   you pick from the front: THE test of revision 10.
+//                   Also in it: tray A's scalloped front, with the
+//                   pillar beside the right side wall (D38); the mouth
+//                   into tray A with its chamfered corners; the flat
+//                   chute-ceiling bridge under tray B (D29); the
+//                   opening into hopper B; the start of the vaulted
+//                   chute in cross-section; and the front joining
+//                   groove breaking out through the top, now with a
+//                   4.4 mm skin and a longer buttress (D39).
 //   PART="pick_lid" the matching right-hand end of the pick lid, in
-//                   print orientation, with its right locating lug
-//                   (D34). Lay it on the section to check seating,
-//                   the lug's fit beside the rail-1 buttress, and the
-//                   skirt over the scalloped front.
+//                   print orientation, with its right retention lug
+//                   (D38). Lay it on the section: the lug drops in
+//                   directly behind the pillar (0.5 mm clear), the
+//                   plate sits flat on the plane, the skirt covers
+//                   the scalloped front. Then tip the section up and
+//                   try to slide the lid down the slope: it must stop
+//                   after under 1 mm. Lift it straight off; it must
+//                   come without catching. "FRONT" is on the skirt.
 //   PART="mouth"    the right-front corner of the fill mouth, full
 //                   size: the top 11mm of the body there, with its
 //                   seat ledges and the half divider it bears on.
@@ -49,7 +57,7 @@ use <parts/fill_lid.scad>
 PART = is_undef(PART) ? "body" : PART;
 
 sec_x0 = wall_x0(4) + wall_div / 2;          // the middle of divider 4
-sec_z1 = 100.0;
+sec_z1 = 160.0;
 // back to where hopper B's ramp rises 1mm past the top cut, so the funnel's
 // floor leaves through the top and its back is closed
 sec_y1 = ceil(yB_tray1 + (sec_z1 + 1 - rampB_foot) / ramp_tan);
@@ -84,7 +92,7 @@ module lid_section() {
 // The fill mouth's right-front corner, and the matching corner of the lid --
 // one world box for both, clear of rail 2's groove behind it.
 mouth_y0 = yB_tray1 - 3;        // 58.2, in front of the mouth's front wall: air at this height
-mouth_y1 = 88.0;                // short of rail 2's groove
+mouth_y1 = yB_wall1 + 24.4;     // 24 mm into the mouth, short of rail 2's groove
 mouth_z0 = fill_seat_z - 8;     // 130
 assert(mouth_y1 < rail2_y - rail_root_w / 2 - rail_clear - 2, "the mouth corner cuts into rail 2's groove");
 fill_lid_pos = [wall_out + fill_lid_clear, hop_mouth_y0 + fill_lid_clear,

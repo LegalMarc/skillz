@@ -2,23 +2,30 @@
 // pick_lid.scad -- ONE lid over BOTH pick tray rows.
 //
 // Tray B's floor sits just above tray A's rim, but their RIMS
-// are still tray_step (about 51mm) apart, so a lid covering
+// are still tray_step (about 82mm) apart, so a lid covering
 // both as two flat steps would be a Z in section -- unprintable
 // without support whichever way it is laid, because one arm is
 // always cantilevered. So the body's whole pick surface is a
-// single plane at pick_lid_slope (44 degrees since D33) and this is
-// a flat plate lying on it, with a skirt down its front edge.
-// The skirt is what holds it: PLA on PLA grips to about 17
-// degrees and this slope is two and a half times that, so the plate would
-// otherwise slide straight off. The skirt also closes the
-// scalloped front wall, which is cut 13mm below the plane so
-// the front tray is open to the front once the lid is lifted.
+// single plane at pick_lid_slope (43.8 degrees) and this is a flat plate
+// lying on it, with a skirt down its front edge.
 //
-// Two finger notches in the skirt's bottom edge (D22) are what
-// you lift by: a fingertip hooks under each notch's ceiling.
-// They are grips, not alignment features. What locates the lid
-// is the pair of lugs under its ends (D32/D34), which drop into
-// the end bays of the front row just inside the side walls.
+// What holds it on that slope is NOT the skirt. PLA on PLA grips to about
+// 17 degrees, and this slope is two and a half times that, so something has to
+// bear against a body face that faces BACK (toward +Y). The skirt hangs outside
+// the front face, 0.35 mm clear of it; sliding down the slope moves the lid
+// forward, which takes the skirt AWAY from that face. Revisions 6 to 9 said
+// otherwise, and test print 2 slid the lid straight off. The retention is the
+// pair of lugs under the plate's ends (D38): each drops into an end bay of tray
+// A directly behind a pillar of the front wall, and its vertical front face
+// meets the pillar's back face after 0.7 mm of travel. probes/lid_retention.py
+// checks that, the straight lift-off, and that the lid cannot be fitted turned
+// round.
+//
+// The skirt closes the scalloped front wall, which is cut well below the plane
+// so the front tray is open to the front once the lid is lifted, and carries
+// the embossed "FRONT". Two finger notches in its bottom edge (D22) are what
+// you lift by: a fingertip hooks under each notch's ceiling. They are grips,
+// not alignment features.
 //
 // Local origin: the module's front-bottom-left outer corner,
 // offset in X only. This part is modelled IN ASSEMBLED
@@ -39,7 +46,7 @@
 //   behind tray B and the top-back corner meets the wall after
 //   about 5 degrees. Nothing to unclip.
 //
-// EXPECTED_BBOX: [229.0, 63.85, 82.03]
+// EXPECTED_BBOX: [239.0, 88.45, 115.44]
 // ============================================================
 
 include <../params.scad>
@@ -134,34 +141,59 @@ module pick_notches() {
 // assert in layout.scad.
 lid_dx_local = (module_w - pick_lid_w) / 2;                 // 0.5
 
-// Locating lugs (D32, moved D34): one under each end of the plate, hanging into
-// the end bay of tray A just inside the rail boss -- not tray B, where they
-// stood in the pile -- so the lid can only go on one way
-// and cannot slide sideways. Built in the plate's own frame -- s along the
-// slope, n normal to it, negative below the underside -- and placed by the
-// ONE rotation that lays that frame on the plane. Each lug reaches 1mm up into
-// the plate and its tip tapers on the side-wall face, so it leads itself in.
-function lug_s(y) = y / cos(pick_lid_slope);
-module pick_lug(x_outer, dir) {
-    // dir = +1: the outer (side-wall) face is at the low-x side; -1: high-x
-    t = pick_lug_t; d = pick_lug_d; L = lug_s(pick_lug_y1) - lug_s(pick_lug_y0);
-    xa = dir > 0 ? x_outer : x_outer - t;
-    translate([0, 0, zu(0)]) rotate([pick_lid_slope, 0, 0])
-        translate([0, lug_s(pick_lug_y0), 0])
-            hull() {
-                translate([xa, 0, -d + 1.5]) cube([t, L, d - 1.5 + 1]);
-                translate([dir > 0 ? xa + pick_lug_lead : xa, 0, -d])
-                    cube([t - pick_lug_lead, L, 0.01]);
-            }
+// Retention lugs (D32, D34, D38): one under each end of the plate, hanging into
+// the end bay of tray A directly behind a pillar of the front wall (params.scad
+// 4c and 9). Going down the slope the lug's FRONT face meets the pillar's back
+// face and the lid stops; nothing else on the lid does that. The face is
+// vertical, like the pillar's, and so is built here in the assembled (y, z)
+// frame rather than the plate's: a polygon with a vertical front face and back
+// face and a tip parallel to the plate's underside, extruded across the lug's
+// thickness in X. It reaches 1.5 mm up into the plate so the union is
+// volumetric. The tip's three edges are chamfered (pick_lug_chamfer) so the lug
+// leads itself in behind the pillar when the lid is set down.
+function lug_zu(y) = zu(y);
+module pick_lug(x_low) {
+    c = pick_lug_chamfer; t = pick_lug_t;
+    y0 = pick_lug_y0; y1 = pick_lug_y1;
+    // the body of the lug stops c above the tip; a second slab, inset c on the
+    // front face and on both X faces, runs the full depth; the hull is the
+    // chamfered tip. Back face stays vertical and square.
+    hull() {
+        yz_extrude(x_low, x_low + t)
+            polygon([[y0, lug_zu(y0) + 1.5],
+                     [y0, lug_zu(y0) - pick_lug_dv + c],
+                     [y1, lug_zu(y1) - pick_lug_dv + c],
+                     [y1, lug_zu(y1) + 1.5]]);
+        yz_extrude(x_low + c, x_low + t - c)
+            polygon([[y0 + c, lug_zu(y0 + c) + 1.5],
+                     [y0 + c, lug_zu(y0 + c) - pick_lug_dv],
+                     [y1,     lug_zu(y1) - pick_lug_dv],
+                     [y1,     lug_zu(y1) + 1.5]]);
+    }
 }
 module pick_lugs() {
-    pick_lug(pick_lug_x_left  - lid_dx_local,  1);
-    pick_lug(pick_lug_x_right - lid_dx_local, -1);
+    pick_lug(pick_lug_x_left  - lid_dx_local);
+    pick_lug(pick_lug_x_right - lid_dx_local);
+}
+
+// "FRONT" (D38), embossed pick_front_h proud of the skirt's outer face (y = -3),
+// centred on the lid, between the two finger notches. rotate([90, 0, 0]) stands
+// the text up facing -Y with its baseline along +X, so it reads left to right
+// from the front; the extrusion then runs toward -Y, away from the skirt. It
+// overlaps 0.4 mm into the skirt so the union is volumetric.
+module pick_front_mark() {
+    cx = module_w / 2 - lid_dx_local;
+    cz = (pick_lid_skirt_bot + zu(0)) / 2 - pick_front_size / 2 - 4;
+    translate([cx, hook_front + 0.4, cz])
+        rotate([90, 0, 0])
+            linear_extrude(height = pick_front_h + 0.4)
+                text(pick_front_text, size = pick_front_size, halign = "center",
+                     font = "Liberation Sans:style=Bold");
 }
 
 module pick_lid_geometry() {
     difference() {
-        union() { pick_plate(); pick_hook(); pick_lugs(); }
+        union() { pick_plate(); pick_hook(); pick_lugs(); pick_front_mark(); }
         pick_notches();
         pick_end_chamfers();
     }

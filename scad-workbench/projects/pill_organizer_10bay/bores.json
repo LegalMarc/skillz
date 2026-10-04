@@ -3,46 +3,46 @@
     "name": "chute_porch_bay1",
     "part": "body",
     "start": [
-      34.28,
-      32.0,
-      10.0
+      35.28,
+      44.0,
+      44.02
     ],
     "end": [
-      34.28,
-      60.0,
-      20.0
+      35.28,
+      83.0,
+      76.74
     ],
     "step_mm": 0.5,
-    "_why": "the 25 degree porch leg of the crossing chute, in the right-hand lane of bay 1. The porch is the lowest stretch of the chute, under tray B's flat-bridged floor (D29), so this line proves it is still open end to end beside the divider. A blocked lane would leave the part watertight and single-bodied, which is exactly why no other check would notice."
+    "_why": "the 40 degree porch leg of the crossing chute (D36: it is the ramp's own angle now, so tray A's feed is one straight chute), in the right-hand lane of bay 1, under tray B's flat-bridged floor (D29). A blocked lane would leave the part watertight and single-bodied, which is exactly why no other check would notice."
   },
   {
     "name": "chute_ramp_bay1",
     "part": "body",
     "start": [
-      34.28,
-      62.0,
-      22.0
+      35.28,
+      88.0,
+      80.94
     ],
     "end": [
-      34.28,
-      165.0,
-      108.0
+      35.28,
+      188.0,
+      164.85
     ],
     "step_mm": 0.5,
-    "_why": "the 40 degree leg, from the end of the porch out into hopper A's mouth: 105mm enclosed under tray B and under hopper B's ramp. If anything closes this, half the bays silently stop feeding."
+    "_why": "the 40 degree leg, from the end of the porch out into hopper A's mouth: about 105mm enclosed under tray B and under hopper B's ramp. If anything closes this, half the bays silently stop feeding."
   },
   {
     "name": "chute_porch_bay5",
     "part": "body",
     "start": [
-      215.72,
-      32.0,
-      10.0
+      224.72,
+      44.0,
+      44.02
     ],
     "end": [
-      215.72,
-      60.0,
-      20.0
+      224.72,
+      83.0,
+      76.74
     ],
     "step_mm": 0.5,
     "_why": "the same porch lane in the far bay"
@@ -51,14 +51,14 @@
     "name": "chute_ramp_bay5",
     "part": "body",
     "start": [
-      215.72,
-      62.0,
-      22.0
+      224.72,
+      88.0,
+      80.94
     ],
     "end": [
-      215.72,
-      165.0,
-      108.0
+      224.72,
+      188.0,
+      164.85
     ],
     "step_mm": 0.5,
     "_why": "the same ramp leg in the bay the right-hand rail buttress intrudes into"
@@ -67,78 +67,78 @@
     "name": "outlet_trayA_bay1",
     "part": "body",
     "start": [
-      34.28,
+      35.28,
       10.0,
-      15.0
+      20.04
     ],
     "end": [
-      34.28,
-      45.0,
-      15.0
+      35.28,
+      60.0,
+      57.44
     ],
     "step_mm": 0.5,
-    "_why": "tray A's outlet: from inside the tray, under the wall that separates it from tray B, into the chute"
+    "_why": "tray A's outlet: from inside the tray, up the tilted floor (D36), under the wall that separates it from tray B, into the chute. The old straight horizontal line at z = 15 would now run into the tilted floor."
   },
   {
     "name": "outlet_trayB_bay5",
     "part": "body",
     "start": [
-      215.72,
-      40.0,
-      79.0
+      224.72,
+      60.0,
+      127.0
     ],
     "end": [
-      215.72,
-      75.0,
-      79.0
+      224.72,
+      100.0,
+      127.0
     ],
     "step_mm": 0.5,
-    "_why": "tray B's outlet: from inside the tray, under hopper B's front wall, into hopper B. At z = 79: above hopper B's ramp, which now starts 6mm above tray B's floor (the vault riser, D26) and is at 73.8 by y = 75, and below the outlet top at 90.2. Revision 6 ran this at 72 and the ramp rose through it."
+    "_why": "tray B's outlet: from inside the tray, under hopper B's front wall, into hopper B. z = 127: above hopper B's ramp (110.0 at the tray's back wall, 122.4 by y = 100) and below the outlet top at 137.0."
   },
   {
     "name": "rail_groove_front",
     "part": "body",
     "start": [
-      227.3,
-      16.8,
+      237.3,
+      22.8,
       12.0
     ],
     "end": [
-      227.3,
-      16.8,
-      66.0
+      237.3,
+      22.8,
+      108.0
     ],
     "step_mm": 0.5,
-    "_why": "the front joining groove must be open from its floor OUT OF THE TOP of the side wall, or a neighbouring module's rail cannot be lowered in. Its top is the pick plane over tray A, which is highest at the groove's back edge (about 62). This line ends at 66, in open air above the plane -- revision 5 ended it at 47, inside the socket, and so proved only that the pocket existed while the groove was capped by 4-11mm of wall."
+    "_why": "the front joining groove must be open from its floor OUT OF THE TOP of the side wall, or a neighbouring module's rail cannot be lowered in. Its top is the pick plane over tray A, which is highest at the groove's back edge (about 104.3). This line ends at 108, in open air above the plane. D39 thickened the skin behind the groove and lengthened the buttress; this proves the groove is still open end to end."
   },
   {
     "name": "rail_groove_back",
     "part": "body",
     "start": [
-      227.3,
-      98.6,
+      237.3,
+      122.6,
       12.0
     ],
     "end": [
-      227.3,
-      98.6,
-      144.0
+      237.3,
+      122.6,
+      192.0
     ],
     "step_mm": 0.5,
-    "_why": "same for the back groove: ends at 144, in open air above the rim (141) and the groove top (142), so the exit is what is tested"
+    "_why": "same for the back groove: ends at 192, in open air above the rim (189) and the groove top (190), so the exit is what is tested"
   },
   {
     "name": "porch_centre_bay3",
     "part": "body",
     "start": [
-      115.0,
-      32.0,
-      20.0
+      120.0,
+      47.0,
+      46.53
     ],
     "end": [
-      115.0,
-      60.0,
-      30.0
+      120.0,
+      83.0,
+      76.74
     ],
     "step_mm": 0.5,
     "_why": "down the centre line of bay 3's porch, where the splitter rib stood until revision 8 (D29). A rib put back, or a porch ceiling sagging to the floor, would block this line while leaving the part watertight and single-bodied."
