@@ -258,7 +258,7 @@ final --export` rebuilds them from the sources and checks each against its STL):
 - The body's base and the foot-pad recesses carry a 0.5 mm bevel against elephant foot; the
   lids' bed faces carry 1.0.
 - Purchased: four stick-on rubber feet, 10 mm (they drop into the recesses); 1/2 inch TZe label tape.
-- Print the body first; it is the long one (about 650 g at 15% infill) and the lids are
+- Print the body first; it is the long one (about 960 g of PETG at 15% infill; start on a full 1 kg spool and keep a second one ready) and the lids are
   checked against it. The lid plates are 239 and 234 mm wide: nothing else goes on those plates.
 - Features printed for the first time in this unit: the D41 ribs, the D42 flare, the D43 slim
   rail and groove, the K1 skin cap, the D45 labels, the divider fillets. `TEST_PRINTS.md`,
@@ -391,7 +391,7 @@ judge the shape and the lid fits; do not judge the flow from it.
 - **The porch ceiling is a flat 45 x 40 mm bridge in every bay** (D29). Check it
   on the first print for sag.
 - The ~2 L of solid wedge under the chute is infill. The body is 2.3 L of
-  solid; plan for about 650 g at 15% infill.
+  solid; plan for about 960 g at 15% infill (2.28 L solid; read the exact figure from the slicer).
 - Bay width is **1.73x the longest pill** against a 2-3x mass-flow rule of
   thumb. Mitigated, not eliminated.
 - The two `NEAR MISS` notes (0.150 mm, 0.144 mm) are both lids' intended

@@ -754,7 +754,7 @@ tests every T row on the real meshes.
 | B1 | Base perimeter (the bed face, 4 sides and 4 corners) | square | **T** 0.5 mm 45 degree chamfer | elephant foot; comes from the outer tool (below), so it follows the rounded corners |
 | B2 | Foot-pad recess mouths (4, on the bed face) | square | **T** 45 degree lead-in cone, 0.5 mm at the bed face, crossing the recess wall at 0.5 | elephant foot closes a recess mouth by a few tenths; the 10 mm stick-on foot must still enter. The recess itself is not smaller |
 | B3 | Vertical outer corners (4) | round r 1.2 (separate cutters) | **T** round r 1.5, same surface as B4/B5 | one dilation, no second tangent line (INCIDENTS) |
-| B4 | Top edges in section (the step, the rim, the back lean, the pick plane's back end) | round r 1.5 | **E** unchanged | |
+| B4 | Top edges in section (the step, the rim, the back lean, the pick plane's back end) | round r 1.5 | **E** unchanged | The dilation tool's lower half is a flat-bottomed cone, so the down-facing back lean (D42, 30 degrees) is dilated by r cos 30 instead of r: the whole lean sits 0.20 mm inside its nominal plane, its wall is about 2.55 mm normal instead of 2.75, and the top-back round has a 30-degree crease where it meets the lean (y 212.9, z 187.5). Cosmetic; accepted (rev 12 review F1). |
 | B5 | Side faces' perimeter (x = 0 and x = 240: along the pick plane, the step, the rim, the back lean) | square | **T** round r 1.5 (hand-carried edge; up-facing or vertical, so a round, not a chamfer) | the side walls are 2.8 thick: 1.3 of flat is left. The rail-1 break-out zone on the right face was re-probed with the round running through it (below) |
 | B6 | Front edge of the pick plane (130 degrees) | 0.16 mm easing | **E** unchanged | |
 | B7 | Tops of dividers, walls and the front wall's pillars on the pick plane, inner edges | square | **K** | the pick lid's seating plane and its 0.2 float; a 2.4 wall top with a bevel on each side keeps 1.4 of flat for nothing |
@@ -814,7 +814,7 @@ oblique lines, each of which would have had to meet the others on their tangent 
 INCIDENTS class). D48 replaces all of it with one operation: the silhouette extruded across the
 width is eroded by `edge_r_top` (1.5) and dilated by a ball of that radius (Minkowski). Every
 convex outer edge is then the same rounded surface, the back corners follow the leaning wall
-exactly, and the bed chamfer comes from the tool's shape: its lower half is a 45 degree cone
+(0.20 mm inside it, see B4: the cone dilates a down-facing face by r cos 30), and the bed chamfer comes from the tool's shape: its lower half is a 45 degree cone
 (the upper hemisphere hulled with a disc 0.5 under its equator, 1.0 in radius), so the bed face
 is flat with a 0.5 mm bevel round it, corners included. `ball()` scales OpenSCAD's sphere by
 1 / cos(180 / n), because the sphere has no vertex on the poles or equator and comes out 0.9%
@@ -840,7 +840,7 @@ had six).
 | `corner_thickness.py`: right break-out zone, thin regions | 465, all named | 422, all named; 0 knife edges |
 | Skin above the front lip (groove floor / mid / mouth) | 2.26 / 1.69 / 1.28 mm | 2.26 / 1.69 / 1.57 mm (limit 2.4) |
 | `lid_retention.py` (a) to (h) | all pass | all pass; clearance at rest 0.14 mm |
-| `overhang_scan.py` | the declared bridges; pick lid 117 mm2 steep, fill lid 62 | the same bridges; pick lid 92, fill lid 75 (the lead-in and bed chamfers at exactly 45.0); the body reads 760 mm2 more steep: the cubby ceiling, exactly 45.0 degrees before and now, whose triangles now fall either side of the threshold on rounding noise |
+| `overhang_scan.py` | the declared bridges; pick lid 117 mm2 steep, fill lid 62 | the same bridges; pick lid 92, fill lid 75 (the lead-in and bed chamfers at exactly 45.0); the body reads 92 mm2 more steep (2719 to 2811): the cubby ceiling, exactly 45.0 degrees before and now, whose triangles now fall either side of the threshold on rounding noise |
 | Body bounding box | 243.0 x 213.01 x 189 | the same |
 
 Final part sizes, print orientation: body 243.0 x 213.0 x 189.0 mm (2281 cm3), pick lid

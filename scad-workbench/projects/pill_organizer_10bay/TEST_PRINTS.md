@@ -171,7 +171,7 @@ was skipped, so the revision 11 features below have never been printed; the edge
 | Watch | Where | What to look for | If it fails |
 |---|---|---|---|
 | D41 ribs | tray A, front-bottom corner, three per bay | Print clean as half-round ribs with a rounded end; a capsule slid to the wall rides up a rib's side and tips | A filled wedge, not larger ribs |
-| D42 flare | hopper A's back wall | A clean 60-degree lean (30 degrees from vertical, not an overhang); pouring from a bottle goes in without spilling | Shallower lean or a wider mouth |
+| D42 flare | hopper A's back wall | A clean 60-degree lean (30 degrees from vertical: the outer face is a printable 30-degree overhang, the inner face leans up); pouring from a bottle goes in without spilling | Shallower lean or a wider mouth |
 | D43 slim rail and groove | right wall (groove) and left wall (rail), both ends | Rail enters the groove by hand at `rail_clear` 0.215, snug, comes out by hand; no tear at the break-out | Move `rail_clear` by one 0.025 step (the coupon is the guide) |
 | K1 skin cap | the 2.4 mm skin behind the rail-1 groove, front bin | No wobble or tear; flat top, 2.3 mm above the lip at worst | Thicken or lower the cap |
 | D45 labels | the front face, two stacked strips | Both strips visible with the lid on, tape fits the 0.5 recess | |
@@ -182,4 +182,4 @@ was skipped, so the revision 11 features below have never been printed; the edge
 | Lid fit | pick lid on the body | Seats on its lugs, no jam on lift (probes pass; first time with the rounded side faces under the lid's ends) | |
 | Fill lid | in the mouth | 0.30 all round, lifts out by the lip; the lip's underside bevel is a fingertip rest | |
 | Stringing | groove, bins, lids | Much less than test print 3 once the PETG is dry | Dry longer; tune retraction |
-| Print time | body | About 650 g at 15% infill | |
+| Print time | body | About 960 g at 15% infill: start on a full spool | |
