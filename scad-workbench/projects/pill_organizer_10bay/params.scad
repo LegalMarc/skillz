@@ -135,17 +135,17 @@ tiltA_tan = tan(trayA_tilt_deg);
 
 // Y stations
 yA_tray0  = wall_out;                       //   2.8  tray A front face
-yA_tray1  = yA_tray0 + tray_d;              //  30.8  tray A back face = chute A foot
-yA_wall1  = yA_tray1 + wall_div;            //  33.2
-yB_tray0  = yA_wall1;                       //  33.2  tray B front face
-yB_tray1  = yB_tray0 + tray_d;              //  61.2  tray B back face = porch end
-yB_wall1  = yB_tray1 + wall_div;            //  63.6  hopper B mouth, front
-yB_hop1   = yB_wall1 + hopperB_run;         // 133.6  hopper B mouth, back
-yA_hop0   = yB_hop1 + wall_div;             // 136.0  hopper A mouth, front
-yA_hop1   = yA_hop0 + hopperA_run;          // 168.0  hopper A mouth, back
-module_d  = yA_hop1 + wall_out;             // 170.8
+yA_tray1  = yA_tray0 + tray_d;              //  42.8  tray A back face = chute A foot
+yA_wall1  = yA_tray1 + wall_div;            //  45.2
+yB_tray0  = yA_wall1;                       //  45.2  tray B front face
+yB_tray1  = yB_tray0 + tray_d;              //  85.2  tray B back face = porch end
+yB_wall1  = yB_tray1 + wall_div;            //  87.6  hopper B mouth, front
+yB_hop1   = yB_wall1 + hopperB_run;         // 157.6  hopper B mouth, back
+yA_hop0   = yB_hop1 + wall_div;             // 160.0  hopper A mouth, front
+yA_hop1   = yA_hop0 + hopperA_run;          // 192.0  hopper A mouth, back
+module_d  = yA_hop1 + wall_out;             // 194.8
 
-porch_run = yB_tray1 - yA_tray1;            //  30.4
+porch_run = yB_tray1 - yA_tray1;            //  42.4
 
 // Z stations
 base_z  = base_t;                                        //   3.0  tray A floor at the front wall
@@ -193,10 +193,10 @@ vault_embed = 1.0;          // how far each roof half reaches INTO its divider o
                             // side wall. Less than weld_embed because the side
                             // walls also carry the rail roots' weld_embed from
                             // outside, and 1.5 + 1.5 does not fit in 2.8
-vault_y0    = yB_tray1 + vault_lead;                            //  63.2, ridge starts
-vault_y1    = yB_hop1 - 0.6;                                    // 133.0, ridge ends
-vault_roof_y0 = yB_tray1 + vault_lead / 2;                      //  62.2, the added solid starts
-vault_roof_y1 = yB_hop1;                                        // 133.6, and ends, inside the wall between the hoppers
+vault_y0    = yB_tray1 + vault_lead;                            // 87.2, ridge starts
+vault_y1    = yB_hop1 - 0.6;                                    // 157.0, ridge ends
+vault_roof_y0 = yB_tray1 + vault_lead / 2;                      //  86.2, the added solid starts
+vault_roof_y1 = yB_hop1;                                        // 157.6, and ends, inside the wall between the hoppers
 function chuteA_ridge(y) = chuteA_ceil(y)
     + (y > vault_y0 && y < vault_y1 ? vault_up * min(1, (y - vault_y0) / vault_ramp) : 0);
 
@@ -213,13 +213,13 @@ assert(vault_roof_y0 > yB_tray1 && vault_roof_y0 < vault_y0 && vault_y1 < vault_
 
 // Tray B sits one slab above the chute ceiling at the porch's end -- which is
 // the whole point of the porch, because that is where the ceiling is lowest.
-trayB_floor = chuteA_ceil(yB_tray1) + chute_ceil;        //  56.18
-trayB_rim   = trayB_floor + trayB_h;                     // 103.18
+trayB_floor = chuteA_ceil(yB_tray1) + chute_ceil;        // 105.59
+trayB_rim   = trayB_floor + trayB_h;                     // 158.59
 // Hopper B's ramp rides one deck above the vault's RIDGE, so it starts
 // vault_up above tray B's floor: a 4mm riser at the tray's back wall that
 // pills drop off (D26). The outlet top rises with it.
-rampB_foot  = trayB_floor + vault_up;                    //  60.18
-outletB_top = rampB_foot + outlet_h;                     //  87.18
+rampB_foot  = trayB_floor + vault_up;                    // 109.99
+outletB_top = rampB_foot + outlet_h;                     // 136.99
 function rampB(y) = rampB_foot + (y - yB_tray1) * ramp_tan;
 
 // Tray A's rim is set INDEPENDENTLY of tray B's floor (D15). It started life
@@ -296,15 +296,15 @@ hopA_lean  = 8.8;                                        // forward offset at th
 // ramp's own face: the review of revision 7 measured it 0.2-0.8mm thick over
 // its bottom 5mm in every bay. It now springs from whichever is higher, and
 // VOID_A carries a vertex there so the wall is vertical up to it.
-hopwall_z0 = max(chuteA_ceil(yA_hop0), rampB(yB_hop1));  // 122.9, the ramp's end
+hopwall_z0 = max(chuteA_ceil(yA_hop0), rampB(yB_hop1));  // 170.7, the ramp's end
 function hopwall_A(z) = yA_hop0
                       - hopA_lean * max(0, z - hopwall_z0) / (hopper_rim - hopwall_z0);
 function hopwall_B(z) = hopwall_A(z) - wall_div;
 
-hop_lean_deg  = atan(hopA_lean / (hopper_rim - hopwall_z0));   // 26.0 (19.35 before the vault fix)
-mouthB_w      = hopwall_B(hopper_rim - lid_t) - yB_wall1;             // 62.5
-mouthA_w      = yA_hop1 - hopwall_A(hopper_rim - lid_t);              // 39.5
-mouth_ratio   = mouthB_w / mouthA_w;                           // 1.56, about 3:2
+hop_lean_deg  = atan(hopA_lean / (hopper_rim - hopwall_z0));   // 25.7 (19.35 before the vault fix)
+mouthB_w      = hopwall_B(hopper_rim - lid_t) - yB_wall1;             // 62.6
+mouthA_w      = yA_hop1 - hopwall_A(hopper_rim - lid_t);              // 39.4
+mouth_ratio   = mouthB_w / mouthA_w;                           // 1.59, about 3:2
 
 assert(hop_lean_deg < 40,
        "the hopper divider leans past the FDM overhang band -- its front face would need support");
@@ -348,7 +348,7 @@ assert(trayA_tilt_deg >= repose_hi_deg && trayA_tilt_deg < ramp_deg,
 assert(module_d <= max_part_y && module_h <= max_part_z,
        "the module no longer fits the usable bed");
 
-tray_step = trayB_rim - trayA_rim;                       //  51.18
+tray_step = trayB_rim - trayA_rim;                       //  81.59
 
 // ------------------------------------------------------------
 // 4c. Scalloped front wall (D17)
@@ -394,7 +394,7 @@ label_h         = label_tape_w + label_clear;            //  12.6
 label_w         = 36.0;
 label_z         = 0.5;      // recess depth; tape is about 0.16 thick
 label_z_center  = 13.0;     // lower strip, centre height on the front face
-labelB_z0 = chuteA_ceil(yA_tray1);                       //  39.0, chute mouth top
+labelB_z0 = chuteA_ceil(yA_tray1);                       //  67.0, chute mouth top
 labelB_z1 = pickplane(yA_tray1);                         //  pick plane over that wall
 label_b_center = (labelB_z0 + labelB_z1) / 2;
 label_cut_over  = 1.0;      // the cut starts this far OUTSIDE the face, never inside it
@@ -436,7 +436,7 @@ assert(trayA_scallop_r < (bay_w - 2 * trayA_scallop_r) / 2,
 // the wall between the trays at outletA_top, so the pile in tray A is
 // unchanged; behind that wall the chute simply has a taller pocket.
 // ------------------------------------------------------------
-porch_ceil_z = chuteA_ceil(yB_tray1);                    //  53.18, flat
+porch_ceil_z = chuteA_ceil(yB_tray1);                    // 102.59, flat
 // Both outlet openings get 45 degree chamfers in their top corners, so the
 // unsupported span across the top of each opening is shorter than the bay.
 outlet_chamfer = 8.0;
@@ -496,8 +496,8 @@ assert(cubby_lip_h < cubby_h_back * 0.6,
 // ------------------------------------------------------------
 // 5. Hopper mouths (both at the back, both at hopper_rim -> ONE flat lid)
 // ------------------------------------------------------------
-hop_mouth_y0 = yB_wall1;                                 //  63.6
-hop_mouth_y1 = yA_hop1;                                  // 168.0
+hop_mouth_y0 = yB_wall1;                                 //  87.6
+hop_mouth_y1 = yA_hop1;                                  // 192.0
 hop_mouth_d  = hop_mouth_y1 - hop_mouth_y0;              // 104.4
 
 // ------------------------------------------------------------
@@ -516,7 +516,7 @@ bayB_vol_measured_ml = 0;
 // ------------------------------------------------------------
 pick_lid_w     = module_w - 1.0;
 pick_lid_clear = 0.35;
-pick_lid_slope = atan((trayB_rim - pickplane_front) / yB_tray1);   // 44.0 deg
+pick_lid_slope = atan((trayB_rim - pickplane_front) / yB_tray1);   // 43.8 deg
 pick_lid_len   = sqrt(pow(yB_tray1, 2) + pow(trayB_rim - pickplane_front, 2))
                  - pick_lid_clear;
 pick_lid_hook_t = 3.0;
@@ -558,7 +558,7 @@ pick_notch_r   = 4.0;
 pick_notch_under = 6.0;     // the notch polygon starts this far below the skirt's
                             // bottom, past its own rounding, so the notch is full
                             // width where it meets the edge (was 2: 0.5mm feathers)
-pick_notch_top = pick_lid_skirt_bot + pick_notch_h;              //  32.0
+pick_notch_top = pick_lid_skirt_bot + pick_notch_h;              //  54.0
 pick_notch_x   = [bay_center_x(1), bay_center_x(bays - 2)];      // bays 2 and 4
 
 assert(pick_notch_top > trayA_pile_front + 5,
@@ -584,7 +584,7 @@ fill_lid_clear  = 0.30;     // NOT confirmed: test print 1 was a 0.42 maquette (
                             // fit_section.scad's fill-lid corner checks it full size
 fill_ledge_w    = 3.0;
 fill_ledge_t    = 2.0;
-fill_seat_z     = hopper_rim - lid_t;         // 138.0
+fill_seat_z     = hopper_rim - lid_t;         // 186.0
 fill_lid_seat_gap = 0.15;                     // modelled at mid-slop; a coplanar
                                               // resting contact makes FCL report a
                                               // nonsense penetration depth
@@ -681,7 +681,7 @@ assert(boss_clip_drop > 0 && boss_clip_drop < 0.5,
 // Rail 1 sits under tray A, not under tray B. Under tray B it would stand in
 // the porch and narrow one lane of an end bay below the single-file rule; tray
 // A is a pick pocket, where a 5mm buttress in one corner costs nothing.
-rail1_y      = (yA_tray0 + yA_tray1) / 2;                  //  16.8, mid tray A
+rail1_y      = (yA_tray0 + yA_tray1) / 2;                  //  22.8, mid tray A
 // A dovetail groove is entered from above, so it has to break out of the top
 // of the wall that carries it -- and over tray A that top is the pick plane,
 // which is HIGHEST at the groove's back edge. Revision 3 capped this groove at
@@ -690,16 +690,16 @@ rail1_y      = (yA_tray0 + yA_tray1) / 2;                  //  16.8, mid tray A
 // length, that no neighbouring module could ever enter (INCIDENTS.md,
 // revision 6). The groove now runs 1mm clear of the plane at its own back
 // edge; the pick lid covers the opening in use.
-rail1_groove_y1 = rail1_y + rail_tip_w / 2 + rail_clear;   //  22.8, groove back edge
-rail1_soc_z1 = pickplane(rail1_groove_y1) + 1.0;           //  67.0, out through the plane
+rail1_groove_y1 = rail1_y + rail_tip_w / 2 + rail_clear;   //  28.5, groove back edge
+rail1_soc_z1 = pickplane(rail1_groove_y1) + 1.0;           // 105.3, out through the plane
 // The male on the neighbour stays below ITS OWN wall's lowest point across
 // the male's footprint, so it never stands proud of the plane it is under.
-rail1_z1     = pickplane(rail1_y - rail_tip_w / 2) - 4.0;  //  48.5
-rail2_y      = (yB_wall1 + yB_hop1) / 2;                   //  98.6, mid hopper B
-rail2_soc_z1 = hopper_rim + 1.0;                           // 142.0
+rail1_z1     = pickplane(rail1_y - rail_tip_w / 2) - 4.0;  //  89.6
+rail2_y      = (yB_wall1 + yB_hop1) / 2;                   // 122.6, mid hopper B
+rail2_soc_z1 = hopper_rim + 1.0;                           // 190.0
 rail2_z1     = 112.0;
 
-rail_sep  = rail2_y - rail1_y;                             //  81.8
+rail_sep  = rail2_y - rail1_y;                             //  99.8
 
 assert(rail1_soc_z1 > rail1_z1 + rail_lead && rail2_soc_z1 > rail2_z1 + rail_lead,
        "a rail groove is shorter than its own male plus its lead");
@@ -849,9 +849,13 @@ echo(str("cubby: ", inner_w, " wide x ", cubby_d, " deep x ",
          chuteA_floor(cubby_y0) - cubby_ceil_z(cubby_y0), " at the front"));
 echo(str("rail 1 groove: open from z ", rail_z0, " to ", rail1_soc_z1,
          " through the plane at ", pickplane(rail1_groove_y1),
-         "; porch throat at repose ",
-         chute_clear - porch_run * (tan(repose_deg) - porch_tan), " / at 35 deg ",
-         chute_clear - porch_run * (tan(35) - porch_tan)));
+         "; skin behind it ", rail_skin, "; tray A floor ", trayA_tilt_deg, " deg, ",
+         base_z, " at the front wall .. ", z_foot, " at the chute foot; pile depth at the front wall ",
+         trayA_pile_front - base_z, " (30 deg repose), ",
+         outletA_top - tray_d * tan(25) - base_z, " (25), ", outletA_top - tray_d * tan(35) - base_z, " (35)"));
+echo(str("pick lid retention: lug front face ", pick_lug_y0, " vs pillar back face ", yA_tray0,
+         "; first contact after ", pick_lug_travel, " mm of travel; engagement ", pick_lug_engage,
+         " mm; footprint ", module_w + rail_out, " x ", module_d, " x ", module_h));
 echo(str("vault: gable ", vault_deg, " deg, face ", vault_face_from_vertical,
          " from vertical; chute clear ", chute_clear - vault_down, " at the edges, ",
          chute_clear + vault_up, " at the ridge; hopper B foot ", rampB_foot,

@@ -27,6 +27,9 @@ mkdir -p "$OUT"
 EXTRA=("$@")
 
 SIZE="${RENDER_SIZE:-800,600}"
+# Linux needs a virtual display for PNG export; macOS does not (and has no
+# xvfb-run), so call OpenSCAD directly there.
+if command -v xvfb-run >/dev/null 2>&1; then XVFB=(xvfb-run -a); else XVFB=(); fi
 
 # One shared camera for every view. --viewall fits each view independently,
 # which silently renders the same part at different scales from different
@@ -34,7 +37,7 @@ SIZE="${RENDER_SIZE:-800,600}"
 # a distortion that does not exist. So: measure the bounding box once, derive
 # a single centre and distance, and hold both fixed across all six.
 read -r CX CY CZ DIST <<<"$(
-  xvfb-run -a "$OPENSCAD_BIN" --backend=manifold --summary all \
+  ${XVFB[@]+"${XVFB[@]}"} "$OPENSCAD_BIN" --backend=manifold --summary all \
     --summary-file - -o "$OUT/.bbox.stl" "${EXTRA[@]}" "$SCAD" 2>/dev/null |
   python3 -c '
 import json, sys, math
@@ -57,7 +60,7 @@ else
 fi
 
 render_view() {
-  xvfb-run -a "$OPENSCAD_BIN" --backend=manifold --render \
+  ${XVFB[@]+"${XVFB[@]}"} "$OPENSCAD_BIN" --backend=manifold --render \
     --imgsize="$SIZE" --camera="$CX,$CY,$CZ,$2,0,$3,$DIST" "${FIT[@]}" \
     --colorscheme="${RENDER_COLORSCHEME:-Tomorrow}" \
     -o "$OUT/$1.png" "${EXTRA[@]}" "$SCAD" >/dev/null 2>"$OUT/.$1.log" \

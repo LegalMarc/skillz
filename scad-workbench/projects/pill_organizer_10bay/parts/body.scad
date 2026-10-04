@@ -1,5 +1,5 @@
 // ============================================================
-// body.scad -- the organizer body, revision 8. Two pick trays
+// body.scad -- the organizer body, revision 10. Two pick trays
 // at the FRONT under one lid, two fill mouths at the BACK under
 // one lid.
 //
@@ -9,8 +9,9 @@
 // Hopper B is the front mouth and feeds tray B right in front
 // of it -- a plain ramp. Hopper A is the BACK mouth and feeds
 // the FRONT tray, so its chute ducks under tray B and under
-// hopper B. See params.scad section 4 for why the chute runs at
-// porch_deg under tray B and ramp_deg everywhere else.
+// hopper B. Since revision 10 (D36) the chute is one straight 40 degree
+// floor from tray A's foot to hopper A, and tray A's own floor tilts down
+// toward the front wall. See params.scad section 4.
 //
 // Local origin: front-bottom-left outer corner. +X right,
 // +Y back, +Z up. This is the assembly datum.
