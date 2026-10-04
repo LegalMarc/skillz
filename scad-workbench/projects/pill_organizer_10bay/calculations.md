@@ -491,7 +491,7 @@ the trays, `fill_seat_z` over the hoppers), split into connected voids.
 
 | Row | Middle bay | End bay | vs 147.4 mL charge | Days at one/day |
 |---|---|---|---|---|
-| Row A, front tray, crossing chute | **427.6 mL** | 406.3 | 2.90x | 261 |
+| Row A, front tray, crossing chute | **427.6 mL** | 404.5 (bay 1), 407.0 (bay 5) | 2.90x | 261 |
 | Row B, back tray, plain ramp | **200.2 mL** | 193.1 | 1.36x | 122 |
 | Cubby, per bay | 366 | 361 | | |
 
@@ -564,3 +564,28 @@ beyond the front wall's own plane-cut top.
 
 `rail_clear` 0.20. Coupon stubs at clearances 0.30, 0.25, 0.20, 0.15, 0.10,
 labelled by the offset from the default: -100, -50, 0, +50, +100.
+
+### Revision 10 re-review (G1-G7)
+
+- **Mouth throats (G5), perpendicular to the floor:** row A 26.03 at the bay centre,
+  24.1 a pill's radius from a divider, 19.9 at the divider face; row B, whose outlet
+  fed well in test print 2, 19.1 / 13.0 at the same places. Row A is asserted never
+  tighter than row B (centre 1.25x, divider 1.0x). Pill length is kept as a sanity
+  floor only: it matters to a capsule standing on end.
+- **Tilting from the rest pose (G2):** under gravity the lugs touch the stop faces
+  (0.5 mm down-slope of nominal). A tilt about the back edge then drives a lug's depth
+  `n x theta` into its face while the face-to-face overlap lasts: 0.8 to 2 mm3 between
+  0.25 and 3.25 degrees. Clearing it needs the lid to ride up-slope 0.09 mm by 1 degree,
+  0.16 by 2, 0.19 by 3 and 4, nothing after 5 (room: 1.0 mm), found by
+  `probes/lid_retention.py` (e2). A geometric relief cannot make it zero: while two
+  perpendicular faces touch over 5 mm or more at rest, rotation about a pivot 106 mm
+  away must push the deeper part of one into the other; draft or a chamfer that
+  cleared it would also take away the engagement. The up-slope ride is the lid's own
+  freedom (PLA flexes more than that).
+- **Filler (G4):** each end bay's slot between the stop block (y 10.0) and the buttress
+  (y 14.3) is filled x 2.8..9.4, top at 45 degrees falling toward the bay from 0.5
+  under the block's corner (z 73.6 at the side wall), 5 mm or more under the lug's lowest
+  point (z 78.8). Cost 1.8 mL in a bay-1 end bay (404.5, was 406.3).
+- **Flush top (G7):** the stop block's top (0.2 under the plane, to avoid a coplanar
+  union) and the front wall's top over the pillar (trimmed to 0.15 under) differ by
+  0.05 mm, from 0.2.

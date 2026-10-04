@@ -332,13 +332,6 @@ assert(chuteA_floor(yA_hop1) + hopper_free <= hopper_rim,
        "hopper A's floor leaves less than hopper_free under the rim");
 assert(chute_clear > pill_len,
        "the crossing chute ridge is not taller than the longest pill");
-// The mouth into tray A, true minimum (review F3): the nearest point of the
-// wall between the trays to the 40 degree floor is that wall's back-bottom
-// corner, wall_div further up the floor than its front-bottom corner, so
-// (chute_clear - wall_div x tan(porch)) x cos(porch), not chute_clear x cos.
-mouthA_min = (chute_clear - wall_div * porch_tan) * cos(porch_deg);          //  26.03
-assert(mouthA_min >= pill_len,
-       "the true minimum of the mouth into tray A, measured perpendicular to the floor, is under one pill length");
 assert(outlet_h > pill_len && outlet_h >= 2 * pill_dia,
        "outlet_h fails the pill-passage or slot rule");
 assert(trayA_rim > outletA_top && trayB_rim > outletB_top,
@@ -452,6 +445,29 @@ outlet_chamfer = 8.0;
 
 assert(bay_w - 2 * outlet_chamfer > pill_len,
        "the outlet corner chamfers narrow the top of the opening below one pill length -- a capsule lying crosswise would catch");
+
+// The throats, measured perpendicular to the 40 degree floor from the nearest point
+// of the wall in front (review F3, G5). The nearest point is that wall's back-bottom
+// corner, wall_div further up the floor than its front-bottom corner, so
+// (opening - wall_div x tan(40)) x cos(40). At the bay centre; near a divider the
+// 45 degree outlet chamfers (outlet_chamfer 8) lower the opening's top by
+// (outlet_chamfer - distance from the divider), so the corner throat is smaller.
+function throat(open_h, from_divider = 1000) =
+    (open_h - max(0, outlet_chamfer - from_divider) - wall_div * ramp_tan) * cos(ramp_deg);
+mouthA_min        = throat(chute_clear);                    // 26.03 at the bay centre
+mouthA_corner_min = throat(chute_clear, 0);                 // 19.9 at the divider face
+mouthA_corner_pill = throat(chute_clear, pill_dia / 2);     // 24.1 a pill's radius from the divider
+// What actually fed in test print 2: row B's outlet, 27 mm vertical on the same 40
+// degree ramp with the same chamfers, measured the same way.
+mouthB_demonstrated        = throat(outlet_h);              // 19.2 at the bay centre
+mouthB_corner_demonstrated = throat(outlet_h, 0);           // 13.0 at the divider face
+// Row A's mouth is NOT a measured fit: it is asserted never to be tighter than the
+// one that fed well, with 25% in hand at the centre, and (sanity floor) at least one
+// pill length. The pill-length floor only matters to a capsule standing on end.
+assert(mouthA_min >= 1.25 * mouthB_demonstrated && mouthA_corner_min >= mouthB_corner_demonstrated,
+       "row A's mouth is tighter than row B's, which is the one test print 2 showed feeding well (centre 1.25x, at the divider face 1.0x)");
+assert(mouthA_min >= pill_len,
+       "the minimum of the mouth into tray A, measured perpendicular to the floor, is under one pill length (sanity floor)");
 
 // ------------------------------------------------------------
 // 4d. Accessory cubby (D18)
@@ -685,7 +701,8 @@ rail_lead = 3.0;
 // boss 7 it is 4.4. The buttress is also 23 mm long in Y, not 19, so the
 // material in front of and behind the groove is 5.5 mm, not 3.5.
 rail_boss = 7.0;
-rail_boss_w = rail_tip_w + 12;  // buttress footprint in Y
+rail_boss_margin = 6.0;         // buttress beyond the groove tip, each side, in Y
+rail_boss_w = rail_tip_w + 2 * rail_boss_margin;   // buttress footprint in Y (23)
 rail_skin = rail_boss + wall_out - rail_out - rail_depth_clear;   // 4.4, groove bottom to tray A
 // Rail 1's buttress is clipped by the outer silhouette rather than capped at a
 // guessed height. Over tray A that silhouette IS the pick plane, so the clip
@@ -732,8 +749,10 @@ assert(rail1_y + rail_boss_w / 2 < yA_tray1,
        "rail 1's buttress reaches back into the chute mouth");
 assert(rail_skin >= 4.0,
        "the skin between the rail-1 groove and tray A is under 4mm: it stands as a thin blade where the pick plane cuts the buttress (D39)");
-assert(rail_boss_w - rail_tip_w >= 10.0,
-       "the buttress is under 5mm longer than the rail's tip on each side (D39); the groove itself is measured on the mesh by probes/corner_thickness.py");
+// material left either side of the groove at its widest (its tip, grown by rail_clear)
+rail_boss_side = rail_boss_margin - rail_clear;      // 5.8
+assert(rail_boss_side >= 5.0,
+       "the buttress leaves under 5mm of material either side of the rail groove at its widest (D39); measured on the mesh by probes/corner_thickness.py");
 assert(bay_w - rail_boss >= pill_len,
        "the rail buttress narrows an end bay below one pill length");
 assert(rail_sep > 50, "the two rails are too close together to resist yaw");
@@ -761,6 +780,9 @@ pick_lug_d     = 7.0;       // perpendicular to the plate, below its underside
 pick_lug_chamfer = 1.0;     // lead-in chamfer on the tip's X edges
 pick_stop_w    = pillar_w - 0.4;   // the block is a hair narrower than the pillar, so its side face does not
                             // lie on the scallop cut's face (a coplanar boolean)
+stop_trim_lift = 0.05;      // the front wall over the pillar is trimmed to this far above the block's clipped top
+pick_filler_drop = 0.5;     // the filler's top at the side wall, under the stop block's corner P1
+pick_filler_inset = 0.4;    // the filler ends this far inside the buttress's inner face
 pick_stop_off  = 1.0;       // where the stop face meets the plane, behind the front wall's inner face
 pick_stop_depth = 9.0;      // how far down (perpendicular) the stop face runs from the plane
 pick_stop_y    = yA_tray0 + pick_stop_off;                              //   3.8

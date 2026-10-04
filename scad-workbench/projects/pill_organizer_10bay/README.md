@@ -30,7 +30,7 @@ revision 9 fixed tray B's pile.
 |---|---|
 | Overall | 245 x 194.8 x 189 mm (the 245 includes the 5 mm joining rail; the plate allows 246 x 246 x 250) |
 | Bays | 10, two rows of 5, 44.96 mm clear each, trays 40 mm deep |
-| Capacity, middle bay | **428 mL front row, 200 mL back row**; end bays 406 / 193. About 3.1 L total, geometric maximum |
+| Capacity, middle bay | **428 mL front row, 200 mL back row**; end bays 405 / 193. About 3.1 L total, geometric maximum |
 | Printed parts | **3 designs, 3 pieces**, no hardware |
 | Validation | **13 passed, 0 failed, 4 n/a, 0 inconclusive, 1 advisory** (the advisory is `check_printability.py`; its overhang half fails every real FDM part on area, but its THIN-WALL half caught a real 0.2 mm wall in revision 7 that everyone had stopped reading it for — read both halves) |
 | Confidence | Tier 2 — geometry verified, fit uncalibrated |
@@ -133,7 +133,9 @@ the wedge to work.
   straight up or along the normal and nothing touches either. Turn it round and
   the skirt lands in the wall behind tray B, so it cannot sit. (The first
   version had a vertical stop face; the lug drove into it at 0.5 to 2 degrees
-  of tilt and jammed. The review of revision 10 found it.) "FRONT" is embossed
+  of tilt and jammed. The review of revision 10 found it.) A 45-degree filler
+  closes the slot between each block and the rail buttress so nothing can lodge
+  there. "FRONT" is embossed
   on the skirt. The two notches in the skirt are finger grips.
 - **Foot pads.** Four 10 mm recesses in the base take stick-on rubber feet, so
   a unit that is bumped while pouring does not skate.
@@ -157,7 +159,7 @@ the wedge to work.
 **Neither lid is hinged.** The two tray rims are 82 mm apart, so a lid
 bridging them as an L has its mass centre well below any back-top pivot and
 falls shut every time; a front pivot runs the far corner into the benchtop. The
-pick lid lifts straight off. What keeps it on the slope is its two lugs against
+pick lid lifts off: lift it (straight up, along the plane's normal, or tilted about its back edge), then draw it forward. A straight lift alone meets the fill lid's pull lip after 26 mm; every lift-then-forward path clears. What keeps it on the slope is its two lugs against
 the stop blocks in tray A's front corners (D38), not its skirt: the skirt hangs outside the front
 face, and sliding down the slope takes it further from that face. Revisions 4 to
 9 said the skirt did it; test print 2 slid the lid straight off.
@@ -297,7 +299,7 @@ judge the shape and the lid fits; do not judge the flow from it.
   with the chute) is the limit.
 - **The chute mouth is 36 mm vertical; its true minimum is 26.0 mm**,
   perpendicular to the 40-degree floor from the back-bottom corner of the wall
-  between the trays (the front-bottom corner gives 27.6): 1.0x a pill length,
+  between the trays (the front-bottom corner gives 27.6): 1.0x a pill length (row B's outlet, which fed well in test print 2, measures 19.2 the same way; near a divider the 8 mm outlet chamfers cut the throat to 19.9 at the divider face on row A, 13.0 on row B),
   asserted. It matters only to a capsule standing on end. Row B's outlet is tighter (27 vertical) and fed
   well in test print 2.
 - **The hanging wall between the trays** is now 35 mm tall below tray B's floor

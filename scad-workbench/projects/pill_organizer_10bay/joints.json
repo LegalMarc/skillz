@@ -1,5 +1,5 @@
 {
-  "_comment": "Contacts: none. Both lids are clearance fits -- the pick lid floats 0.2mm above its plane and the fill lid 0.15mm above its seat -- so both report as NEAR MISS, which is correct. Modelling either as a coplanar resting contact is what made FCL report 66.9mm of penetration on a pair whose real boolean overlap measured 0.000 mm3. Motion (revision 10 review, F1): neither lid is hinged, but the PICK LID is REMOVED, and 'nothing moves' was how a lid with a stop face that jammed on removal (and, before that, no retention at all) went unchecked. Three removal motions are swept: tilting about the back edge (lifting by the front notches, or hinging on from the back), a straight lift, and a lift along the plane's normal. The retention in the OTHER direction (down-slope slide must be stopped) is a contact, not a clearance, and is checked by probes/lid_retention.py with exact boolean overlaps. The two lifts are swept 0-12 mm (the lug is clear of the stop face after 7 mm of lift); a straight lift past about 24 mm would meet the fill lid's pull lip, which the body-only probe does not include, and nobody lifts that far straight: past 7 mm the lid is free to move forward.",
+  "_comment": "Contacts: none. Both lids are clearance fits -- the pick lid floats 0.2mm above its plane and the fill lid 0.15mm above its seat -- so both report as NEAR MISS, which is correct. Modelling either as a coplanar resting contact is what made FCL report 66.9mm of penetration on a pair whose real boolean overlap measured 0.000 mm3. Motion (revision 10 review, F1): neither lid is hinged, but the PICK LID is REMOVED, and 'nothing moves' was how a lid with a stop face that jammed on removal (and, before that, no retention at all) went unchecked. Three removal motions are swept: tilting about the back edge (lifting by the front notches, or hinging on from the back), a straight lift, and a lift along the plane's normal. The retention in the OTHER direction (down-slope slide must be stopped) is a contact, not a clearance, and is checked by probes/lid_retention.py with exact boolean overlaps. The two lifts are swept 0-12 mm (the lug is clear of the stop face after 7 mm of lift); a straight lift past about 24 mm would meet the fill lid's pull lip, which the body-only probe does not include, and nobody lifts that far straight: past 7 mm the lid is free to move forward. The lift-then-forward removal (lift 8-24 mm, then draw the lid forward 0-140 mm, against the body AND the fill lid) is two-phase, which this tool cannot sweep; probes/lid_retention.py (h) does it, and the diagonal motion here covers the first 20 mm of it. Likewise tilting FROM THE REST POSE (lugs touching the stop faces under gravity) needs an initial offset this tool cannot express: probes/lid_retention.py (e2) does it and reports the up-slope ride the lid needs (0.19 mm at most, against 1.0 mm of room); every motion here starts from the nominal pose, 0.5 mm clear of the stops.",
   "contacts": [],
   "motion": [
     {
@@ -66,6 +66,27 @@
       "range_deg": [
         0,
         12
+      ],
+      "step_deg": 0.5,
+      "min_clearance_mm": 0.05
+    },
+    {
+      "id": "pick_lid_lift_and_draw_forward",
+      "drivers": [
+        {
+          "part": "pick_lid",
+          "type": "prismatic",
+          "axis": [
+            0,
+            -0.5,
+            0.866
+          ],
+          "ratio": 1.0
+        }
+      ],
+      "range_deg": [
+        0,
+        20
       ],
       "step_deg": 0.5,
       "min_clearance_mm": 0.05

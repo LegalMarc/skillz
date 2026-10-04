@@ -29,10 +29,12 @@ import trimesh
 from _common import params, parts, overlap_mm3, moved, translation
 
 TOL = 0.5   # mm^3 of overlap that counts as contact (a 0.01 mm sliver is 0.1)
+TOL_REST = 0.05   # the rest-pose cases start in contact, so they use a tenfold tighter threshold
 
 P = params()
-M = parts()
+M = parts(("body", "pick_lid", "fill_lid"))
 body, lid0 = M["body"], M["pick_lid"]
+fill = moved(M["fill_lid"], translation([P["fill_x"], P["fill_y"], P["fill_z"]]))
 s = np.radians(P["slope"])
 u = np.array([0.0, np.cos(s), np.sin(s)])       # up the plane
 N = np.array([0.0, -np.sin(s), np.cos(s)])      # plane normal, out of the body
@@ -139,6 +141,61 @@ if mins:
     print("      " + "  ".join(f"{a}:{d:.2f}" for a, d in mins.items()))
 # the same poses in the reverse order are the lid being hinged ON from the back;
 # the poses are identical, so the result is too -- stated, not re-run.
+
+# (e2) tilt from the rest pose (touching the stops under gravity), with up-slope ride
+print()
+rest = moved(lid, translation(down * P["lug_clear"]))
+check("(e2) the rest pose touches the stops without intersecting", overlap_mm3(body, rest) <= TOL_REST,
+      f"overlap {overlap_mm3(body, rest):.3f} mm3 (lid {P['lug_clear']} mm down-slope of nominal)")
+def tilted(base, ang, ride):
+    T = translation(u * ride)
+    piv = pivot + down * P["lug_clear"] + u * ride
+    R = trimesh.transformations.rotation_matrix(-np.radians(ang), [1, 0, 0], piv)
+    return moved(base, R @ T)
+need = {}
+bad_at_zero = []
+for ang in np.arange(0.25, 15.01, 0.25):
+    if overlap_mm3(body, tilted(rest, ang, 0.0)) <= TOL_REST:
+        need[ang] = 0.0; continue
+    bad_at_zero.append(ang)
+    lo, hi = 0.0, 1.0
+    if overlap_mm3(body, tilted(rest, ang, hi)) > TOL_REST:
+        need[ang] = None; continue
+    for _ in range(12):
+        mid = (lo + hi) / 2
+        if overlap_mm3(body, tilted(rest, ang, mid)) > TOL_REST: lo = mid
+        else: hi = mid
+    need[ang] = hi
+unsolved = [a for a, r in need.items() if r is None]
+mx = max((r for r in need.values() if r is not None), default=0.0)
+amax = max((a for a, r in need.items() if r == mx), default=0.0)
+print(f"      from the rest pose with no ride, overlap at {len(bad_at_zero)} of {len(need)} angles"
+      + (f" ({bad_at_zero[0]:.2f} .. {bad_at_zero[-1]:.2f} deg)" if bad_at_zero else ""))
+print("      up-slope ride needed to clear it, mm, by degree of tilt (max over each degree's four steps):")
+rows = []
+for d in range(1, 16):
+    rs = [need[a] for a in need if d - 1 < a <= d and need[a] is not None]
+    rows.append(f"{d}:{max(rs):.2f}")
+print("      " + "  ".join(rows))
+check("(e2) tilting 0.25..15 deg from the rest pose clears with an up-slope ride under 1.0 mm (the room there is)",
+      not unsolved and mx < 1.0, f"max ride {mx:.3f} mm at {amax:.2f} deg" if not unsolved else f"no ride up to 1.0 mm clears at {unsolved}")
+
+# (h) lift, then draw forward; and where a straight lift meets the fill lid
+print()
+first = None
+for k in np.arange(0.0, 40.01, 0.5):
+    if overlap_mm3(fill, moved(lid, translation([0, 0, float(k)]))) > TOL:
+        first = k; break
+print(f"      a straight lift meets the fill lid's pull lip after {first} mm")
+badh = []
+for h in (8.0, 10.0, 15.0, 20.0, 24.0):
+    for fwd in np.arange(0.0, 140.01, 5.0):
+        m = moved(lid, translation([0, -float(fwd), h]))
+        if overlap_mm3(body, m) > TOL or overlap_mm3(fill, m) > TOL:
+            badh.append((h, fwd)); break
+check("(h) lift 8/10/15/20/24 mm, then draw forward 0..140 mm: clears the body and the fill lid", not badh,
+      "" if not badh else f"collides at (lift, forward) {badh}")
+check("    a straight lift alone meets the fill lid only beyond 24 mm", first is not None and first > 24.0, f"first contact at {first} mm")
 
 # (f) along the plane's normal
 worst = 0.0

@@ -3,10 +3,10 @@ pick plane 43.76 deg; lug clearance 0.5 mm; asserted engagement 6.86 mm
 PASS  (b) at rest: lid does not intersect the body   overlap 0.000 mm3
 
 PASS  (a) slid 1 mm down the plane intersects the body   overlap 25.84 mm3
-PASS  (a) slid 2 mm down the plane intersects the body   overlap 77.59 mm3
-PASS  (a) slid 5 mm down the plane intersects the body   overlap 210.28 mm3
+PASS  (a) slid 2 mm down the plane intersects the body   overlap 77.53 mm3
+PASS  (a) slid 5 mm down the plane intersects the body   overlap 207.62 mm3
 PASS  (a) first contact within 1 mm of travel   first contact at 0.510 mm (expected 0.500 = the clearance: both stop faces are perpendicular to the slope)
-      overlap region at 2 mm: z 74.65 .. 80.53 (height 5.88 mm), x 3.3 .. 236.7, y 2.72 .. 8.54
+      overlap region at 2 mm: z 74.65 .. 80.53 (height 5.88 mm), x 3.3 .. 236.7, y 2.79 .. 8.54
 
 PASS  (c) lifts straight up 30 mm (31 poses, 1 mm steps) with no intersection   worst overlap 0.000 mm3
 PASS      sideways -0.45 mm is still free   overlap 0.000 mm3
@@ -22,6 +22,16 @@ PASS  (d) no in-plane position within +-60 mm along the slope lets it seat   min
 PASS  (e) tilting about the back edge, 0..15 deg x back edge raised 0/1/3 mm (183 poses): no intersection   worst overlap 0.000 mm3
       min clearance lid <-> body, back edge not raised, mm per degree of tilt:
       0:0.14  1:0.15  2:0.16  3:0.16  4:0.17  5:0.18  6:0.18  7:0.19  8:0.20  9:0.21  10:0.21  11:0.22  12:0.23  13:0.23  14:0.24  15:0.25
+
+PASS  (e2) the rest pose touches the stops without intersecting   overlap 0.000 mm3 (lid 0.5 mm down-slope of nominal)
+      from the rest pose with no ride, overlap at 13 of 60 angles (0.25 .. 3.25 deg)
+      up-slope ride needed to clear it, mm, by degree of tilt (max over each degree's four steps):
+      1:0.09  2:0.16  3:0.19  4:0.19  5:0.00  6:0.00  7:0.00  8:0.00  9:0.00  10:0.00  11:0.00  12:0.00  13:0.00  14:0.00  15:0.00
+PASS  (e2) tilting 0.25..15 deg from the rest pose clears with an up-slope ride under 1.0 mm (the room there is)   max ride 0.191 mm at 3.25 deg
+
+      a straight lift meets the fill lid's pull lip after 26.0 mm
+PASS  (h) lift 8/10/15/20/24 mm, then draw forward 0..140 mm: clears the body and the fill lid
+PASS      a straight lift alone meets the fill lid only beyond 24 mm   first contact at 26.0 mm
 PASS  (f) lifts along the plane's normal 0..30 mm (31 poses): no intersection   worst overlap 0.000 mm3
 PASS  (g) the built lid's skirt reaches at least 3 mm below the scalloped front wall's top   skirt bottom z 49.0, wall top 55.0
 

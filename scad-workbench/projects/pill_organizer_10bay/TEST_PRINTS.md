@@ -33,9 +33,9 @@ wall (27 mm above the rim on the real body).
 | Row A pile depth | Look at tray A full | About 41 mm deep at the front wall, 11 mm under the wall's top; no capsule over it at rest |
 | Row B (D33) | Pour into hopper B | Pile stays in tray B, below the wall in front of it |
 | Pick lid stays on (D38) | Lay the lid end on the section, lugs dropping behind the stop blocks. Tip the section so the plane is up the slope | Lugs go in without forcing; the lid does not slide down the slope; it moves 0.5 mm and stops against the block |
-| Lift by the front edge | With one hand, lift the lid by the notch (it is cut in on this piece), letting it tilt about its back edge | No catch or jam at any angle from 0 to about 15 degrees; the lug leaves the block after about 4 degrees |
-| Lower it hinged from the back | Set the back edge on the plane first and lower the front | The lugs find the gap behind the blocks without catching |
-| Lift straight up | Lift it vertically | Comes off clean |
+| Lift by the front edge | The lid piece is 91 mm wide on a 49 mm body section, so its centre of mass is 2-3 mm inside the cut half-divider and lifting at the notch (x 167) rolls it about the right side wall: that tests nothing. **Hold the overhanging left end level with your other hand (or prop it on a spacer at plane height), then lift by the skirt directly over the section** and let the lid tilt about its back edge | A pass: the lug leaves the stop block after about 3.6 to 4 degrees of tilt (about 7 mm of rise at the front), with no catch or drag at any point; the lid may need to creep up the slope by a fifth of a millimetre as it starts, which is expected (the lugs touch the stops at rest) |
+| Lower it hinged from the back | Same support. Rest the back edge on the plane and lower the front | The lugs find the gap behind the blocks and the lid settles 0.5 mm from the stops without catching |
+| Lift straight up, then draw forward | Lift it vertically 8 mm or more, then pull it toward you | Comes off clean. (On the full body a straight lift beyond 26 mm meets the fill lid's pull lip; lift-then-forward never does)  |
 | Pick lid reversed | Try to fit it turned round | It cannot sit flat; the skirt hits the wall behind tray B |
 | "FRONT" | Look at the skirt | Legible, no stringing, printed without support |
 | Groove corner (D39) | Lower a spare rail into the front groove from above, handle the section | Nothing tears or cracks at the break-out; no flap inside tray A |

@@ -38,4 +38,8 @@ echo(str("PROBE trayA_front_h=", trayA_front_h));
 echo(str("PROBE stop_y=", pick_stop_y));
 echo(str("PROBE stop_back_y=", pick_stop_back_y));
 echo(str("PROBE pick_stop_w=", pick_stop_w));
+echo(str("PROBE mouth=", mouthA_min, " ", mouthA_corner_min, " ", mouthA_corner_pill, " ", mouthB_demonstrated, " ", mouthB_corner_demonstrated));
+echo(str("PROBE fill_x=", wall_out + fill_lid_clear));
+echo(str("PROBE fill_y=", hop_mouth_y0 + fill_lid_clear));
+echo(str("PROBE fill_z=", fill_seat_z + fill_lid_seat_gap));
 cube(0.001);

@@ -399,14 +399,49 @@ module stop_block_profile() {
     Fm = F(-1.5); P1 = F(pick_stop_depth);
     polygon([[1.0, Fm[1]], Fm, P1, [P1[0], base_z - 1], [1.0, base_z - 1]]);
 }
+// The filler (G4, revision 10 re-review). Between a stop block's lower back face
+// (y 10.0) and the rail-1 buttress (from y 14.3) there was a 4.3 mm blind slot,
+// open only toward the bay, floor to plane, that traps small tablets and fragments
+// and cannot be cleaned. This fills it, x from the side wall to just inside the
+// buttress's inner face, y from inside the block to well into the buttress. Its top
+// falls at 45 degrees toward the bay (so it sheds, and prints facing up), starting
+// pick_filler_drop under the block's corner P1 and ending in the bay's own air, well
+// under the lug's swept envelope.
+module stop_filler_profile() {   // in (x, z), for the LEFT side; mirrored for the right
+    sa = sin(pick_lid_slope); ca = cos(pick_lid_slope);
+    zt = pickplane(pick_stop_y) - pick_stop_depth * ca - pick_filler_drop;     // top at the side wall
+    xe = wall_out + rail_boss - pick_filler_inset;                              // end, inside the buttress
+    polygon([[wall_out - weld_embed, base_z - 1], [xe, base_z - 1],
+             [xe, zt - (xe - wall_out)], [wall_out, zt], [wall_out - weld_embed, zt]]);
+}
+module stop_filler_left() {
+    y0 = pick_stop_back_y - 0.5; y1 = rail1_boss_y0 + 1.5;
+    translate([0, y1, 0]) rotate([90, 0, 0]) linear_extrude(height = y1 - y0) stop_filler_profile();
+}
 module stop_blocks() {
     intersection() {
         union() {
             yz_extrude(wall_out - weld_embed, wall_out + pick_stop_w) stop_block_profile();
             yz_extrude(module_w - wall_out - pick_stop_w, module_w - wall_out + weld_embed) stop_block_profile();
+            stop_filler_left();
+            translate([module_w, 0, 0]) mirror([1, 0, 0]) stop_filler_left();
         }
         yz_extrude(0, module_w) polygon(OUTER_CLIP);
     }
+}
+// G7: the block's top is clipped boss_clip_drop under the plane (a top ON the
+// plane is a coplanar union that fails to weld), which left a 0.2 mm step against
+// the front wall's top at y = 2.8. The front wall's top over the pillar is trimmed
+// to the same height with a cutter whose floor is the clip polygon itself, a hair
+// ABOVE the block's top (stop_trim_lift), so the two are flush to within 0.05 mm
+// and no two faces coincide. The lid still floats pick_lid_gap over the plane.
+module stop_trim() {
+    for (x0 = [wall_out, module_w - wall_out - pillar_w])
+        intersection() {
+            yz_extrude(x0, x0 + pillar_w) polygon([[-1, -1], [-1, 400], [pick_stop_back_y, 400], [pick_stop_back_y, -1]]);
+            translate([0, 0, stop_trim_lift]) yz_extrude(x0, x0 + pillar_w)
+                difference() { translate([-5, 20]) square([60, 400]); polygon(OUTER_CLIP); }
+        }
 }
 
 module rail_socket_cut() {
@@ -454,6 +489,7 @@ module body_geometry() {
         union() { body_shell(); outlet_chamfers(); vault_roof(); rail_male(); rail_bosses(); stop_blocks(); }
         fill_seat_cut();
         front_scallop_cut();
+        stop_trim();
         rail_socket_cut();
         label_cuts();
         foot_pad_cuts();
