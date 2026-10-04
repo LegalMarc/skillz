@@ -455,6 +455,31 @@ module rail_socket_cut() {
         }
 }
 
+// The rail-1 groove breaks out through the SLOPED pick plane, and its front
+// flank is vertical, so the lip of material just in front of it ended in a
+// 46 degree knife edge about 2 mm tall: the spot that tore in test prints 1 and 2
+// (revision 10 final review, H2). A countersink, sheared to the plane, takes a
+// groove_chamfer x groove_chamfer 45 degree bevel off the groove's mouth in the
+// plane's own frame: built flat (z' above the plane) and sheared by the plane's
+// slope, so in the body it leaves the front lip a >= 90 degree edge and the back
+// lip 134 degrees. It stops at the groove's floor plane so the skin behind the
+// groove keeps its full thickness. The groove stays open through the top.
+module groove_outline() {
+    rail_trapezoid(rail_root_w, rail_tip_w, rail_out + rail_depth_clear, rail_clear);
+}
+module rail1_countersink() {
+    c = groove_chamfer;
+    sl = (trayB_rim - pickplane_front) / yB_tray1;
+    intersection() {
+        multmatrix([[1, 0, 0, module_w], [0, 1, 0, rail1_y], [0, sl, 1, pickplane(rail1_y)], [0, 0, 0, 1]])
+            hull() {
+                translate([0, 0, -c]) linear_extrude(height = 0.01) groove_outline();
+                translate([0, 0, 3]) linear_extrude(height = 0.01) offset(delta = c + 3) groove_outline();
+            }
+        translate([module_w - rail_out - rail_depth_clear, 0, 0]) cube([rail_out + 10, 400, 400]);
+    }
+}
+
 // Label recesses for 1/2 inch TZe tape: the lower strip on the module's own
 // front face, below the lid skirt so it reads with the lid on; the upper strip
 // on the wall between the trays, which faces forward over tray A and is read at
@@ -491,6 +516,7 @@ module body_geometry() {
         front_scallop_cut();
         stop_trim();
         rail_socket_cut();
+        rail1_countersink();
         label_cuts();
         foot_pad_cuts();
         corner_cuts();

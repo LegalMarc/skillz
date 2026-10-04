@@ -42,4 +42,5 @@ echo(str("PROBE mouth=", mouthA_min, " ", mouthA_corner_min, " ", mouthA_corner_
 echo(str("PROBE fill_x=", wall_out + fill_lid_clear));
 echo(str("PROBE fill_y=", hop_mouth_y0 + fill_lid_clear));
 echo(str("PROBE fill_z=", fill_seat_z + fill_lid_seat_gap));
+echo(str("PROBE rail1_z1=", rail1_z1));
 cube(0.001);

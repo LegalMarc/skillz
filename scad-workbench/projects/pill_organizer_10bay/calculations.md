@@ -589,3 +589,10 @@ labelled by the offset from the default: -100, -50, 0, +50, +100.
 - **Flush top (G7):** the stop block's top (0.2 under the plane, to avoid a coplanar
   union) and the front wall's top over the pillar (trimmed to 0.15 under) differ by
   0.05 mm, from 0.2.
+- **Break-out knife edge (H2):** the rail-1 groove breaks out through the sloped plane and its
+  front flank is vertical, so the lip in front of it ended in a 46 degree edge about 2 mm tall
+  (a 3-6 mm2 thin region in the z = 94.6 to 96 slices, right side). A `groove_chamfer` of 3 mm,
+  a 45 degree countersink built in the plane's own frame and sheared to the slope, now leaves
+  that lip a 90 degree or wider edge; it stops at the groove's floor plane so the skin keeps 4.4 mm.
+  `probes/corner_thickness.py` slices the zone every 0.25 mm and fails if any region under 2 mm
+  stands over 1 mm tall. Left (male rail) side has no break-out; its lead taper is excluded.

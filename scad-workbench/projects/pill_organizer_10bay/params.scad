@@ -464,6 +464,8 @@ mouthB_corner_demonstrated = throat(outlet_h, 0);           // 13.0 at the divid
 // Row A's mouth is NOT a measured fit: it is asserted never to be tighter than the
 // one that fed well, with 25% in hand at the centre, and (sanity floor) at least one
 // pill length. The pill-length floor only matters to a capsule standing on end.
+// (These two asserts are a backstop: the chute-height-under-the-vault and tray B pile-margin
+// asserts above bind first today; these only start to matter if those limits are relaxed.)
 assert(mouthA_min >= 1.25 * mouthB_demonstrated && mouthA_corner_min >= mouthB_corner_demonstrated,
        "row A's mouth is tighter than row B's, which is the one test print 2 showed feeding well (centre 1.25x, at the divider face 1.0x)");
 assert(mouthA_min >= pill_len,
@@ -703,6 +705,8 @@ rail_lead = 3.0;
 rail_boss = 7.0;
 rail_boss_margin = 6.0;         // buttress beyond the groove tip, each side, in Y
 rail_boss_w = rail_tip_w + 2 * rail_boss_margin;   // buttress footprint in Y (23)
+groove_chamfer = 3.0;        // 45 degree bevel round the rail-1 groove's break-out through the plane (H2): the
+                            // lip in front of it was a 46 degree knife edge that tore in test prints 1 and 2
 rail_skin = rail_boss + wall_out - rail_out - rail_depth_clear;   // 4.4, groove bottom to tray A
 // Rail 1's buttress is clipped by the outer silhouette rather than capped at a
 // guessed height. Over tray A that silhouette IS the pick plane, so the clip

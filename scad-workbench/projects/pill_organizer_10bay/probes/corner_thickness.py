@@ -25,6 +25,7 @@ from shapely.ops import unary_union
 from _common import params, parts
 
 THIN = 2.0
+TIP = 0.6         # mm2: the 70 degree lip tips of the dovetail (0.48 mm2, the same at every height) are below this
 SLIVER = 4.0      # mm2: below this a thin region is a wedge tip, not a flap
 
 
@@ -60,6 +61,27 @@ def run(mesh, module_w, zmax):
     return rows
 
 
+def breakout_scan(mesh, mw, rail1_y, zlo, zhi, side="right", step=0.25):
+    """Fine slices (<= 0.5 mm) through the rail-1 groove's break-out zone: the
+    18 mm of Y round the groove, the outer 9-10 mm of X on that side, from the
+    plane's height at the buttress front to above the groove's top. Returns the
+    thin regions (under THIN mm) of 0.2 mm2 or more, per slice."""
+    xs = (mw - 9, mw + 1) if side == "right" else (-6, 9)
+    win = box(xs[0], rail1_y - 9, xs[1], rail1_y + 9)
+    out = []
+    for z in np.arange(zlo, zhi, step):
+        full = solid_at(mesh, float(z)).intersection(box(-8, -2, mw + 8, 60))
+        if full.is_empty:
+            continue
+        # thin regions of the WHOLE slice, then clipped to the zone: clipping first
+        # would invent thin slivers at the zone's own edges
+        thin = full.difference(full.buffer(-THIN / 2).buffer(THIN / 2)).intersection(win)
+        for g in getattr(thin, "geoms", [thin]):
+            if g.area >= TIP:
+                out.append((round(float(z), 2), round(g.centroid.x, 1), round(g.centroid.y, 1), round(g.area, 2)))
+    return out
+
+
 def run_len(mesh, p0, p1, step=0.05):
     """Lengths of the solid runs along p0 -> p1."""
     p0, p1 = np.array(p0, float), np.array(p1, float)
@@ -90,6 +112,29 @@ if __name__ == "__main__":
     worst = max((r[3] for r in rows), default=0)
     print(f"\nlargest thin region in any slice: {worst:.1f} mm2   (flap if it persists over {SLIVER} mm2)")
     ok = True
+    if P is not None:
+        zp = lambda y: P["trayA_rim"] + y * (P["trayB_rim"] - P["trayA_rim"]) / P["yB_tray1"]
+        y1 = P["rail1_y"]
+        zlo, zhi = zp(y1 - 15) - 8, zp(y1 + 15) + 3
+        for side in ("right", "left"):
+            # the left face carries the MALE rail, which has no break-out; its tapered lead
+            # (the top 3 mm) ends in a small flat and is excluded
+            th = breakout_scan(mesh, mw, y1, zlo, zhi if side == "right" else P["rail1_z1"] - 4.0, side)
+            # a thin region only counts if it stands: it must recur, within 1 mm of the
+            # same place, in MIN_RUN consecutive slices (1 mm of height). A lone slice is
+            # where a chamfer's lower corner meets the dovetail lip, 0.5 mm tall, not an edge.
+            run, longest, where = {}, 0, None
+            for z, x, y, a_ in th:
+                key = next((k for k in run if abs(k[0] - x) < 1 and abs(k[1] - y) < 1 and abs(run[k][1] - (z - 0.25)) < 0.01), None)
+                n = (run.pop(key)[0] + 1) if key else 1
+                run[(x, y)] = (n, z)
+                if n > longest: longest, where = n, (z, x, y)
+            print(f"\nbreak-out zone, {side} side, slices every 0.25 mm from z {zlo:.0f} to {zhi if side == 'right' else P['rail1_z1'] - 4:.0f}: "
+                  f"{len(th)} thin regions of >= {TIP} mm2 (the dovetail lips' own 0.48 mm2 tips are below that); "
+                  f"the tallest stands {longest * 0.25:.2f} mm" + (f" (at z, x, y = {where}); all of them: {th}" if th else ""))
+            good = longest * 0.25 <= 1.0 - 1e-9
+            ok &= good
+            print(("PASS  " if good else "FAIL  ") + f"no material under {THIN} mm thick stands over 1 mm tall in the {side} break-out zone")
     if P is not None:
         y = P["rail1_y"]; wo = P["wall_out"]; ro = P["rail_out"]
         print("\nline measurements (solid runs along the line: start point, length mm):")

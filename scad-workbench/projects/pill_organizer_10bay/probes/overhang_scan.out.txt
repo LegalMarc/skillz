@@ -1,5 +1,5 @@
 
-build/print_ready/body.stl: 6196 faces, bounds [-5.0, 0.0, 0.0] .. [240.0, 194.8, 189.0]
+build/print_ready/body.stl: 6212 faces, bounds [-5.0, 0.0, 0.0] .. [240.0, 194.8, 189.0]
   downward faces past 45 deg from vertical, above the bed: flat 9664 mm2, steep 3423 mm2
     flat    8530.1 mm2  normal (np.float64(0.0), np.float64(0.0), np.float64(-1.0))  90.0 deg from vertical  x 18..222 y 60..72 z 103..103
     flat     319.1 mm2  normal (np.float64(0.0), np.float64(0.0), np.float64(-1.0))  90.0 deg from vertical  x 20..220 y 44..44 z 67..67
@@ -26,8 +26,8 @@ build/print_ready/body.stl: 6196 faces, bounds [-5.0, 0.0, 0.0] .. [240.0, 194.8
     steep      4.6 mm2  normal (np.float64(0.0), np.float64(-0.5), np.float64(-0.9))  61.9 deg from vertical  x 25..215 y 156..156 z 166..166
 
 build/print_ready/fill_lid.stl: 456 faces, bounds [0.0, -103.8, 0.0] .. [233.8, 8.0, 3.0]
-  downward faces past 45 deg from vertical, above the bed: flat 0 mm2, steep 74 mm2
-    steep     66.2 mm2  normal (np.float64(0.0), np.float64(0.7), np.float64(-0.7))  45.0 deg from vertical  x 69..165 y -1..-0 z 0..1
+  downward faces past 45 deg from vertical, above the bed: flat 0 mm2, steep 62 mm2
+    steep     54.5 mm2  normal (np.float64(0.0), np.float64(0.7), np.float64(-0.7))  45.0 deg from vertical  x 69..165 y -1..-1 z 0..0
     steep      0.5 mm2  normal (np.float64(-0.1), np.float64(-0.7), np.float64(-0.7))  45.0 deg from vertical  x 2..2 y -103..-103 z 0..1
     steep      0.5 mm2  normal (np.float64(0.7), np.float64(-0.1), np.float64(-0.7))  45.0 deg from vertical  x 233..233 y -102..-102 z 0..1
     steep      0.5 mm2  normal (np.float64(0.1), np.float64(-0.7), np.float64(-0.7))  45.0 deg from vertical  x 232..232 y -103..-103 z 0..1

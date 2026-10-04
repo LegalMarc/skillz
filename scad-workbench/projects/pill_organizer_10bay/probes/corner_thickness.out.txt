@@ -1,3 +1,7 @@
+/Users/mhm/.local/opt/openscad/venv/lib/python3.14/site-packages/trimesh/triangles.py:550: RuntimeWarning: divide by zero encountered in divide
+  inverse_denominator = 1.0 / (dot00 * dot11 - dot01 * dot01)
+/Users/mhm/.local/opt/openscad/venv/lib/python3.14/site-packages/trimesh/triangles.py:555: RuntimeWarning: invalid value encountered in subtract
+  barycentric[:, 0] = 1 - barycentric[:, 1] - barycentric[:, 2]
 module_w 240.0; slices every 2 mm, thin = under 2.0 mm, window = right 26 mm x front 45 mm
  z      thin regions  total mm2  largest mm2   regions over 4 mm2 (x, y, area)
    6.0     0           0.0       0.0     []
@@ -38,23 +42,29 @@ module_w 240.0; slices every 2 mm, thin = under 2.0 mm, window = right 26 mm x f
   76.0     2           1.0       0.5     []
   78.0     3           1.5       0.6     []
   80.0     3           7.1       6.2     [(234.5, 3.9, 6.2)]
-  82.0     3           1.4       0.5     []
+  82.0     2           1.0       0.5     []
   84.0     2           1.0       0.5     []
   86.0     2           1.0       0.5     []
   88.0     3          32.6      31.6     [(223.3, 44.2, 31.6)]
   90.0     3          32.6      31.6     [(223.3, 44.2, 31.6)]
   92.0     3          32.6      31.6     [(223.3, 44.2, 31.6)]
   94.0     3          32.6      31.6     [(223.3, 44.2, 31.6)]
-  96.0     3          38.6      31.6     [(238.1, 20.6, 6.5), (223.3, 44.2, 31.6)]
+  96.0     2          32.1      31.6     [(223.3, 44.2, 31.6)]
   98.0     2          32.1      31.6     [(223.3, 44.2, 31.6)]
  100.0     1           0.5       0.5     []
  102.0     1           0.5       0.5     []
- 104.0     1           0.5       0.5     []
- 106.0     0           0.0       0.0     []
- 108.0     0           0.0       0.0     []
+ 104.0     1           0.3       0.3     []
+ 106.0     1           0.3       0.3     []
+ 108.0     2           0.8       0.4     []
  110.0     0           0.0       0.0     []
 
 largest thin region in any slice: 31.6 mm2   (flap if it persists over 4.0 mm2)
+
+break-out zone, right side, slices every 0.25 mm from z 79 to 119: 2 thin regions of >= 0.6 mm2 (the dovetail lips' own 0.48 mm2 tips are below that); the tallest stands 0.50 mm (at z, x, y = (94.84, 239.6, 20.3)); all of them: [(94.59, 239.3, 20.1, 5.24), (94.84, 239.6, 20.3, 2.7)]
+PASS  no material under 2.0 mm thick stands over 1 mm tall in the right break-out zone
+
+break-out zone, left side, slices every 0.25 mm from z 79 to 88: 0 thin regions of >= 0.6 mm2 (the dovetail lips' own 0.48 mm2 tips are below that); the tallest stands 0.00 mm
+PASS  no material under 2.0 mm thick stands over 1 mm tall in the left break-out zone
 
 line measurements (solid runs along the line: start point, length mm):
   skin, along X at y=25.8, z=30:  [([230.2, 25.8, 30.0], np.float64(4.4))]
