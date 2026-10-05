@@ -259,11 +259,14 @@ module body_shell() {
 }
 
 // ------------------------------------------------------------
-// Outlet corner chamfers (D29). The top of each outlet opening -- the bottom
+// Outlet facets (D29, reshaped by D52). The top of each outlet opening -- the bottom
 // edge of the wall between the trays, into tray A, and of hopper B's front
-// wall, into tray B -- spans the whole bay with nothing under it, and test
-// print 1 printed both ragged. A 45 degree triangle in each top corner, one
-// per divider face, shortens that span by 2 x outlet_chamfer. Each prism
+// wall, into tray B -- spans the whole bay with nothing under it. Test print 1
+// printed both ragged and test print 3 drooped and strung along the 27 mm flat
+// the D29 chamfers left. A 45 degree triangle in each top corner, one per divider
+// face, fills the corner so the opening is a half octagon: vertical dividers, two
+// 45 degree facets climbing toward the centre, and an outlet_crown_flat (10 mm)
+// crown. Each facet is outlet_chamfer (17.48) long in both run and rise. Each prism
 // reaches 1mm into its divider and up into the wall, and stops 0.05mm inside
 // both faces of the wall in Y (D35): running it past them left a fin in the
 // air on each side, and flush would put a face on a face of the shell.

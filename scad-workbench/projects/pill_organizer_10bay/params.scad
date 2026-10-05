@@ -474,35 +474,57 @@ assert(trayA_scallop_r < (bay_w - 2 * trayA_scallop_r) / 2,
 // unchanged; behind that wall the chute simply has a taller pocket.
 // ------------------------------------------------------------
 porch_ceil_z = chuteA_ceil(yB_tray1);                    // 102.59, flat
-// Both outlet openings get 45 degree chamfers in their top corners, so the
-// unsupported span across the top of each opening is shorter than the bay.
-outlet_chamfer = 8.0;
+// Both outlet openings are half octagons (D52, replacing D29's 8 mm corner chamfers):
+// the divider side stays vertical, a 45 degree facet climbs from each divider toward
+// the bay centre, and only outlet_crown_flat of flat is left at the crown. Test print 3
+// (full-size PETG) drooped and strung along the old 27 mm flat. 45 degrees is the
+// facet that climbs least while still printing (a facet steeper from vertical climbs
+// MORE), so these are as short as they can be. The crown stays at
+// outletA_top / outletB_top: raising it would raise the pile at the bay centre, and the
+// pile margins have 1.1 mm (tray A, 25 degree repose, front wall) and 1.4 mm (tray B,
+// D33) in hand. So the facets eat the corners instead.
+outlet_crown_flat = 10.0;
+outlet_chamfer    = (bay_w - outlet_crown_flat) / 2;       // 17.48: each facet's run AND rise
+outlet_chamfer_tested = 8.0;                               // what test print 2 fed through (D29)
 
-assert(bay_w - 2 * outlet_chamfer > pill_len,
-       "the outlet corner chamfers narrow the top of the opening below one pill length -- a capsule lying crosswise would catch");
+assert(outlet_crown_flat <= 10.0 + 1e-6 && outlet_crown_flat > 0,
+       "the outlet crown flat is wider than the 10 mm bridge D52 allows");
+// Where the opening clears a pill (perpendicular throat >= pill_dia, measured as below):
+// the width over which a capsule lying crosswise can pass.
+function pass_w(open_h) = bay_w - 2 * max(0, outlet_chamfer
+    - (open_h - wall_div * ramp_tan - pill_dia / cos(ramp_deg)));
 
 // The throats, measured perpendicular to the 40 degree floor from the nearest point
 // of the wall in front (review F3, G5). The nearest point is that wall's back-bottom
 // corner, wall_div further up the floor than its front-bottom corner, so
 // (opening - wall_div x tan(40)) x cos(40). At the bay centre; near a divider the
-// 45 degree outlet chamfers (outlet_chamfer 8) lower the opening's top by
-// (outlet_chamfer - distance from the divider), so the corner throat is smaller.
-function throat(open_h, from_divider = 1000) =
-    (open_h - max(0, outlet_chamfer - from_divider) - wall_div * ramp_tan) * cos(ramp_deg);
-mouthA_min        = throat(chute_clear);                    // 26.03 at the bay centre
-mouthA_corner_min = throat(chute_clear, 0);                 // 19.9 at the divider face
-mouthA_corner_pill = throat(chute_clear, pill_dia / 2);     // 24.1 a pill's radius from the divider
+// 45 degree facets lower the opening's top by (chamfer - distance from the divider),
+// so the corner throat is smaller.
+function throat_c(open_h, from_divider = 1000, c = outlet_chamfer) =
+    (open_h - max(0, c - from_divider) - wall_div * ramp_tan) * cos(ramp_deg);
+function throat(open_h, from_divider = 1000) = throat_c(open_h, from_divider);
+mouthA_min        = throat(chute_clear);                    // 26.03 at the bay centre (unchanged by D52)
+mouthA_corner_min = throat(chute_clear, 0);                 // 12.6 at the divider face (19.9 before D52)
+mouthA_corner_pill = throat(chute_clear, pill_dia / 2);     // 16.9 a pill's radius from the divider
 // What actually fed in test print 2: row B's outlet, 27 mm vertical on the same 40
-// degree ramp with the same chamfers, measured the same way.
+// degree ramp, with the old 8 mm chamfers, measured the same way. Only the centre is
+// still a demonstrated number: the D52 corners (outlet B's is 5.7 at the divider face)
+// have never been printed.
 mouthB_demonstrated        = throat(outlet_h);              // 19.2 at the bay centre
-mouthB_corner_demonstrated = throat(outlet_h, 0);           // 13.0 at the divider face
+mouthB_corner_demonstrated = throat_c(outlet_h, 0, outlet_chamfer_tested);   // 13.0 at the divider face, old geometry
+mouthB_corner_d52          = throat(outlet_h, 0);           // 5.7 now
+mouthB_pass_w              = pass_w(outlet_h);              // 31.3 of 44.96 clears a pill
 // Row A's mouth is NOT a measured fit: it is asserted never to be tighter than the
 // one that fed well, with 25% in hand at the centre, and (sanity floor) at least one
 // pill length. The pill-length floor only matters to a capsule standing on end.
-// (These two asserts are a backstop: the chute-height-under-the-vault and tray B pile-margin
+// (These asserts are a backstop: the chute-height-under-the-vault and tray B pile-margin
 // asserts above bind first today; these only start to matter if those limits are relaxed.)
-assert(mouthA_min >= 1.25 * mouthB_demonstrated && mouthA_corner_min >= mouthB_corner_demonstrated,
-       "row A's mouth is tighter than row B's, which is the one test print 2 showed feeding well (centre 1.25x, at the divider face 1.0x)");
+// D52: the corner clause is now "a pill lying along the fall line passes at the divider
+// face" (12.6 >= 11 + 1), since the 13.0 it used to match was row B's old corner.
+assert(mouthA_min >= 1.25 * mouthB_demonstrated && mouthA_corner_min >= pill_dia + 1,
+       "row A's mouth is tighter than row B's at the centre (1.25x), or a pill cannot pass at the divider face (D52)");
+assert(pass_w(chute_clear) >= pill_len + 4 && mouthB_pass_w >= pill_len + 4,
+       "an outlet opening, where it clears a pill, is narrower than a crosswise capsule plus 4mm (D52 facets)");
 assert(mouthA_min >= pill_len,
        "the minimum of the mouth into tray A, measured perpendicular to the floor, is under one pill length (sanity floor)");
 
