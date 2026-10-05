@@ -424,3 +424,13 @@ declarations against what they claimed to test and by probing the mesh with
 - **Root cause:** the 10 mm margin is the multi-part test plates' spacing; the printer's usable footprint is 246 (5 mm each side).
 - **Fix:** single-part final plates are checked against 5..251 (`FINAL_MARGIN`) and the body is centred at x 6.5..249.5; recorded in `calculations.md` D49.
 - **Already promoted to a rule?** no.
+
+
+## Revision 13 -- the half-octagon openings and the one-piece lid
+
+### 2026-10-04 -- an end chamfer built from a prism, a cone and a prism left zero-area faces at both tangent points, then again when its chain points sat on the outline's own vertices
+- **Where:** `parts/pick_lid.scad`, the x-end chamfer running round the bend (D53), first attempt.
+- **Symptom:** the lid came out non-watertight in trimesh with edges shared by 4 and 6 faces and 8, then 60, zero-area triangles, all along the lines where the bend's arc meets the straight faces (and, in the second version, along every facet-to-facet line of the arc). OpenSCAD itself reported a clean manifold the whole time.
+- **Root cause:** the same class as the 2026-10-04 tangent-cutter entry. (1) A straight prism, a revolved cone and a vertical prism hand over on a tangent line, where their chamfer surfaces are tangent to each other and the lid's own faces are tangent to the arc. (2) Replacing them with one hulled piece per polyline segment, the chain's points on the outline's own arc vertices put each cutter's crease through the line where two lid facets meet, so four planes met along one line to floating point. (3) A vertex of the cutter on the end face's plane (x = 0) is a smaller version of the same thing.
+- **Fix:** the chain's bend points are the middles of the arc's facets and the points either side of the bend sit 2 mm into the straight faces, so every crease crosses a face instead of an edge; the section is a triangle carried past x = 0 so no cutter vertex lies in the end plane. Result: watertight, one body, shortest edge 0.0098 mm (revision 12's was the same), chamfer 0.500 to 0.501 mm round the whole chain on the mesh.
+- **Already promoted to a rule?** partly, by the 2026-10-04 generalisation (no tangent line, vertex row or face of a cutter ON a face or edge of what it meets). Added here: sweep a cutter along a curve in pieces whose joints cross the outline's facets, not at their vertices, and check trimesh watertight and the face-area minimum before looking at anything else; OpenSCAD's own "manifold, NoError" does not see this.

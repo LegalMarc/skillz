@@ -1,3 +1,33 @@
+# Resume note -- revision 13 (read this first)
+
+**Where it stands:** revision 13 (D51 to D53) is implemented on branch `pill-organizer-rev13`
+(from `pill-organizer-rev12` at `348e240`); not pushed, no PR. It answers the full-size PETG
+print: the arches drooped (D52) and the pick lid read as two pieces (D53). D52: the tray A mouth
+and outlet B are half octagons, a 45 degree facet 17.48 mm long off each divider and a 10 mm crown
+flat (27 before); the crowns did not move (pile margins), so the corners pay: outlet B's corner
+throat is 5.7 mm and 31.3 of 44.96 mm clears a pill. D53: the lid's plate and skirt are one profile,
+3.0 mm all round, a r 3.0 fillet inside the bend and r 1.5 outside, the 1.0 mm end chamfer one
+chain round the bend. D51 (`rail_clear` 0.40, not touched here) got its missing plan row. Read
+`calculations.md` "Revision 13" first, then `LID_PROFILE` and `chain_cut()` in `parts/pick_lid.scad`.
+
+**Proven:** `validate_scad.sh --all` (COVERAGE 14 passed, 0 failed, 3 n/a, 0 inconclusive, 1
+advisory), `check_rules.py` (all automated rules pass), every probe in `probes/` including the new
+`probes/outlet_arch.py` and the bend rows of `probes/edge_pass.py`; lid retention (a)-(h) and the four
+motion sweeps pass; each part one watertight body, no edge under 0.001 mm. **Not proven:** anything
+printed. In particular (R1) outlet B's corners passing capsules, (R2) the 1.5 mm round on the bed edge
+printing clean (worst layer step 0.36 mm), (R3) the lid seating with 0.10 mm (not 0.14) to the body's
+front top edge, (R4) the porch ceiling, now the longest flat in the body, not drooping.
+
+**Judgement calls:** crowns not raised (D33 and the tray A front wall have 1.4 and 1.1 mm left);
+the skirt thickened 2.65 -> 3.0 to make the wall constant (outer face y -3.35, bbox y 87.95); the
+tray A corner assert is now "a pill passes at the divider face" because 13.0 was row B's old corner;
+`build/section/` and the body and pick lid plates were rebuilt, the fill lid plate and the coupon were not.
+
+**Next step:** an adversarial review of revision 13 (start with `chain_cut()` and the corner-throat
+asserts in `params.scad`), then print the three plates, body first, dried PETG, no brim, no supports.
+
+---
+
 # Resume note -- revision 12 (read this first)
 
 **Where it stands:** revision 12, the final full-size print, is implemented on branch

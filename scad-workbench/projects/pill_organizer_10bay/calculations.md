@@ -204,7 +204,7 @@ printed it ragged anyway, and the rib split the flow into two 20.3 mm lanes.
 | Chute clear at the porch end | `porch_ceil_z − z_porch` | 36.0 |
 | Chute clear at the mouth's back face | `porch_ceil_z − chuteA_floor(33.2)` | 49.1 |
 | Mouth into tray A | bottom of the wall between the trays | 39.0, unchanged |
-| Outlet corner chamfers | `outlet_chamfer` at 45° | 8.0; top span 27.0 of 42.96 |
+| Outlet facets (D52; 8.0 and a 27.0 flat until revision 13) | `outlet_chamfer` at 45° | 17.48; crown flat 10.0 of 44.96 |
 
 The ceiling meets the 40-degree leg's ceiling at tray B's back wall at the same
 height, so there is no step in the flow. The pocket behind the mouth adds about
@@ -379,7 +379,7 @@ them (32 x 9 x 0.6, and the upper cut 1.0 deep). Revision 6 writes them.
 | Hopper B outlet vs tray B rim | 16.0 | OK — asserted >= 3 |
 | Tray B pile vs the wall in front of it | 5.1 at 30° repose, 2.0 at 25° | OK — D33; asserted >= 5 and > 0 |
 | Porch ceiling | flat bridge, 42.96 x 28 per bay | OK — slicer bridge; D29 (was a 25° overhang with a rib) |
-| Outlet tops | 45° corner chamfers, 27 mm span | OK — D29 |
+| Outlet tops | 45° facets, 10 mm crown flat | OK — D52 (27 mm span until revision 13) |
 | Cubby ceiling overhang | 45 from vertical, 22,100 mm^2 across 224 mm | OK — at the limit, D21 (was 50) |
 | Front joining groove | open from z 10 to 67.0, through the plane at 66.0 | OK — blind in revisions 3-5 |
 | Wall between trays, above tray B's floor | 19.9 | OK — but what it must hold back is the pile, not the floor: see D33 |
@@ -665,7 +665,7 @@ it. The back corners' rounding follows the lean (a sheared cutter, nicked 0.03).
 | Skin, groove floor to tray A | 4.4 | 2.4 (= wall_div) |
 | Buttress either side of the groove (`margin - rail_clear`) | 5.8 | 3.8 |
 | Groove front-lip bevel `groove_chamfer` / buttress back bevel `boss_bevel` | 3.0 / none | 1.0 / 1.0 |
-| `rail_clear` | 0.20 | 0.215 |
+| `rail_clear` | 0.20 | 0.215 (0.40 since D51) |
 
 The dovetail's flank slope (0.4) is unchanged. The lug (x 3.3 to 7.3, y 5.6 to 11.8)
 clears the buttress, which starts at y 15.8, by 4 mm (3.2 before).
@@ -789,7 +789,7 @@ tests every T row on the real meshes.
 | P2 | Plate underside, front and back edges | chamfer 1.0 | **E** | |
 | P3 | Plate underside, x-end edges | square | **T** 0.8 mm chamfer, from y = 0.2 back | up-facing in print; the end face keeps 3 - 1.0 - 0.8 = 1.2 mm of flat |
 | P4 | Skirt bottom edge | chamfer 1.0 | **E** | |
-| P5 | Skirt outer end edges (2 vertical edges, where the lid is pinched) | square | **T** 1.0 mm chamfer, not a round | the outer face hangs 43.8 degrees off vertical in print; a chamfer between it and the vertical end face stays inside that |
+| P5 | Skirt outer end edges (2 vertical edges, where the lid is pinched) | square | **T** 1.0 mm chamfer, not a round | the outer face hangs 43.8 degrees off vertical in print; a chamfer between it and the vertical end face stays inside that. Revision 13: now one chain with the plate's top chamfer, see P11 |
 | P6 | Skirt inner end edges | square | **K** | they face the body's front face across the 0.35 clearance |
 | P7 | Seating plane (underside), skirt clearance, lug and its contact face | | **K** | |
 | P8 | "FRONT" relief edges | square | **L** | 0.6 mm of text |
@@ -859,3 +859,129 @@ The limit checked is the printer's usable footprint, **5 to 251 mm** (`max_part_
 10 to 246: the body with its rail is 243 mm wide and cannot lie within a 236 mm window.
 Centred, the body spans x 6.5 to 249.5, y 21.5 to 234.5; the pick lid x 8.5 to 247.5, y 58.4 to 197.6;
 the fill lid x 11.1 to 244.9, y 63.5 to 192.5.
+
+## Revision 13: the half-octagon openings (D52) and the one-piece pick lid (D53)
+
+The full-size PETG print of revision 12 drooped and strung along the flat top of two
+openings and read the pick lid as two rectangles welded together.
+
+### Derived: the opening profiles (D52)
+
+Each opening is the bottom face of a 2.4 mm wall seen across the bay: vertical dividers, a 45
+degree facet from each, a flat crown. The facet is `outlet_chamfer` = (`bay_w` - `outlet_crown_flat`) / 2
+= (44.96 - 10) / 2 = **17.48** in both run and rise. 45 degrees is the least rise a printable facet has
+(a facet steeper from vertical climbs more per mm of run), so for a 10 mm crown this is the minimum.
+Measured on the real body by `probes/outlet_arch.py` (one ray up the opening at 15 distances
+from the divider, bays 0 and 4, both openings; all pass):
+
+| | Tray A mouth | Outlet B |
+|---|---|---|
+| Crown height, flat | 67.01, 10.0 mm | 136.99, 10.0 mm |
+| Facet | 45.0 degrees, 17.48 run and rise | the same |
+| Ceiling at the divider face (distance 0.3) | 49.83 | 119.81 |
+| Ceiling a pill radius (5.5) from the divider | 55.03 | 125.01 |
+| Unsupported span across the top | 10 mm (was 27) | 10 mm (was 27) |
+| Flat downward area in `overhang_scan.py`, 5 bays | 110.2 mm2 (was 319.1) | 110.2 mm2 (was 319.1) |
+| Throat at the bay centre, perpendicular to the 40 degree floor | 26.03, unchanged | 19.2, unchanged |
+| Throat at the divider face | 12.6 (was 19.9) | 5.7 (was 13.0, the one test print 2 fed through) |
+| Throat a pill radius from the divider | 16.9 (was 24.1) | 10.0 (was 17.2) |
+| Width over which the throat clears a pill (11 mm) | 44.96, all of it | 31.3 of 44.96 (was all of it) |
+| Pile margin that bounds the crown | 1.1 mm (front wall over a 25 degree pile) | 1.4 mm (D33: 6.4 against the 5.0 floor) |
+
+Why the crowns did not rise. A higher crown at the bay centre would give the facets less to
+take off the corners, but it raises the pile that forms at the centre of the opening by the same
+amount, and the margins above are all that is left: raising by 9.5 mm (to keep the old corner
+throat) would put tray B's pile 3.1 mm over the wall in front of it. So the centre is unchanged
+(`mouthA_min`, `outlet_h` 27, D33's margin 6.39 and tray A's front-wall margin 11.1 at 30 degrees)
+and the corners pay. What that costs in use is unmeasured: outlet B's corner throat (5.7 at the
+divider face) is under a capsule's diameter out to 6.9 mm from each divider. The asserts now say
+what is guarded: `mouthA_corner_min >= pill_dia + 1` and `pass_w(...) >= pill_len + 4` for both
+openings (31.3 against 30). `mouthB_corner_demonstrated` is kept at the old chamfer (13.0) as the
+only corner number a print has shown.
+
+The other flat bridges in the bays, from `overhang_scan.py` on the print-ready body. Hopper B's and
+hopper A's ceilings are the 40 degree chute (vaulted, 44.8 from vertical, listed as steep) and the
+leaning back wall, none flat. The flat faces left in the body are the porch ceiling under tray B
+(8530 mm2 across five bays, **44.96 x 40 mm each**), the 10 mm crowns above (110 mm2 each row), and
+label, scallop and foot-pad ceilings of 90 to 313 mm2 that were there before. The porch ceiling is not
+an opening arch (D29: a declared bridge) and is left. Droop risk: it is the longest unsupported flat
+in the part, 4.5 times the new crown's span, and the only flat of its size in the body. The print
+showed no complaint about it, but the arches' complaint was the same defect at 27 mm. It is a watch
+row in `TEST_PRINTS.md`; the fix, if it sags, is a gable in its ceiling like the vault's, at the cost of
+chute height that D33's margins do not have.
+
+### Derived: the one-piece pick lid (D53)
+
+| Quantity | Value | Note |
+|---|---|---|
+| Profile | one closed polygon, 42 points (`LID_PROFILE`), extruded once across 239 mm | the union of `PLATE` and `HOOK` is gone; `pick_plate` and `pick_hook` sub-features became `pick_body` |
+| Wall | plate 3.0 perpendicular (4.15 vertical), skirt 3.0 horizontal | the skirt was 2.65 (`pick_lid_hook_t` 3.0 to 3.35); outer face at y -3.35, inner face still -0.35 |
+| Bend turn | 46.2 degrees (90 - slope) | |
+| Inside fillet | r 3.0 (= `lid_t`), tangent length 1.28 | adds 0.26 on the bisector |
+| Outside round | r 1.5, tangent length 0.64 | removes 0.13 on the bisector |
+| Wall at the bend, on the bisector | 3.39 | 3.0 / cos(23.1) = 3.26 mitre, less 0.13, plus 0.26 |
+| Other convex corners | 45 degree chamfers, 0.586 on a right angle (1.69 at the plate's acute back-top corner) | the offset-chamfer rule of D27 |
+| Lid size (print orientation) | 239.0 x 139.5 x 22.7 mm, 105.5 cm3, 2418 triangles | was 139.3, 103 cm3, 2178 |
+| `EXPECTED_BBOX` | [239.0, 87.95, 111.63] | y was 87.6 |
+| Closest lid to body at rest | 0.10 mm (was 0.14) | the fillet, at y 0.2 to 0.3, against the body's front top edge round |
+| Motion sweeps (4) | all pass, worst clearance 0.100 mm (limit 0.05) | |
+
+The outside round against the bed. In print the plate's top is on the bed and this corner is its
+edge. The round starts tangent to the bed, rises through the 46.2 degree turn to meet the skirt's own
+face (which prints at 46.2 degrees from the bed), and so reaches full slope after R x (1 - cos 46.2) =
+0.31 R of height. Horizontal step per 0.2 mm layer, taken at each layer's mid-height:
+
+| R | Height of the round | Steps, layers 2 to 4 | Worst step | Worst angle from vertical |
+|---|---|---|---|---|
+| 1.0 | 0.31 | 0.28, 0.19, 0.19 | 0.28 | 54 |
+| **1.5** | **0.46** | **0.36, 0.22, 0.19** | **0.36** | **61** |
+| 2.0 | 0.62 | 0.43, 0.27, 0.20 | 0.43 | 65 |
+
+Beyond the round the face is the skirt's 0.19 mm per layer (46.2 degrees). Revision 12's chamfer at
+this corner printed a single 66.9 degree facet. R = 1.5 is the smallest radius in the asked range and is
+kept above the 1.0 mm end chamfer that runs round it (a chamfer cone at x = 0 would otherwise reach the
+axis); a PETG elephant foot of 0.2 to 0.3 mm at the bed softens the first step. `overhang_scan.py` now
+lists the round's first 1.2 mm as steep (300 mm2 in all against 92) and the end chamfer where it lies on
+the bed at exactly 45.0 degrees.
+
+The end chamfer is built as a chain: the lid's outline from below the skirt, round the bend (the same 16-point
+arc the profile uses, at its facet middles) and along the top face is walked as a polyline, and each segment's
+cutter is the hull of two mitred triangular sections. Neighbouring pieces share a section exactly. Measured on
+the mesh: the end section at x = 0.5 stands 0.500 to 0.501 mm inside the full section for the whole outer chain,
+bend included. The first two versions failed: analytic prisms and a cone handed over on a tangent line (8 zero-area
+faces, the INCIDENTS class again), then segments whose chain points sat on the profile's own facet-to-facet lines left
+60 zero-area faces; the chain's points are now facet middles and 2 mm into the straight faces (`INCIDENTS.md`).
+Each part is one watertight body with no edge under 0.001 mm (0.0098 mm shortest, the same as revision 12's).
+
+### Audit rows added to the pick lid (continues "Audit, pick lid")
+
+| # | Edge | Before | Decision | Reason |
+|---|---|---|---|---|
+| P9 | Outside of the bend (plate top / skirt outer corner, on the bed in print) | 0.2 mm offset-chamfer facet (a 46 degree turn) | **T** round r 1.5 | no seam line; worst layer step 0.36 mm (table above) |
+| P10 | Inside of the bend (plate underside / skirt inner face, a 134 degree concave corner) | sharp, plus a 2 mm skirt top inside the plate | **T** fillet r 3.0 | up-facing in print, so no overhang; `lid_t` is the asked minimum; costs 0.04 mm of clearance |
+| P11 | x-end edge round the bend: plate top face, bend, skirt outer face | a 1.0 chamfer along the top and a separate 1.0 chamfer down the skirt, meeting in a seam | **T** one 1.0 chamfer, continuous | the visible side of the two-rectangles look |
+| P12 | Underside x-end chamfer (P3), where it starts | y = 0.2, behind a sharp crotch | **E** start moved to 0.25 mm past the fillet's end (y 0.82) | in front of that the surface is the fillet, whose end edge stays square like the skirt's inner end edges (P6) |
+
+Counts over the 42 rows (revision 12's 39 and P9 to P11; P12 changes P3's start and adds no row):
+**T 15**, **E 11**, **K 9**, **L 7**. Body 27 rows, pick lid 11, fill lid 4.
+
+### Derived: what moved in revision 13
+
+| Check | Revision 12 | Revision 13 |
+|---|---|---|
+| `validate_scad.sh --all` | 14 passed, 0 failed, 3 n/a, 0 inconclusive, 1 advisory | the same, verbatim: `COVERAGE: 14 passed, 0 failed, 3 not-applicable, 0 inconclusive, 1 advisory (18 checks reported).` |
+| Capacity, middle bay (A / B) | 438.3 / 200.2 mL | 437.7 / 199.6 mL (the facets fill 0.6 mL per bay per row) |
+| Capacity, end bays | 428.4, 428.8 / 198.3 | 427.9, 428.3 / 197.8 |
+| `lid_retention.py` (a) to (h) | all pass; clearance at rest 0.14 mm | all pass; 0.10 mm |
+| `outlet_arch.py` | n/a | all pass (crown, flat 10.0, facet 45.0, divider-face height, mirror) |
+| `edge_pass.py` | all pass | all pass, with the bend rows (chamfer round the bend at 25, 50, 75 % of the round, both ends) |
+| `overhang_scan.py` | body flat 9664, steep 2811; pick lid steep 92; fill lid 75 | body flat 9246, steep 3039 (the 45.0 degree facets); pick lid steep 300; fill lid 75 |
+| Body solid | 2309.6 cm3 | 2314.8 cm3 (the facets) |
+| Triangles (body / pick lid / fill lid) | 17002 / 2178 / 460 | 17016 / 2418 / 460 |
+
+The final plates were rebuilt with `python3 build/maquette/make_plate.py final --export`: the body plate
+(also carries D51's `rail_clear` 0.40, which the previous plate predates) and the pick lid plate changed,
+the fill lid plate did not; the section plate (`build/section/`) was rebuilt too, because `fit_section.scad` cuts the body
+and the pick lid. The coupon was not touched. Final part sizes, print orientation: body 243.0 x 213.0 x 189.0 mm
+(2315 cm3), pick lid 239.0 x 139.5 x 22.7 mm (105.5 cm3), fill lid 233.8 x 129.0 x 3.0 mm (85 cm3). Centred, the
+body spans x 6.5 to 249.5, y 21.5 to 234.5; the pick lid x 8.5 to 247.5, y 58.2 to 197.8.

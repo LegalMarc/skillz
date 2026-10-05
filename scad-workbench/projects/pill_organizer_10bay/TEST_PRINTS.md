@@ -153,7 +153,7 @@ filament first. Slicer settings as test print 3 (no brim, no supports).
 | Front-right corner of tray A | Look at the stop block, filler, buttress and beads together | No lump a capsule wedges against (the probe finds no pocket over 3 mm); no gap narrower than a capsule that is deeper than a cusp |
 | Pick lid on / off (D38, D44) | Seat the lid end; pinch the skirt and plate edge and lift | Seats by its lug as before; lifts off between thumb and forefinger without a notch |
 | Rail and groove (D43) | Lower a spare rail into the front groove; slide the coupon block | Stiff enough; nothing tears at the break-out; the buttress no longer gets in the way in the front bin |
-| Coupon (D47, PETG) | Block bed-face up over each stub | Report the label that goes down by hand and comes back out, snug but free; centre is 0.215 |
+| Coupon (D47, PETG) | Block bed-face up over each stub | Report the label that goes down by hand and comes back out, snug but free; centre is 0.215 (superseded: the slim rail's coupon read too tight, `rail_clear` is 0.40 since D51 and the coupon is 0.50 .. 0.30) |
 | Labels (D45) | Stick 1/2 inch tape on both strips | Both on the front face, the back-row (B) strip above the front-row (A) strip, both visible with the lid on |
 | Left wall (D46) | Handle the section | The left wall (a whole divider) does not crack; the divider / front wall corners have a fillet |
 | Fill-lid end (D30) | Drop it into the mouth | Fits at 0.30 with the longer lid (121 mm); lifts out cleanly |
@@ -161,7 +161,7 @@ filament first. Slicer settings as test print 3 (no brim, no supports).
 | Stringing | Look at the groove, bins and lid | Much less than test print 3 once the filament is dry |
 
 
-## Final print — planned, revision 12
+## Final print — planned, revision 12 (with D51 to D53 from revision 13)
 
 **Printed:** three plates, `build/final/final_body_256.3mf`, `final_pick_lid_256.3mf`,
 `final_fill_lid_256.3mf`. PETG (dried), no brim, no supports, 15% infill. Test print 4
@@ -172,7 +172,7 @@ was skipped, so the revision 11 features below have never been printed; the edge
 |---|---|---|---|
 | D41 ribs | tray A, front-bottom corner, three per bay | Print clean as half-round ribs with a rounded end; a capsule slid to the wall rides up a rib's side and tips | A filled wedge, not larger ribs |
 | D42 flare | hopper A's back wall | A clean 60-degree lean (30 degrees from vertical: the outer face is a printable 30-degree overhang, the inner face leans up); pouring from a bottle goes in without spilling | Shallower lean or a wider mouth |
-| D43 slim rail and groove | right wall (groove) and left wall (rail), both ends | Rail enters the groove by hand at `rail_clear` 0.215, snug, comes out by hand; no tear at the break-out | Move `rail_clear` by one 0.025 step (the coupon is the guide) |
+| D43 slim rail and groove | right wall (groove) and left wall (rail), both ends | Rail enters the groove by hand at `rail_clear` 0.40 (D51), snug, comes out by hand; no tear at the break-out | Move `rail_clear` by one 0.05 step (the D51 coupon is the guide) |
 | K1 skin cap | the 2.4 mm skin behind the rail-1 groove, front bin | No wobble or tear; flat top, 2.3 mm above the lip at worst | Thicken or lower the cap |
 | D45 labels | the front face, two stacked strips | Both strips visible with the lid on, tape fits the 0.5 recess | |
 | Divider fillets | tray A and tray B front-wall corners (D46, D48) | Smooth quarter-rounds, no gap between them and the divider | |
@@ -181,6 +181,10 @@ was skipped, so the revision 11 features below have never been printed; the edge
 | Scallop, mouth and cubby chamfers (D48) | front wall floors, fill-mouth rim, cubby mouth | Clean 45-degree faces; the scallop chamfer fades out up the corner arcs | |
 | Cubby lip (D50) | the back wall's bottom 76 mm, across the cubby mouth | A 2.8 mm wall standing 76 mm above the bed with a clean 0.5 mm chamfer on its top edge, no wobble or tear while printing; the pocket behind it takes a lip balm and a pill cutter upright | Thicken the lip or lower `cubby_lip_top` |
 | Lid fit | pick lid on the body | Seats on its lugs, no jam on lift (probes pass; first time with the rounded side faces under the lid's ends) | |
+| Half-octagon openings (D52) | the tray A mouth (under the wall between the rows) and outlet B (under hopper B's front wall), every bay | A 10 mm crown flat that prints without sag or strings, and clean 45-degree facets either side of it (the full-size print drooped and strung along the old 27 mm flat). Pour a few capsules into hopper B and watch them leave outlet B: look for any that lodge in the side corners (the corner throat there is 5.7 mm; 31.3 of 44.96 mm clears a pill) | Lengthen the crown flat (`outlet_crown_flat` toward 14 mm if it still droops; toward 20 if capsules lodge in the corners) |
+| Porch ceiling, not changed by D52 | the flat 45 x 40 mm ceiling under tray B, every bay | The largest bridge left in the body, four times the span the openings now have. Look for sag or strings across it; none was reported in the full-size print | A shallow gable (the vault, D26) over the porch, which costs chute height |
+| One-piece pick lid (D53) | the bend between plate and skirt, outside and inside | One surface from plate through the bend to the skirt, no seam line. The 1.5 mm round on the bed edge prints without ragged first layers (worst step 0.36 mm); the 1.0 mm end chamfer is one bevel round the bend; the skirt is the plate's thickness | Go back to a 45 degree chamfer on the outside of the bend, as in revision 12 |
+| Lid on the body (D53) | the lid's inside fillet beside the body's front top edge | Seats on its lugs and lifts off by pinching the skirt as before. The fillet leaves 0.10 mm to the body's front edge by calculation (0.14 before), so a lid that rubs or sticks is this | Float the lid higher (`pick_lid_gap` 0.2 toward 0.3) or lower `pick_bend_in_r` (its assert is `>= lid_t`: relax it knowingly) |
 | Fill lid | in the mouth | 0.30 all round, lifts out by the lip; the lip's underside bevel is a fingertip rest | |
 | Stringing | groove, bins, lids | Much less than test print 3 once the PETG is dry | Dry longer; tune retraction |
 | Print time | body | About 960 g at 15% infill: start on a full spool | |
