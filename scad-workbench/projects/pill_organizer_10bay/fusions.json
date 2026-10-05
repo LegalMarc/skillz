@@ -8,13 +8,6 @@
   },
   {
     "pair": [
-      "pick_plate",
-      "pick_hook"
-    ],
-    "reason": "the hook is rotated by the pick plane's own slope and overlaps 2mm into the plate's front edge, so the two weld volumetrically rather than meeting along the single line where the plate's front face and the hook would otherwise touch."
-  },
-  {
-    "pair": [
       "body_shell",
       "vault_roof"
     ],
@@ -25,7 +18,7 @@
       "body_shell",
       "outlet_chamfers"
     ],
-    "reason": "each 45 degree corner prism reaches 1mm into its divider and up into the wall above the outlet, and 0.3mm past both faces of that wall in Y, so it welds volumetrically and no face of it lands on a face of the shell (D29)"
+    "reason": "each 45 degree facet prism reaches 1mm into its divider and up into the wall above the outlet, and stops 0.05mm inside both faces of that wall in Y, so it welds volumetrically and no face of it lands on a face of the shell (D29, facets lengthened to 17.48 mm by D52)"
   },
   {
     "pair": [
@@ -36,9 +29,9 @@
   },
   {
     "pair": [
-      "pick_plate",
+      "pick_body",
       "pick_lugs"
     ],
-    "reason": "each retention lug reaches 1.5mm up into the plate along its full length, so it welds volumetrically instead of meeting the underside on a plane (D32, D38)"
+    "reason": "each retention lug reaches 1.5mm up into the lid body along its full length, so it welds volumetrically instead of meeting the underside on a plane (D32, D38)"
   }
 ]

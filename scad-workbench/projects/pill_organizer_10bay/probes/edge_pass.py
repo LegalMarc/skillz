@@ -103,6 +103,21 @@ removed(pick, [0.05, 40.0, zu(40.0) + 0.05], [uc + 0.3, 40.0, zu(40.0) + 0.05], 
 removed(pick, [w - 0.05, 40.0, zu(40.0) + 0.05], [w - uc - 0.3, 40.0, zu(40.0) + 0.05], "plate underside x-end edge, right")
 chk("the plate's end face keeps over 1 mm of flat between its two chamfers", P["lid_t"] - 1.0 - uc >= 1.0)
 
+# D53: the end chamfer runs on round the bend. Points on the bend's arc (the profile's own centre line
+# of the round), at three angles, are cut away at x = 0.1 and stay at x = c + 0.3.
+al = np.radians(P["slope"])
+Ro = P["pick_bend_out_r"]; turn = 90.0 - P["slope"]; tv = P["lid_t"] / np.cos(al)
+Co = np.array([-ht, zu(-ht) + tv]); to = Ro * np.tan(np.radians(turn / 2))
+cen = np.array([-ht + Ro, Co[1] - to])
+for frac in (0.25, 0.5, 0.75):
+    a = np.radians(180 - turn * frac)
+    q = cen + (Ro - 0.05) * np.array([np.cos(a), np.sin(a)])          # 0.05 inside the round's surface
+    removed(pick, [0.1, q[0], q[1]], [P["lid_chamfer"] + 0.3, q[0], q[1]], f"end chamfer round the bend, {int(frac * 100)} % round, left")
+    removed(pick, [w - 0.1, q[0], q[1]], [w - P["lid_chamfer"] - 0.3, q[0], q[1]], f"end chamfer round the bend, {int(frac * 100)} % round, right")
+# and the body of the bend is solid in the middle of the lid, so the round did not open a gap
+a = np.radians(180 - turn * 0.5)
+chk("the bend is solid 0.3 mm inside its round, mid-width", pick.contains([[120.0, *(cen + (Ro - 0.3) * np.array([np.cos(a), np.sin(a)]))]])[0])
+
 print("\nfill lid (as modelled: plate top up)")
 fc = P["fill_lip_chamfer"]
 sl_ = fill.section(plane_origin=[0, 0, 1.0], plane_normal=[0, 0, 1])   # above the chamfer: the lip's full width

@@ -621,7 +621,16 @@ pick_lid_back_clear = 1.2;   // plate back edge to the wall behind tray B. 0.35 
 pick_lid_slope = atan((trayB_rim - pickplane_front) / yB_tray1);   // 43.8 deg
 pick_lid_len   = sqrt(pow(yB_tray1, 2) + pow(trayB_rim - pickplane_front, 2))
                  - pick_lid_back_clear;
-pick_lid_hook_t = 3.0;
+pick_lid_hook_t = pick_lid_clear + lid_t;   // 3.35: the skirt is lid_t thick, like the plate (D53; 3.0 outside, 2.65 thick, until then)
+// D53, the bend of the unibody pick lid (parts/pick_lid.scad). Inside (concave) fillet r = lid_t. Outside
+// (convex) round 1.5 mm: the bend turns the surface only 46.2 degrees, and in print it is
+// the plate-top / skirt-outer corner on the bed, so the round starts tangent to the bed and
+// climbs 0.31 x R in height before it reaches the skirt's own 46.2 degree face: 0.46 mm
+// (two layers at 0.2). Worst layer-to-layer overhang step at 0.2 mm layers: 0.36 mm at 1.5,
+// 0.43 at 2.0 (calculations.md), against 0.2 on a clean 45 degree face. 1.5 is the bottom of the
+// 1.5 to 2 range asked for, and it stays larger than the end chamfer (1.0) that runs round it.
+pick_bend_in_r  = lid_t;
+pick_bend_out_r = 1.5;
 pick_lid_gap    = 0.2;   // vertical float above the pick plane; keeps the pair a
                          // near miss rather than a coplanar resting contact
 // A skirt (D17): it hangs down the OUTSIDE of the front face, past the
@@ -951,6 +960,8 @@ lid_round   = 1.0;          // pick lid plate front/back edges and skirt bottom,
                             // did, at 1.5 on a 3.0 plate -- standalone it survived
                             // on floating point, through use<> it vanished and the
                             // assembly had no pick lid at all; revision 7)
+assert(pick_bend_in_r >= lid_t && pick_bend_out_r > lid_chamfer && pick_bend_out_r <= 2.0,
+       "the unibody lid's bend radii are outside D53's rules (inside >= lid_t; outside above the end chamfer, at most 2.0 for the first-layer overhang)");
 assert(lid_round < lid_t / 2 - 0.3 && lid_round < (pick_lid_hook_t - pick_lid_clear) / 2 - 0.3,
        "lid_round erodes the pick lid's plate or skirt to nothing");
 
