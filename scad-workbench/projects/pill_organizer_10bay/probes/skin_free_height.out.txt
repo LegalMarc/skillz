@@ -1,5 +1,5 @@
 skin 2.4 mm thick, middle at x=235.4; front lip top vs highest skin top over the groove's width:
-  at groove floor +0.2 : lip edge y  19.66, front lip top z   94.81, skin top max z   97.08 -> skin stands  2.26 mm above the lip (0.94 x its thickness)
-  at mid groove        : lip edge y  20.26, front lip top z   95.39, skin top max z   97.08 -> skin stands  1.69 mm above the lip (0.70 x its thickness)
-  at mouth -0.3        : lip edge y  20.68, front lip top z   95.51, skin top max z   97.08 -> skin stands  1.57 mm above the lip (0.65 x its thickness)
+  at groove floor +0.2 : lip edge y  19.47, front lip top z   94.64, skin top max z   96.90 -> skin stands  2.26 mm above the lip (0.94 x its thickness)
+  at mid groove        : lip edge y  20.07, front lip top z   95.21, skin top max z   96.90 -> skin stands  1.69 mm above the lip (0.70 x its thickness)
+  at mouth -0.3        : lip edge y  20.49, front lip top z   95.33, skin top max z   96.90 -> skin stands  1.57 mm above the lip (0.65 x its thickness)
 PASS  the skin stands at most 1 x its thickness (2.4) above the front lip (worst 2.26 mm = 0.94 x)

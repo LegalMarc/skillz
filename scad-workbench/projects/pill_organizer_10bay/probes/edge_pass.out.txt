@@ -1,5 +1,5 @@
-PASS  body is one watertight body (17002 triangles)
-PASS  pick_lid is one watertight body (2178 triangles)
+PASS  body is one watertight body (17012 triangles)
+PASS  pick_lid is one watertight body (2418 triangles)
 PASS  fill_lid is one watertight body (460 triangles)
 
 body
@@ -25,11 +25,18 @@ PASS  cubby mouth chamfer, lip top: [120.0, 194.75, 75.95] is cut away, [120.0, 
 PASS  tray B front wall / divider corner is filleted (a point 0.25 mm from both faces is solid)
 
 pick lid (as modelled: assembled orientation)
-PASS  skirt outer end edge, left: [0.1, -2.9, 60.0] is cut away, [1.3, -2.7, 60.0] stays
-PASS  skirt outer end edge, right: [238.9, -2.9, 60.0] is cut away, [237.7, -2.7, 60.0] stays
+PASS  skirt outer end edge, left: [0.1, -3.25, 60.0] is cut away, [1.3, -3.05, 60.0] stays
+PASS  skirt outer end edge, right: [238.9, -3.25, 60.0] is cut away, [237.7, -3.05, 60.0] stays
 PASS  plate underside x-end edge, left: [0.05, 40.0, 115.55] is cut away, [1.1, 40.0, 115.55] stays
 PASS  plate underside x-end edge, right: [238.95, 40.0, 115.55] is cut away, [237.9, 40.0, 115.55] stays
 PASS  the plate's end face keeps over 1 mm of flat between its two chamfers
+PASS  end chamfer round the bend, 25 % round, left: [0.1, -3.27, 77.8] is cut away, [1.3, -3.27, 77.8] stays
+PASS  end chamfer round the bend, 25 % round, right: [238.9, -3.27, 77.8] is cut away, [237.7, -3.27, 77.8] stays
+PASS  end chamfer round the bend, 50 % round, left: [0.1, -3.18, 78.07] is cut away, [1.3, -3.18, 78.07] stays
+PASS  end chamfer round the bend, 50 % round, right: [238.9, -3.18, 78.07] is cut away, [237.7, -3.18, 78.07] stays
+PASS  end chamfer round the bend, 75 % round, left: [0.1, -3.04, 78.33] is cut away, [1.3, -3.04, 78.33] stays
+PASS  end chamfer round the bend, 75 % round, right: [238.9, -3.04, 78.33] is cut away, [237.7, -3.04, 78.33] stays
+PASS  the bend is solid 0.3 mm inside its round, mid-width
 
 fill lid (as modelled: plate top up)
 PASS  lip underside chamfer, left side: [101.94, -4.0, 0.12] is cut away, [102.7, -4.0, 0.12] stays

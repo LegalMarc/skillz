@@ -1,3 +1,6 @@
-bay 2 (x 97.5 .. 142.5): row A 438.3 mL, row B 200.2 mL   (charge 147.4 mL: A 2.97x, B 1.36x)
-bay 0 (x 2.8 .. 47.8): row A 428.4 mL, row B 198.3 mL   (charge 147.4 mL: A 2.91x, B 1.35x)
-bay 4 (x 192.2 .. 237.2): row A 428.8 mL, row B 198.3 mL   (charge 147.4 mL: A 2.91x, B 1.35x)
+bay 2 (x 97.5 .. 142.5): row A 437.7 mL, row B 199.6 mL   (charge 147.4 mL: A 2.97x, B 1.35x)
+  component   510.5 mL   y  124.8 ..  214.1   z    0.0 ..  185.7
+  component   437.7 mL   y    0.0 ..  207.0   z    4.8 ..  185.7
+  component   199.6 mL   y   45.2 ..  157.1   z  105.6 ..  185.7
+  component     0.2 mL   y    0.0 ..    0.5   z   24.3 ..   36.9
+  component     0.2 mL   y    0.0 ..    0.5   z    7.7 ..   20.3
