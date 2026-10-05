@@ -37,6 +37,9 @@ EXPORTS = {
         ("build/section/fill_lid.stl", "fit_section.scad", ['PART="fill_lid"']),
         ("build/calibration_coupon.stl", "calibration_coupon.scad", []),
     ],
+    "coupon": [
+        ("build/calibration_coupon.stl", "calibration_coupon.scad", []),
+    ],
     "final": [
         ("build/print_ready/body.stl",     "print_export.scad", ['PART="body"']),
         ("build/print_ready/pick_lid.stl", "print_export.scad", ['PART="pick_lid"']),
@@ -76,6 +79,10 @@ PLATES = {
         ("pick_lid_end_full_size",        "build/section/pick_lid.stl",   (85.0, 20.0)),
         ("fill_lid_end_full_size",        "build/section/fill_lid.stl",   (145.0, 20.0)),
         ("calibration_coupon",            "build/calibration_coupon.stl", (205.0, 20.0, "rot90")),
+    ]),
+    # D51: the rail coupon alone, to confirm the fit before the final body
+    "coupon": ("build/coupon/rail_coupon_256.3mf", "rail coupon only (D51)", [
+        ("rail_coupon_d51",               "build/calibration_coupon.stl", (66.0, 113.0)),
     ]),
 }
 FINAL = [   # (3mf, object name, stl)
