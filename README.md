@@ -20,9 +20,30 @@ Two rules make it safe for legal workflows: it **never fabricates registration d
 
 **Intended workflow:** run it on every candidate name *before* anyone falls in love with one; the report routes to attorney review with the key records located, quoted, and pre-verified.
 
+### [pandadoc-pdf-download](pandadoc-pdf-download/)
+
+Download a PandaDoc document as a PDF from its public view link (`app.pandadoc.com/document/v2?token=...`), including when the sender has disabled the recipient's download button. Produces two files: PandaDoc's own byte-exact stored source PDF, and a signed reconstruction with the signature images and field values stamped in at the positions the viewer renders them. Built on Playwright browser tools; the link's token is the user's own document access.
+
 ### [workflow-loop](workflow-loop/)
 
 Turn a goal into self-contained GitHub issues, then grind through them **AFK** with a deterministic multi-agent loop: fresh clean-context coder per ticket, independent adversarial reviewer who re-runs all verification, committer that lands with evidence — and blocked tickets are *parked* (work stashed, findings posted to the issue, triage label applied) so an overnight queue never dies at the first stubborn ticket. Model-agnostic: roles are capability tiers and effort levels, not model names. Requires a runtime with a Workflow-style orchestration tool (built for Claude Code).
+
+### [scad-workbench](scad-workbench/)
+
+Not a skill: a provisioned, verified headless OpenSCAD toolchain for agent-driven mechanical design, plus a survey of existing agent CAD skills. `install.sh` sets up the toolchain and libraries, `verify.sh` is an acceptance test that must catch a motion clash without inventing one, and `render.sh` produces six views and a contact sheet to read. Includes a worked project (`projects/pill_organizer_10bay`). Use it by cloning the repo; it is not offered as a plugin.
+
+## Install
+
+As Claude Code plugins, one per skill:
+
+```
+/plugin marketplace add LegalMarc/skillz
+/plugin install tm-clearance@legalmarc-skillz
+```
+
+Replace `tm-clearance` with any of `ai-tos-review`, `pandadoc-pdf-download`, `tm-clearance`, or `workflow-loop`.
+
+Manually: clone this repo and copy or symlink the skill directory you want into `~/.claude/skills/`, e.g. `ln -s "$PWD/tm-clearance" ~/.claude/skills/tm-clearance`. The skills are plain `SKILL.md` folders, so they also work in any agent runtime that reads that format.
 
 ## Provenance
 

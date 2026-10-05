@@ -1,0 +1,29 @@
+{
+  "name": "legalmarc-skillz",
+  "owner": {
+    "name": "Marc Mandel"
+  },
+  "description": "Skills for legal work and building, from LegalMarc/skillz.",
+  "plugins": [
+    {
+      "name": "ai-tos-review",
+      "source": "./ai-tos-review",
+      "description": "Rapid, IP-focused triage of an AI tool's Terms of Service for corporate adoption. Determines the two things that decide the go/no-go — whether the provider can train on or reuse our inputs and outputs, and whether we own the outputs — then returns a one-line verdict, a short employee-facing findings list, and a section-cited addendum for legal. Use whenever someone wants to vet, evaluate, screen, or get an IP read on an AI tool, SaaS, model, or vendor's ToS, terms of use, EULA, or DPA before adopting it — including phrasings like \"can we use this AI tool\", \"is this tool's terms OK\", or a pasted block of terms of service — even if they don't explicitly say \"IP review\". Model-neutral; designed to run the same on any frontier reasoning model. IP-only: not a privacy, security, or general contract review."
+    },
+    {
+      "name": "pandadoc-pdf-download",
+      "source": "./pandadoc-pdf-download",
+      "description": "Download a PandaDoc document as PDF from its public view (app.pandadoc.com/document/v2?token=...) — byte-exact source PDF plus a signed reconstruction with signature images and field values stamped in. Use when the user shares a PandaDoc link and wants the PDF, especially when the sender disabled the recipient download button."
+    },
+    {
+      "name": "tm-clearance",
+      "source": "./tm-clearance",
+      "description": "Full US trademark clearance workflow: structured client intake, federal (USPTO) and common-law searches, Abercrombie strength and Section 2(e) screening, 13-factor DuPont likelihood-of-confusion analysis, and a source-tagged, attorney-review-ready clearance report with strategic recommendations. Use whenever someone wants to clear, vet, screen, or search a trademark, brand name, product name, company name, or app name — including \"can we use/trademark this name\", \"is this name taken\", \"run a knockout search\", \"clearance search\", or any likelihood-of-confusion question — even if they never say the word \"trademark\". Never fabricates registration data: every finding is source-tagged as verified-live or flagged for manual verification. US federal and common law only; a preliminary screen that routes to attorney review, not a legal opinion."
+    },
+    {
+      "name": "workflow-loop",
+      "source": "./workflow-loop",
+      "description": "Turn a goal into self-contained GitHub issues, then autonomously grind through them AFK with a multi-agent loop that gives every ticket clean context: a coder implements and stages, an independent reviewer adversarially verifies, a committer lands — and blocked tickets are parked with findings posted to the issue so the loop keeps going without human intervention. Use when the user wants to break work into tickets and solve them automatically, run an AFK/autonomous/overnight/unattended build loop, grind a ticket queue with fresh context per ticket, or says \"create issues and solve them\". Model- agnostic: roles are defined by capability tier and effort, not model names."
+    }
+  ]
+}
