@@ -262,17 +262,16 @@ module body_shell() {
 // Outlet facets (D29, reshaped by D52). The top of each outlet opening -- the bottom
 // edge of the wall between the trays, into tray A, and of hopper B's front
 // wall, into tray B -- spans the whole bay with nothing under it. Test print 1
-// printed both ragged and test print 3 drooped and strung along the 27 mm flat
+// printed both ragged and test print 4 drooped and strung along the 29 mm flat
 // the D29 chamfers left. A 45 degree triangle in each top corner, one per divider
 // face, fills the corner so the opening is a half octagon: vertical dividers, two
-// 45 degree facets climbing toward the centre, and an outlet_crown_flat (10 mm)
-// crown. Each facet is outlet_chamfer (17.48) long in both run and rise. Each prism
+// 45 degree facets climbing toward the centre, and a crown flat (D54: 10 mm on tray A's
+// mouth, 20 mm on outlet B). Each facet is outletX_chamfer (17.48, 12.48) long in both run and rise. Each prism
 // reaches 1mm into its divider and up into the wall, and stops 0.05mm inside
 // both faces of the wall in Y (D35): running it past them left a fin in the
 // air on each side, and flush would put a face on a face of the shell.
 // ------------------------------------------------------------
-module outlet_corner(x_wall, dir, z_edge, z_top, y0, y1) {
-    c = outlet_chamfer;
+module outlet_corner(x_wall, dir, z_edge, z_top, y0, y1, c) {
     T = z_top + 1;
     // in (x, z): a right triangle against the divider face at x_wall, its
     // hypotenuse at 45 degrees through (x_wall + dir*c, z_edge)
@@ -286,9 +285,9 @@ module outlet_chamfers() {
         x0 = wall_x1(i); x1 = x0 + bay_w;
         for (side = [[x0, 1], [x1, -1]]) {
             outlet_corner(side[0], side[1], outletA_top, outletA_top,
-                          yA_tray1 + 0.05, yA_wall1 - 0.05);
+                          yA_tray1 + 0.05, yA_wall1 - 0.05, outletA_chamfer);
             outlet_corner(side[0], side[1], outletB_top, outletB_top,
-                          yB_tray1 + 0.05, yB_wall1 - 0.05);
+                          yB_tray1 + 0.05, yB_wall1 - 0.05, outletB_chamfer);
         }
     }
 }

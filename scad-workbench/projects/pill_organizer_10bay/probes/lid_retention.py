@@ -147,6 +147,25 @@ print()
 rest = moved(lid, translation(down * P["lug_clear"]))
 check("(e2) the rest pose touches the stops without intersecting", overlap_mm3(body, rest) <= TOL_REST,
       f"overlap {overlap_mm3(body, rest):.3f} mm3 (lid {P['lug_clear']} mm down-slope of nominal)")
+# the up-slope room from the rest pose: how far the lid can ride up the slope before it first meets
+# the body (the lid's fillet beside the body's front top edge, since D53; the skirt before that)
+lo, hi = 0.0, 2.0
+for _ in range(14):
+    mid = (lo + hi) / 2
+    if overlap_mm3(body, moved(rest, translation(u * mid))) > TOL_REST: hi = mid
+    else: lo = mid
+ROOM = lo
+print(f"      up-slope room from the rest pose: {ROOM:.3f} mm before the lid meets the body ({ROOM - P['lug_clear']:.3f} mm past the nominal pose)")
+try:
+    from trimesh.proximity import closest_point
+    pts, _ = trimesh.sample.sample_surface(rest, 60000)
+    front = pts[(pts[:, 1] < 4.0) & (pts[:, 0] > 20) & (pts[:, 0] < 220)]     # the skirt and the bend's fillet, between the lugs (which touch the stops by design)
+    c = P["lug_clear"]
+    for name, off in (("rest (on the stops, 0.5 down-slope of nominal)", 0.0), ("nominal pose", c), ("nominal + 0.2 up-slope", c + 0.2), ("nominal + 0.3 up-slope", c + 0.3)):
+        q = front + u * off
+        print(f"      closest skirt / fillet to body, {name}: {closest_point(body, q)[1].min():.3f} mm")
+except Exception as ex:
+    print("      (closest distance not measured: %s)" % ex)
 def tilted(base, ang, ride):
     T = translation(u * ride)
     piv = pivot + down * P["lug_clear"] + u * ride
@@ -158,7 +177,7 @@ for ang in np.arange(0.25, 15.01, 0.25):
     if overlap_mm3(body, tilted(rest, ang, 0.0)) <= TOL_REST:
         need[ang] = 0.0; continue
     bad_at_zero.append(ang)
-    lo, hi = 0.0, 1.0
+    lo, hi = 0.0, ROOM
     if overlap_mm3(body, tilted(rest, ang, hi)) > TOL_REST:
         need[ang] = None; continue
     for _ in range(12):
@@ -177,8 +196,8 @@ for d in range(1, 16):
     rs = [need[a] for a in need if d - 1 < a <= d and need[a] is not None]
     rows.append(f"{d}:{max(rs):.2f}")
 print("      " + "  ".join(rows))
-check("(e2) tilting 0.25..15 deg from the rest pose clears with an up-slope ride under 1.0 mm (the room there is)",
-      not unsolved and mx < 1.0, f"max ride {mx:.3f} mm at {amax:.2f} deg" if not unsolved else f"no ride up to 1.0 mm clears at {unsolved}")
+check("(e2) tilting 0.25..15 deg from the rest pose clears with an up-slope ride inside the room there is (measured above)",
+      not unsolved and mx < ROOM, f"max ride {mx:.3f} mm at {amax:.2f} deg, room {ROOM:.3f} mm" if not unsolved else f"no ride up to {ROOM:.3f} mm clears at {unsolved}")
 
 # (h) lift, then draw forward; and where a straight lift meets the fill lid
 print()

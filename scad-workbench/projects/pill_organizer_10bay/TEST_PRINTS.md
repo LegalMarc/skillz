@@ -134,10 +134,22 @@ the print shows a problem):
 | Rail-1 buttress, back-top edge inside tray A (about x 234, y 37, z 112) | A 46 degree edge, 7 mm long, under the lid. Chipping or a ragged edge | Add a 1 mm chamfer there |
 | Groove mouth in the side-wall top | The D39 chamfer widens it to about 17 mm. A capsule dropped there with the lid off can fall into the groove, as it could before | Note it; a cap or narrower chamfer is a revision 11 question |
 
-## Test print 4 — planned, revision 11
+## Test print 4 — printed 2026-10-04, revision 11 section (results)
 
-**SKIPPED:** the user went straight to the full unit (revision 12, "Final print" below). Nothing here
-was printed. Its checks are kept because the final print is the first print of every feature in it.
+**PRINTED** (`test_print_4_rev11` on the printer, PETG), after revision 12 had been designed as the
+final print. Its photos and the user's feedback drove revision 13 (D51 to D54). Nothing else was reported:
+the planned checks below are not answered, so the final print is still the first print of every
+feature in them. Results:
+
+| Watch | Result | Change, revision 13 |
+|---|---|---|
+| Arches over the openings (the tray A mouth and outlet B) | Drooped a little, strung along the flat top; "make them like half octagon instead of half hexagon" | Half octagons: 45 degree facets and a short crown flat, 10 mm (tray A) and 20 mm (outlet B, D54) instead of 29 (D52, D54) |
+| Pick lid | Looks like two rectangles welded together; wants a more unibody profile | One profile, constant 3.0 wall, a fillet inside the bend and a round outside, one end chamfer round it (D53) |
+| Coupon (slim rail, 0.265 .. 0.165) | Every stub too large for the slot | `rail_clear` 0.40 as a best guess (D51); new coupon 0.50 .. 0.30 |
+| D51 coupon (0.50 .. 0.30) | **Printing; reading pending.** Read it before printing the body (README, "Print the final unit") | If the best stub is not "0", set `rail_clear` and rebuild the plates first |
+| Everything else in the planned checks | Not reported | None |
+
+Planned checks, kept for the final print:
 
 **Printed:** `build/section/test_print_section_256.3mf`: the right-hand end bay cut at
 the left face of divider 4, the whole height and depth (50.2 x 213 x 189 mm), the
@@ -164,9 +176,12 @@ filament first. Slicer settings as test print 3 (no brim, no supports).
 ## Final print — planned, revision 12 (with D51 to D53 from revision 13)
 
 **Printed:** three plates, `build/final/final_body_256.3mf`, `final_pick_lid_256.3mf`,
-`final_fill_lid_256.3mf`. PETG (dried), no brim, no supports, 15% infill. Test print 4
-was skipped, so the revision 11 features below have never been printed; the edge pass
-(D48) is new too. Report anything that is not a pass.
+`final_fill_lid_256.3mf`. PETG (dried), no brim, no supports, 15% infill. **Before the body: read the
+D51 coupon** (`build/coupon/rail_coupon_256.3mf`, printing). If its best stub is not "0", set
+`rail_clear` to the read value and run `python3 build/maquette/make_plate.py final --export` first:
+the body bakes in the 0.40 guess. Test print 4 reported only the arches, the lid and the coupon, so
+the other revision 11 features below have never been checked on a print; the edge pass (D48) is new
+too. Report anything that is not a pass.
 
 | Watch | Where | What to look for | If it fails |
 |---|---|---|---|
@@ -181,10 +196,10 @@ was skipped, so the revision 11 features below have never been printed; the edge
 | Scallop, mouth and cubby chamfers (D48) | front wall floors, fill-mouth rim, cubby mouth | Clean 45-degree faces; the scallop chamfer fades out up the corner arcs | |
 | Cubby lip (D50) | the back wall's bottom 76 mm, across the cubby mouth | A 2.8 mm wall standing 76 mm above the bed with a clean 0.5 mm chamfer on its top edge, no wobble or tear while printing; the pocket behind it takes a lip balm and a pill cutter upright | Thicken the lip or lower `cubby_lip_top` |
 | Lid fit | pick lid on the body | Seats on its lugs, no jam on lift (probes pass; first time with the rounded side faces under the lid's ends) | |
-| Half-octagon openings (D52) | the tray A mouth (under the wall between the rows) and outlet B (under hopper B's front wall), every bay | A 10 mm crown flat that prints without sag or strings, and clean 45-degree facets either side of it (the full-size print drooped and strung along the old 27 mm flat). Pour a few capsules into hopper B and watch them leave outlet B: look for any that lodge in the side corners (the corner throat there is 5.7 mm; 31.3 of 44.96 mm clears a pill) | Lengthen the crown flat (`outlet_crown_flat` toward 14 mm if it still droops; toward 20 if capsules lodge in the corners) |
-| Porch ceiling, not changed by D52 | the flat 45 x 40 mm ceiling under tray B, every bay | The largest bridge left in the body, four times the span the openings now have. Look for sag or strings across it; none was reported in the full-size print | A shallow gable (the vault, D26) over the porch, which costs chute height |
+| Half-octagon openings (D52) | the tray A mouth (under the wall between the rows) and outlet B (under hopper B's front wall), every bay | A 10 mm (tray A) and 20 mm (outlet B, D54) crown flat that prints without sag or strings, and clean 45-degree facets either side (test print 4 drooped and strung along the old 29 mm flat). Pour a few capsules into hopper B and watch them leave outlet B: look for any that lodge in the side corners (the throat a pill radius from a divider is 13.8 mm, a capsule 11; the mesh sweep's worst pose clears by +1.37 mm) | If outlet B's 20 mm still droops, shorten `outletB_crown_flat` and re-run `probes/outlet_arch.py`: it fails below +1.0 mm of worst-pose margin (about 19 mm); if capsules lodge, lengthen it |
+| Porch ceiling, not changed by D52 | the flat 45 x 40 mm ceiling under tray B, every bay | The largest bridge left in the body, 2.2 times outlet B's crown and 4.5 times tray A's. Look for sag or strings across it; none was reported on test print 4 | A shallow gable (the vault, D26) over the porch, which costs chute height |
 | One-piece pick lid (D53) | the bend between plate and skirt, outside and inside | One surface from plate through the bend to the skirt, no seam line. The 1.5 mm round on the bed edge prints without ragged first layers (worst step 0.36 mm); the 1.0 mm end chamfer is one bevel round the bend; the skirt is the plate's thickness | Go back to a 45 degree chamfer on the outside of the bend, as in revision 12 |
-| Lid on the body (D53) | the lid's inside fillet beside the body's front top edge | Seats on its lugs and lifts off by pinching the skirt as before. The fillet leaves 0.10 mm to the body's front edge by calculation (0.14 before), so a lid that rubs or sticks is this | Float the lid higher (`pick_lid_gap` 0.2 toward 0.3) or lower `pick_bend_in_r` (its assert is `>= lid_t`: relax it knowingly) |
+| Lid on the body (D53) | the lid's inside fillet beside the body's front top edge | Seats on its lugs and lifts off by pinching the skirt as before. The fillet leaves 0.10 mm to the body's front edge at the nominal pose by calculation (0.14 before; 0.141 on the stops, 0.046 at +0.2 mm up-slope, touching at about +0.36 mm, where the skirt used to touch at +0.485), so a lid that rubs when pushed up-slope is this | Float the lid higher (`pick_lid_gap` 0.2 toward 0.3; it moves the stops' clearance too) or lower `pick_bend_in_r` (its assert is `>= lid_t`: relax it knowingly) |
 | Fill lid | in the mouth | 0.30 all round, lifts out by the lip; the lip's underside bevel is a fingertip rest | |
 | Stringing | groove, bins, lids | Much less than test print 3 once the PETG is dry | Dry longer; tune retraction |
 | Print time | body | About 960 g at 15% infill: start on a full spool | |

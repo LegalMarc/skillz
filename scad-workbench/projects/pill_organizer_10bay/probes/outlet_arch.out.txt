@@ -1,30 +1,34 @@
 
-tray A mouth: crown at z 67.01, facet run/rise 17.48, flat 10.0
-  bay at x=2.8: 0.3:49.83  2.0:51.53  5.5:55.03  8.0:57.53  12.0:61.53  16.0:65.53  17.5:67.01  19.5:67.01  22.5:67.01  25.5:67.01  27.5:67.01  29.0:65.53  37.0:57.53  43.0:51.53  44.7:49.83
+tray A mouth: crown at z 67.01, flat 10.0, facet run/rise 17.48, opening 36.0
+  bay at x=2.8: 0.3:49.83  2.0:51.53  5.5:55.03  8.0:57.53  12.0:61.53  17.5:67.01  22.5:67.01  39.5:55.04  44.7:49.84
 PASS  tray A mouth: the ceiling at the bay centre is 67.01 (got 67.01, within 0.06)
-PASS  tray A mouth: the crown flat is 10.0 mm (<= 10.5)
+PASS  tray A mouth: the crown flat is 10.2 mm (declared 10.0 +-0.5)
 PASS  tray A mouth: the left facet climbs at 45.0 degrees (45 +- 1.5)
 PASS  tray A mouth: the ceiling at the divider face is crown - 17.48 (49.83 against 49.83)
-PASS  tray A mouth: left and right facets mirror (8 mm in: 57.53 / 57.53)
-  bay at x=192.2: 0.3:49.83  2.0:51.53  5.5:55.03  8.0:57.53  12.0:61.53  16.0:65.53  17.5:67.01  19.5:67.01  22.5:67.01  25.5:67.01  27.5:67.01  29.0:65.53  37.0:57.53  43.0:51.53  44.7:49.83
+PASS  tray A mouth: left and right facets mirror (8 mm in: 57.53 / 57.54)
+PASS  tray A mouth: worst capsule pose clears the throat by +4.43 mm (>= +1.0)
+  bay at x=192.2: 0.3:49.83  2.0:51.53  5.5:55.03  8.0:57.53  12.0:61.53  17.5:67.01  22.5:67.01  39.5:55.04  44.7:49.84
 PASS  tray A mouth: the ceiling at the bay centre is 67.01 (got 67.01, within 0.06)
-PASS  tray A mouth: the crown flat is 10.0 mm (<= 10.5)
+PASS  tray A mouth: the crown flat is 10.2 mm (declared 10.0 +-0.5)
 PASS  tray A mouth: the left facet climbs at 45.0 degrees (45 +- 1.5)
 PASS  tray A mouth: the ceiling at the divider face is crown - 17.48 (49.83 against 49.83)
-PASS  tray A mouth: left and right facets mirror (8 mm in: 57.53 / 57.53)
+PASS  tray A mouth: left and right facets mirror (8 mm in: 57.53 / 57.54)
+PASS  tray A mouth: worst capsule pose clears the throat by +4.43 mm (>= +1.0)
 
-outlet B: crown at z 136.99, facet run/rise 17.48, flat 10.0
-  bay at x=2.8: 0.3:119.81  2.0:121.51  5.5:125.01  8.0:127.51  12.0:131.51  16.0:135.51  17.5:136.99  19.5:136.99  22.5:136.99  25.5:136.99  27.5:136.99  29.0:135.51  37.0:127.51  43.0:121.51  44.7:119.81
+outlet B: crown at z 136.99, flat 20.0, facet run/rise 12.48, opening 27.0
+  bay at x=2.8: 0.3:124.81  2.0:126.51  5.5:130.01  8.0:132.51  12.0:136.51  12.5:136.99  22.5:136.99  39.5:130.02  44.7:124.82
 PASS  outlet B: the ceiling at the bay centre is 136.99 (got 136.99, within 0.06)
-PASS  outlet B: the crown flat is 10.0 mm (<= 10.5)
+PASS  outlet B: the crown flat is 20.2 mm (declared 20.0 +-0.5)
 PASS  outlet B: the left facet climbs at 45.0 degrees (45 +- 1.5)
-PASS  outlet B: the ceiling at the divider face is crown - 17.48 (119.81 against 119.81)
-PASS  outlet B: left and right facets mirror (8 mm in: 127.51 / 127.51)
-  bay at x=192.2: 0.3:119.81  2.0:121.51  5.5:125.01  8.0:127.51  12.0:131.51  16.0:135.51  17.5:136.99  19.5:136.99  22.5:136.99  25.5:136.99  27.5:136.99  29.0:135.51  37.0:127.51  43.0:121.51  44.7:119.81
+PASS  outlet B: the ceiling at the divider face is crown - 12.48 (124.81 against 124.81)
+PASS  outlet B: left and right facets mirror (8 mm in: 132.51 / 132.52)
+PASS  outlet B: worst capsule pose clears the throat by +1.37 mm (>= +1.0)
+  bay at x=192.2: 0.3:124.81  2.0:126.51  5.5:130.01  8.0:132.51  12.0:136.51  12.5:136.99  22.5:136.99  39.5:130.02  44.7:124.82
 PASS  outlet B: the ceiling at the bay centre is 136.99 (got 136.99, within 0.06)
-PASS  outlet B: the crown flat is 10.0 mm (<= 10.5)
+PASS  outlet B: the crown flat is 20.2 mm (declared 20.0 +-0.5)
 PASS  outlet B: the left facet climbs at 45.0 degrees (45 +- 1.5)
-PASS  outlet B: the ceiling at the divider face is crown - 17.48 (119.81 against 119.81)
-PASS  outlet B: left and right facets mirror (8 mm in: 127.51 / 127.51)
+PASS  outlet B: the ceiling at the divider face is crown - 12.48 (124.81 against 124.81)
+PASS  outlet B: left and right facets mirror (8 mm in: 132.51 / 132.52)
+PASS  outlet B: worst capsule pose clears the throat by +1.37 mm (>= +1.0)
 
 RESULT: ALL PASS

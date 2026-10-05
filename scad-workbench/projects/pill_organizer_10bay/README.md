@@ -7,20 +7,24 @@ Lift one lid and all ten types are exposed.
 **Two lids total.** Both fill ports at the back under one flat lid, both pick
 rows at the front under one sloped lid.
 
-**Revision 13.** Thirteen revisions, fifty-three recorded decisions (`plan.md`). Revision 13
-answers the full-size PETG print of revision 12, which drooped along the flat tops of two
-openings and read the pick lid as two pieces. D52: the opening from the chute into tray A and
-the opening from hopper B into tray B are half octagons now: each divider face carries a 45
-degree facet 17.48 mm long and the flat at the crown is 10 mm, not 27. The crowns do not
-move, so the throat at the bay centre and tray B's pile margin (D33) are as they were; the
-price is the corners (tray A's mouth is 12.6 mm at the divider face, outlet B's 5.7, of
-which 31.3 of 44.96 mm clears a pill). D53: the pick lid's plate and skirt are one profile,
-extruded once, 3.0 mm thick all the way round, with a 3.0 mm fillet inside the bend and a
-1.5 mm round outside it, and the 1.0 mm end chamfer runs on round the bend. D51 (`rail_clear`
-0.40, a best guess pending the new coupon) is recorded too. Nothing here has been printed.
+**Revision 13.** Thirteen revisions, fifty-four recorded decisions (`plan.md`). Revision 13
+answers test print 4, which was printed after all (the revision 11 section, PETG, 2026-10-04):
+the arches over the openings drooped a little, the pick lid looked like two rectangles welded
+together, and every stub of the slim-rail coupon was too large for the slot. D52: the opening
+from the chute into tray A and the opening from hopper B into tray B are half octagons now:
+each divider face carries a 45 degree facet and the crown is a short flat, 10 mm on tray A's
+mouth (facets 17.48 mm) and 20 mm on outlet B (facets 12.48), against 29 before. The crowns do
+not move, so the throat at the bay centre and tray B's pile margin (D33) are as they were; the
+price is the corners. A first cut gave outlet B a 10 mm crown, and the review found a capsule
+against a divider blocked by 2.47 mm; D54 raised it to 20 and the probe now sweeps a capsule over
+the mesh (worst pose +4.43 mm on tray A's mouth, +1.37 on outlet B). D53: the pick lid's plate and
+skirt are one profile, extruded once, 3.0 mm thick all the way round, with a 3.0 mm fillet inside
+the bend and a 1.5 mm round outside it, and the 1.0 mm end chamfer runs on round the bend. D51
+(`rail_clear` 0.40) is a best guess: **read the new coupon before printing the body** (see "Print
+the final unit"). Nothing here has been printed.
 
 **Revision 12.** Twelve revisions, forty-nine recorded decisions (`plan.md`). Revision
-12 is the final full-size print: the user skipped test print 4 and goes straight to the unit.
+12 is the final full-size print: the user skipped test print 4 and went straight to the unit (they printed it afterwards; see revision 13).
 It is an edge pass (D48): every edge of the three parts was audited (`calculations.md`,
 "Revision 12: the edge pass", 39 rows) and the ones a hand, a pill or the bed touches are
 chamfered or rounded: a 0.5 mm bed chamfer on the base and the foot-pad mouths, r 1.5 on the
@@ -65,7 +69,7 @@ revision 9 fixed tray B's pile.
 |---|---|
 | Overall | 243 x 213.0 x 189 mm (the 243 includes the 3 mm joining rail; 194.8 deep below z 155, the back wall leans out above; the plate allows 246 x 246 x 250) |
 | Bays | 10, two rows of 5, 44.96 mm clear each, trays 40 mm deep |
-| Capacity, middle bay | **438 mL front row, 200 mL back row** (437.7 / 199.6 after the D52 facets); end bays 428 / 198. About 3.2 L total, geometric maximum |
+| Capacity, middle bay | **438 mL front row, 200 mL back row** (437.7 / 200.0 after the D52 and D54 facets); end bays 428 / 198. About 3.2 L total, geometric maximum |
 | Printed parts | **3 designs, 3 pieces**, no hardware |
 | Validation | **14 passed, 0 failed, 3 n/a, 0 inconclusive, 1 advisory** (the advisory is `check_printability.py`; its overhang half fails every real FDM part on area, but its THIN-WALL half caught a real 0.2 mm wall in revision 7 that everyone had stopped reading it for — read both halves) |
 | Confidence | Tier 2 — geometry verified, fit uncalibrated |
@@ -172,12 +176,15 @@ the wedge to work.
 - **Half-octagon openings** (D52; D29's 8 mm chamfers before). The opening into
   each front bin (under the wall between the rows) and into each back-row
   hopper (under hopper B's front wall) has vertical sides, a 45-degree facet
-  17.48 mm long climbing from each divider, and a 10 mm flat at the crown: the
-  unsupported span across the top of each is 10 mm, not 27 (and 43 before D29).
+  climbing from each divider, and a flat at the crown: 10 mm on tray A's mouth
+  (facets 17.48 mm) and 20 mm on outlet B (facets 12.48; D54), so the unsupported span
+  across the top is 10 and 20 mm, not 29 (and 43 before D29).
   The crowns stay where they were, 67.0 and 137.0 mm up, so the throat at the bay
-  centre and the pile heights are unchanged; the facets fill the corners. That
-  leaves tray A's mouth 12.6 mm clear at the divider face and outlet B's 5.7, with
-  31.3 of its 44.96 mm clearing a pill (`probes/outlet_arch.py`). The porch
+  centre and the pile heights are unchanged; the facets fill the corners. A capsule against
+  a divider clears both: the throat a pill radius from the divider is 16.9 mm on tray A's
+  mouth and 13.8 on outlet B (a capsule needs 11, and the asserts want 12). The mesh
+  sweep (`probes/outlet_arch.py`) gives a worst pose of +4.43 and +1.37 mm. At a 10 mm
+  crown outlet B blocked a capsule by 2.47 mm, which is why it is 20. The porch
   ceiling under tray B is not one of these arches and is still a flat 45 x 40 mm bridge.
 - **The fill lid nests.** It drops into the recess above the seat ledges with
   0.3 mm all round, rests on them, and stays put by gravity. A chamfer on its
@@ -208,8 +215,10 @@ the wedge to work.
   end chamfer is one bevel from the plate's top, round the bend and down the
   skirt. In print the outside round sits on the bed and climbs only 0.46 mm
   before it meets the skirt's own 46 degree face (worst overhang step 0.36 mm
-  per 0.2 mm layer). The inside fillet brings the lid to 0.10 mm from the body's
-  front top edge at the closest (0.14 before); the lid probes and sweeps pass.
+  per 0.2 mm layer). The inside fillet brings the skirt / fillet to 0.10 mm from the body's
+  front top edge at the nominal pose (0.14 before; 0.141 on the stops), and the fillet is the
+  first thing to meet the body 0.36 mm up-slope of nominal (the skirt was, at 0.485). The lid
+  probes and sweeps pass.
 - **Foot pads.** Four 10 mm recesses in the base take stick-on rubber feet, so
   a unit that is bumped while pouring does not skate.
 - **Edges.** The body's vertical corners are rounded at 3 mm and the step and
@@ -249,8 +258,8 @@ face, and sliding down the slope takes it further from that face. Revisions 4 to
 jams on the way off, or if it can be fitted turned round. It lifts by its front
 edge, tilted about its back edge, which is 1.2 mm from the wall behind tray B
 (0.35 until the review of revision 10: the top-back corner met that wall after 9
-degrees of tilt); it is swept clear to 15 degrees, with 0.14 mm of clearance at
-rest and more as it tilts, and the whole removal is declared in `joints.json` so
+degrees of tilt); it is swept clear to 15 degrees, with 0.10 mm of clearance at
+the nominal pose (0.141 on the stops) and more as it tilts, and the whole removal is declared in `joints.json` so
 `motion_sweep.py` runs it.
 
 **The pick surface is one sloped plane, not two steps.** A lid spanning two
@@ -268,7 +277,7 @@ it is laid. Every wall over both trays dies on that plane.
 
 ## Print the final unit
 
-Revision 13 is the full unit (revision 12's plus D51 to D53); test print 4 (the revision 11 section) was skipped. Three
+Revision 13 is the full unit (revision 12's plus D51 to D54); test print 4 (the revision 11 section) was printed after revision 12 was designed and drove D51 to D53. Three
 plates, one part each, plain core-spec 3MFs that Elegoo Slicer opens as a single named
 object, already centred on the 256 x 256 plate at z = 0 (`python3 build/maquette/make_plate.py
 final --export` rebuilds them from the sources and checks each against its STL):
@@ -279,10 +288,15 @@ final --export` rebuilds them from the sources and checks each against its STL):
 | 2 | `build/final/final_pick_lid_256.3mf` | `pill_organizer_pick_lid` | 239.0 x 139.5 x 22.7 mm, 105.5 cm3 | x 8.5-247.5, y 58.2-197.8 |
 | 3 | `build/final/final_fill_lid_256.3mf` | `pill_organizer_fill_lid` | 233.8 x 129.0 x 3.0 mm, 85 cm3 | x 11.1-244.9, y 63.5-192.5 |
 
-- **Filament: PETG**, the same as test print 3. `rail_clear` is 0.40 (D51), a best guess after
-  the slim rail's coupon read too tight at 0.265 .. 0.165; run the new coupon (0.50 .. 0.30)
-  first if you want a reading, and in another filament run it again. **Dry it first**: test print 3 strung
-  heavily (groove, bins, lid).
+- **Before the body: read the D51 coupon.** The body bakes in `rail_clear` 0.40 (D51), a best guess
+  after every stub of the slim rail's coupon (0.265 .. 0.165) was too large for the slot on test print 4.
+  The new coupon (`build/coupon/rail_coupon_256.3mf`, 0.50 .. 0.30) is printing. Read it first: the stub
+  that goes down by hand and comes back out, snug but free. If that is not the "0" stub, set `rail_clear`
+  in `params.scad` to the read value (0.40 + the label / 1000) and run
+  `python3 build/maquette/make_plate.py final --export` **before** printing the body; the groove is in
+  the body, so a wrong value is a reprint. The lids do not depend on it.
+- **Filament: PETG**, the same as the tests; in another filament run the coupon again. **Dry it first**:
+  the tests strung heavily (groove, bins, lid).
 - **No brim.** Elegoo Slicer: Others, Skirt and brim, Brim type, No-brim (a brim fused into
   the walls on test print 1). **No supports.** 10% cubic infill, 2 wall loops (the 2.4-2.8 mm walls are already near solid at 2 loops; a third added about 150 g), 0.2 mm layers. Bridge detection on.
 - The body's base and the foot-pad recesses carry a 0.5 mm bevel against elephant foot; the
@@ -306,7 +320,7 @@ Print-ready STLs are in `build/print_ready/`, exported by `print_export.scad`,
 already rotated and dropped to z = 0. Each was scanned face by face in that
 orientation (`probes/overhang_scan.py`): the body's downward faces past 45
 degrees from vertical are the flat bridges (the chute ceiling under tray B,
-now 45 x 40 mm per bay, and the 10 mm crown flats of both outlet openings), the foot-pad
+now 45 x 40 mm per bay, and the 10 mm and 20 mm crown flats of the two outlet openings), the foot-pad
 and label recess ceilings, the 1 mm lips at the ends of each vault ridge, and
 the seat ledge's underside along the leaning divider; the pick lid has a 1 mm
 strip at the tip of its skirt, its plate chamfers and the bend's round on the bed (the round's
@@ -415,20 +429,22 @@ judge the shape and the lid fits; do not judge the flow from it.
   with the chute) is the limit.
 - **The chute mouth is 36 mm vertical; its true minimum is 26.0 mm**,
   perpendicular to the 40-degree floor from the back-bottom corner of the wall
-  between the trays (the front-bottom corner gives 27.6): 1.0x a pill length (row B's outlet, which fed well in test print 2, measures 19.2 the same way; near a divider the D52 facets cut the throat to 12.6 at the divider face on row A and 5.7 on row B, which were 19.9 and 13.0 with the old 8 mm chamfers),
+  between the trays (the front-bottom corner gives 27.6): 1.0x a pill length (row B's outlet, which fed well in test print 2, measures 19.2 the same way; near a divider the D52 / D54 facets cut the throat to 12.6 at the divider face on row A and 9.6 on row B, which were 19.9 and 13.0 with the old 8 mm chamfers; a pill radius out they are 16.9 and 13.8),
   asserted. It matters only to a capsule standing on end. Row B's outlet is tighter (27 vertical) and fed
   well in test print 2.
 - **The hanging wall between the trays** is now 35 mm tall below tray B's floor
   (it was 14), 2.4 mm thick, carried by the dividers and the outlet facets.
 - **The porch ceiling is a flat 45 x 40 mm bridge in every bay** (D29). Check it
   on the first print for sag: it is now the longest flat in the part (the openings'
-  crowns are 10 mm, D52).
-- **D52's corner trade.** The openings' crowns stayed put so the centre throat and the
-  pile margins (D33) did not move; the corners paid. Outlet B's corner throat is 5.7 mm
-  and a capsule needs 11, so a capsule hugging a divider cannot leave there. 31.3 of
-  44.96 mm clears one. Watch the last capsules in hopper B.
+  crowns are 10 and 20 mm, D52, D54).
+- **D52 / D54's corner trade.** The openings' crowns stayed put so the centre throat and the
+  pile margins (D33) did not move; the corners paid. At outlet B's 20 mm crown the worst
+  capsule pose clears its throat by +1.37 mm on the mesh sweep (+4.43 on tray A's mouth); at 10 mm
+  it was -2.47. Watch the last capsules in hopper B, and the 20 mm crown for droop.
 - **D53's clearance.** The lid's inside fillet leaves 0.10 mm to the body's front top
-  edge (0.14 before), by calculation only.
+  edge at the nominal pose (0.141 on the stops, 0.046 at +0.2 mm up-slope, 0.010 at +0.3; it
+  touches at about +0.36). By calculation only; the lid has about 0.86 mm of up-slope room from
+  the stops against the 0.19 mm the tilt needs.
 - The ~2 L of solid wedge under the chute is infill. The body is 2.3 L of
   solid; sliced at 899 g with 10% cubic infill and 2 wall loops (2.31 L solid).
 - Bay width is **1.73x the longest pill** against a 2-3x mass-flow rule of

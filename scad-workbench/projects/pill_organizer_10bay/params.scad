@@ -476,23 +476,22 @@ assert(trayA_scallop_r < (bay_w - 2 * trayA_scallop_r) / 2,
 porch_ceil_z = chuteA_ceil(yB_tray1);                    // 102.59, flat
 // Both outlet openings are half octagons (D52, replacing D29's 8 mm corner chamfers):
 // the divider side stays vertical, a 45 degree facet climbs from each divider toward
-// the bay centre, and only outlet_crown_flat of flat is left at the crown. Test print 3
-// (full-size PETG) drooped and strung along the old 27 mm flat. 45 degrees is the
-// facet that climbs least while still printing (a facet steeper from vertical climbs
-// MORE), so these are as short as they can be. The crown stays at
-// outletA_top / outletB_top: raising it would raise the pile at the bay centre, and the
+// the bay centre, and only a crown flat is left at the top. Test print 4 (the revision 11
+// section, PETG) drooped along the old flat (44.96 less two 8 mm chamfers = 29 mm).
+// 45 degrees from horizontal is the facet that climbs least while still printing: a steeper
+// facet climbs more per mm of run, a shallower one overhangs past 45 degrees. The crowns stay at
+// outletA_top / outletB_top: raising one would raise the pile at the bay centre, and the
 // pile margins have 1.1 mm (tray A, 25 degree repose, front wall) and 1.4 mm (tray B,
-// D33) in hand. So the facets eat the corners instead.
-outlet_crown_flat = 10.0;
-outlet_chamfer    = (bay_w - outlet_crown_flat) / 2;       // 17.48: each facet's run AND rise
+// D33) in hand. So the facets eat the corners, and that is what bounds how short a crown
+// can be (D54): outlet B's corner is the tighter, so its crown is 20 mm, tray A's mouth 10.
+outletA_crown_flat = 10.0;
+outletB_crown_flat = 20.0;
+outletA_chamfer    = (bay_w - outletA_crown_flat) / 2;     // 17.48: each facet's run AND rise
+outletB_chamfer    = (bay_w - outletB_crown_flat) / 2;     // 12.48
 outlet_chamfer_tested = 8.0;                               // what test print 2 fed through (D29)
 
-assert(outlet_crown_flat <= 10.0 + 1e-6 && outlet_crown_flat > 0,
-       "the outlet crown flat is wider than the 10 mm bridge D52 allows");
-// Where the opening clears a pill (perpendicular throat >= pill_dia, measured as below):
-// the width over which a capsule lying crosswise can pass.
-function pass_w(open_h) = bay_w - 2 * max(0, outlet_chamfer
-    - (open_h - wall_div * ramp_tan - pill_dia / cos(ramp_deg)));
+assert(outletA_crown_flat > 0 && outletB_crown_flat > 0 && outletA_crown_flat <= bay_w && outletB_crown_flat <= bay_w,
+       "an outlet crown flat is not between 0 and the bay width");
 
 // The throats, measured perpendicular to the 40 degree floor from the nearest point
 // of the wall in front (review F3, G5). The nearest point is that wall's back-bottom
@@ -500,31 +499,33 @@ function pass_w(open_h) = bay_w - 2 * max(0, outlet_chamfer
 // (opening - wall_div x tan(40)) x cos(40). At the bay centre; near a divider the
 // 45 degree facets lower the opening's top by (chamfer - distance from the divider),
 // so the corner throat is smaller.
-function throat_c(open_h, from_divider = 1000, c = outlet_chamfer) =
+function throat_c(open_h, from_divider = 1000, c = outletA_chamfer) =
     (open_h - max(0, c - from_divider) - wall_div * ramp_tan) * cos(ramp_deg);
-function throat(open_h, from_divider = 1000) = throat_c(open_h, from_divider);
-mouthA_min        = throat(chute_clear);                    // 26.03 at the bay centre (unchanged by D52)
-mouthA_corner_min = throat(chute_clear, 0);                 // 12.6 at the divider face (19.9 before D52)
-mouthA_corner_pill = throat(chute_clear, pill_dia / 2);     // 16.9 a pill's radius from the divider
+mouthA_min         = throat_c(chute_clear, 1000, outletA_chamfer);          // 26.03 at the bay centre (unchanged by D52)
+mouthA_corner_min  = throat_c(chute_clear, 0, outletA_chamfer);             // 12.6 at the divider face (19.9 before D52)
+mouthA_corner_pill = throat_c(chute_clear, pill_dia / 2, outletA_chamfer);  // 16.9 a pill's radius from the divider
 // What actually fed in test print 2: row B's outlet, 27 mm vertical on the same 40
 // degree ramp, with the old 8 mm chamfers, measured the same way. Only the centre is
-// still a demonstrated number: the D52 corners (outlet B's is 5.7 at the divider face)
-// have never been printed.
-mouthB_demonstrated        = throat(outlet_h);              // 19.2 at the bay centre
-mouthB_corner_demonstrated = throat_c(outlet_h, 0, outlet_chamfer_tested);   // 13.0 at the divider face, old geometry
-mouthB_corner_d52          = throat(outlet_h, 0);           // 5.7 now
-mouthB_pass_w              = pass_w(outlet_h);              // 31.3 of 44.96 clears a pill
+// still a demonstrated number: the corners of D52 / D54 have never been printed.
+mouthB_demonstrated        = throat_c(outlet_h, 1000, outletB_chamfer);     // 19.2 at the bay centre
+mouthB_corner_demonstrated = throat_c(outlet_h, 0, outlet_chamfer_tested);  // 13.0 at the divider face, old geometry
+mouthB_corner_d54          = throat_c(outlet_h, 0, outletB_chamfer);        // 9.6 at the divider face (5.7 at a 10 mm crown): a capsule's side cannot get there
+mouthB_corner_pill         = throat_c(outlet_h, pill_dia / 2, outletB_chamfer);   // 13.8 a pill's radius from the divider
+// The worst pose of a capsule (D54, the review of revision 13): lying against a divider, so its
+// side is a pill radius from the divider face, riding the 40 degree ramp under the wall's
+// back-bottom edge. A 26 x 11 spherocylinder swept across both openings with this throat formula
+// was blocked at a 10 mm crown on outlet B by 2.47 mm and clears at 20 mm. The check is that
+// the throat a pill radius from the divider is at least pill_dia + 1 on BOTH openings.
+// (probes/outlet_arch.py repeats it on the mesh, over every position and pose.)
+assert(mouthA_corner_pill >= pill_dia + 1 && mouthB_corner_pill >= pill_dia + 1,
+       "a capsule against a divider cannot clear an outlet opening: the throat a pill radius from the divider is under pill_dia + 1 (D54)");
 // Row A's mouth is NOT a measured fit: it is asserted never to be tighter than the
 // one that fed well, with 25% in hand at the centre, and (sanity floor) at least one
 // pill length. The pill-length floor only matters to a capsule standing on end.
 // (These asserts are a backstop: the chute-height-under-the-vault and tray B pile-margin
 // asserts above bind first today; these only start to matter if those limits are relaxed.)
-// D52: the corner clause is now "a pill lying along the fall line passes at the divider
-// face" (12.6 >= 11 + 1), since the 13.0 it used to match was row B's old corner.
 assert(mouthA_min >= 1.25 * mouthB_demonstrated && mouthA_corner_min >= pill_dia + 1,
-       "row A's mouth is tighter than row B's at the centre (1.25x), or a pill cannot pass at the divider face (D52)");
-assert(pass_w(chute_clear) >= pill_len + 4 && mouthB_pass_w >= pill_len + 4,
-       "an outlet opening, where it clears a pill, is narrower than a crosswise capsule plus 4mm (D52 facets)");
+       "row A's mouth is tighter than row B's at the centre (1.25x), or a pill cannot pass at tray A's divider face (D52)");
 assert(mouthA_min >= pill_len,
        "the minimum of the mouth into tray A, measured perpendicular to the floor, is under one pill length (sanity floor)");
 
@@ -738,7 +739,7 @@ rail_tip_w  = 6.0;         // 11 until revision 11; flank slope unchanged (0.4)
 rail_out    = 3.0;         // 5 until revision 11: about the divider thickness
 rail_clear  = 0.40;        // 0.35 -> 0.50 (D31) -> 0.20 (D40) -> 0.215 (D47) -> 0.40 (D51). Test print 3's
                            // coupon (old 5 mm rail): "0" (0.20) best, slightly tight. The D43 slim rail's
-                           // coupon (0.265 .. 0.165) was too tight on EVERY stub: a 3.6/6.0 mm dovetail
+                           // coupon (0.265 .. 0.165, test print 4) was too tight on EVERY stub: a 3.6/6.0 mm dovetail
                            // closes up more in print than the old 7/11 one. 0.40 is a best guess; the D51
                            // coupon brackets it 0.50 .. 0.30 in 0.05 steps.
 rail_depth_clear = 0.40;

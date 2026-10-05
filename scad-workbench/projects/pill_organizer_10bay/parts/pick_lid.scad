@@ -85,7 +85,7 @@ hook_back  = -pick_lid_clear;           // -0.35, clear of the module's front fa
 
 // ---- The lid's ONE section (D53) -----------------------------------------------------
 // Plate and skirt used to be two polygons (PLATE and HOOK) unioned, each with its own
-// chamfered ends: a seam at the bend and a two-piece look (test print 3). This is a single
+// chamfered ends: a seam at the bend and a two-piece look (test print 4). This is a single
 // closed (y, z) profile, extruded once across the lid's width. Walking it from the skirt's
 // bottom-outer corner: up the skirt's outer face, round the bend (outside radius
 // pick_bend_out_r), along the plate's top face to the back, down the back face, forward along
