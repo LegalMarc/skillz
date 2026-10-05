@@ -158,7 +158,7 @@ ROOM = lo
 print(f"      up-slope room from the rest pose: {ROOM:.3f} mm before the lid meets the body ({ROOM - P['lug_clear']:.3f} mm past the nominal pose)")
 try:
     from trimesh.proximity import closest_point
-    pts, _ = trimesh.sample.sample_surface(rest, 60000)
+    pts, _ = trimesh.sample.sample_surface(rest, 60000, seed=0)
     front = pts[(pts[:, 1] < 4.0) & (pts[:, 0] > 20) & (pts[:, 0] < 220)]     # the skirt and the bend's fillet, between the lugs (which touch the stops by design)
     c = P["lug_clear"]
     for name, off in (("rest (on the stops, 0.5 down-slope of nominal)", 0.0), ("nominal pose", c), ("nominal + 0.2 up-slope", c + 0.2), ("nominal + 0.3 up-slope", c + 0.3)):

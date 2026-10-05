@@ -151,7 +151,7 @@ feature in them. Results:
 
 Planned checks, kept for the final print:
 
-**Printed:** `build/section/test_print_section_256.3mf`: the right-hand end bay cut at
+**Printed:** the revision 11 section plate (`build/section/test_print_section_256.3mf` at commit 7d99c97; that path now holds the revision 13 section): the right-hand end bay cut at
 the left face of divider 4, the whole height and depth (50.2 x 213 x 189 mm), the
 matching pick-lid end and fill-lid end at the section's own width, and the coupon
 turned 90 degrees. About 580 cm3 of solid: expect about 8 hours in PETG. Dry the
@@ -173,7 +173,7 @@ filament first. Slicer settings as test print 3 (no brim, no supports).
 | Stringing | Look at the groove, bins and lid | Much less than test print 3 once the filament is dry |
 
 
-## Final print — planned, revision 12 (with D51 to D53 from revision 13)
+## Final print — planned, revision 12 (with D51 to D54 from revision 13)
 
 **Printed:** three plates, `build/final/final_body_256.3mf`, `final_pick_lid_256.3mf`,
 `final_fill_lid_256.3mf`. PETG (dried), no brim, no supports, 15% infill. **Before the body: read the
