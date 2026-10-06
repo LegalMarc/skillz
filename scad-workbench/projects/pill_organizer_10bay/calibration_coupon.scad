@@ -13,14 +13,17 @@
 // the best but slightly tight: "a little looser, around -10 to -15".
 // rail_clear became 0.215 (D47); but the D43 slim rail's coupon
 // (0.265 .. 0.165) was too tight on every stub, so D51 sets 0.40
-// as a best guess and this coupon brackets it 0.50 .. 0.30 per
-// side in 0.05 steps. The reading is for the
+// as a best guess; its coupon (0.50 .. 0.30) was loose on every
+// stub, even 0.30. The fit is between 0.265 (too tight) and 0.30
+// (loose), so D55 centres on 0.28 and this coupon brackets it
+// 0.30 .. 0.26 in 0.01 steps, at the printer's resolution limit.
+// The reading is for the
 // filament it was printed in: use the same one for the unit, or
 // run the coupon again.
 //
 //   RAIL   a plate with five male rail stubs, widths offset by
-//          -100 .. +100 (microns per side, relative to the default
-//          rail_clear; clearance 0.50 .. 0.30), and a loose groove
+//          -20 .. +20 (microns per side, relative to the default
+//          rail_clear; clearance 0.30 .. 0.26), and a loose groove
 //          block cut exactly as the body cuts its grooves
 //          (rail_clear per side). Turn the block bed-face UP and
 //          drop it over each stub: the one that goes down with
@@ -46,7 +49,7 @@ include <params.scad>
 
 plate_t   = 4.0;
 pitch     = 18.0;
-steps     = [-0.10, -0.05, 0.0, 0.05, 0.10];    // offset applied to the male's half-width
+steps     = [-0.02, -0.01, 0.0, 0.01, 0.02];    // offset applied to the male's half-width
 label_d   = 0.6;
 gap       = 6.0;
 

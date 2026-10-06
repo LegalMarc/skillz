@@ -80,9 +80,9 @@ PLATES = {
         ("fill_lid_end_full_size",        "build/section/fill_lid.stl",   (145.0, 20.0)),
         ("calibration_coupon",            "build/calibration_coupon.stl", (205.0, 20.0, "rot90")),
     ]),
-    # D51: the rail coupon alone, to confirm the fit before the final body
-    "coupon": ("build/coupon/rail_coupon_256.3mf", "rail coupon only (D51)", [
-        ("rail_coupon_d51",               "build/calibration_coupon.stl", (66.0, 113.0)),
+    # D51/D55: the rail coupon alone, to confirm the fit before the final body
+    "coupon": ("build/coupon/rail_coupon_256.3mf", "rail coupon only (D55)", [
+        ("rail_coupon_d55",               "build/calibration_coupon.stl", (66.0, 113.0)),
     ]),
 }
 FINAL = [   # (3mf, object name, stl)

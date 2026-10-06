@@ -737,11 +737,13 @@ assert(fill_seat_z - fill_ledge_t > rampB(yB_hop1)
 rail_root_w = 3.6;        // D43: 1.5 x wall_div (7 until revision 11)
 rail_tip_w  = 6.0;         // 11 until revision 11; flank slope unchanged (0.4)
 rail_out    = 3.0;         // 5 until revision 11: about the divider thickness
-rail_clear  = 0.40;        // 0.35 -> 0.50 (D31) -> 0.20 (D40) -> 0.215 (D47) -> 0.40 (D51). Test print 3's
+rail_clear  = 0.28;        // 0.35 -> 0.50 (D31) -> 0.20 (D40) -> 0.215 (D47) -> 0.40 (D51) -> 0.28 (D55). Test print 3's
                            // coupon (old 5 mm rail): "0" (0.20) best, slightly tight. The D43 slim rail's
                            // coupon (0.265 .. 0.165, test print 4) was too tight on EVERY stub: a 3.6/6.0 mm dovetail
-                           // closes up more in print than the old 7/11 one. 0.40 is a best guess; the D51
-                           // coupon brackets it 0.50 .. 0.30 in 0.05 steps.
+                           // closes up more in print than the old 7/11 one. 0.40 was a best guess; the D51
+                           // coupon (0.50 .. 0.30, PETG, 2026-10-05) was loose on EVERY stub, even 0.30.
+                           // So the fit lies between 0.265 (too tight) and 0.30 (loose): D55 centres
+                           // on 0.28 and the D55 coupon brackets it 0.30 .. 0.26 in 0.01 steps.
 rail_depth_clear = 0.40;
 
 assert(rail_tip_w > rail_root_w && rail_root_w > 0,
