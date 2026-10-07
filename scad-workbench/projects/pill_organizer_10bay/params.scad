@@ -702,8 +702,10 @@ ramp_at_back    = max(rampB(yB_hop1), chuteA_floor(yA_hop1));
 fill_lip_w      = 30.0;
 fill_lip_len    = 8.0;
 fill_grip_d     = fill_lip_w + 4.0;                  //  34.0, the wall notch
-seat_cut_over   = 0.4;
+seat_cut_over   = 0.05;  // D60 (F10): 0.4 left a 0.4 mm notch in the rim wall beside every divider; 0.05 is under the slicer's resolution
 seat_lip_drop   = 0.2;
+fill_ledge_land = 0.5;   // D60 (F11): each seat ledge's 45 degree (or 34) underside ends this far under the ledge top, then a vertical land, so the tip is 90 degrees, not a knife
+fill_ledge_top_w = fill_ledge_w - seat_lip_drop - fill_ledge_land;   // 2.3 at 45 degrees: the flat the lid could land on
 
 assert(fill_lip_len > wall_div + fill_lid_clear + 3.0,
        "the pull lip does not reach past the wall in front of the lid far enough to get a finger under");
@@ -726,8 +728,8 @@ assert(fill_ledge_w >= 2.5, "the fill-lid seat ledge is too narrow to carry the 
 // (fill_lid_x is defined as inner_w - 2 x fill_lid_clear, so it spans the
 // dividers by definition; the assert that said so could not fail. The real
 // check is the next but one: the lid is smaller than the mouth.)
-assert(fill_ledge_w - fill_lid_clear - fill_lead_in >= 1.5,
-       "the lead-in chamfer leaves under 1.5mm of lid over the perimeter ledge");
+assert(fill_ledge_top_w - fill_lid_clear - fill_lead_in >= 1.3,
+       "the lead-in chamfer leaves under 1.3mm of lid over the perimeter ledge (D60: the ledge top is shortened by the land; the lid floats seat_lip_drop over it and bears on the dividers)");
 assert(fill_seat_z - fill_ledge_t > rampB(yB_hop1)
        && fill_seat_z - fill_ledge_t > chuteA_floor(yA_hop1),
        "the seat ledge hangs below a hopper floor -- it would be in the pill path");
@@ -869,6 +871,8 @@ pick_lug_d     = 7.0;       // perpendicular to the plate, below its underside
 pick_lug_chamfer = 1.0;     // lead-in chamfer on the tip's X edges
 pick_stop_w    = pillar_w - 0.05;   // D60: a hair narrower than the pillar, so its side face does not lie on the scallop cut's
                             // face (a coplanar boolean). 0.4 left a visible step; 0.05 does not
+pick_filler_xe = wall_out + pick_stop_w - 0.05;   // D60: the filler is as wide as the stop block, less 0.05 (not coplanar with its side)
+buttress_round_r = 1.0;     // D60 (F9): vertical round on the inboard edges of the buttresses and the filler's back-inner edge
 pick_filler_drop = 0.5;     // the filler's top at the side wall, under the stop block's corner P1
 pick_filler_inset = 0.4;    // the filler ends this far inside the buttress's inner face
 pick_stop_off  = 1.0;       // where the stop face meets the plane, behind the front wall's inner face
@@ -973,12 +977,13 @@ bed_chamfer     = 0.5;      // body base perimeter and foot-pad recess mouths
 // the tray side, is a 45 degree chamfer that follows the scallop outline and fades to
 // nothing up the scallop's rounded corners.
 scallop_chamfer = 0.7;
+pull_notch_r    = 0.8;   // D60 (F12): round on the pull-lip notch's four vertical edges
 scallop_round_r = 0.8;   // D60: round along the scallop outline on the front face (floor, corners, sides up to the plane)
 wall_back_bevel = 1.0;   // D60: bevel on the back-top edge of the wall between the trays (46 degree knife edge otherwise)
 stop_clip_drop  = 0.05;  // D60: stop block and filler tops sit this far under the plane (was boss_clip_drop 0.2 plus a G7 trim)
 divider_top_r   = 0.6;   // D60: quarter round on both top edges of the dividers on the pick plane (user: rounded wherever possible)
 // The fill mouth's rim (the opening both hoppers share), inside edge, all four sides.
-mouth_chamfer   = 0.45;  // the front rim wall is wall_div wide and loses edge_r_top to the outer round: 0.45 keeps 0.45 of flat. NOT 0.4: that is seat_cut_over, and the cone's corner then crossed the seat cuts' corner lines and left four zero-volume shards
+mouth_chamfer   = 0.45;  // the front rim wall is wall_div wide and loses edge_r_top to the outer round: 0.45 keeps 0.45 of flat. (seat_cut_over was 0.4 until D60 and the cone's corner then crossed the seat cuts' corner lines and left four zero-volume shards: keep the two apart)
 // Pick lid (print face down is the plate's top, already chamfered 1.0 on all four sides, which is the
 // bed chamfer): the underside's x-end edges, and the skirt's outer end edges where the lid is pinched.
 pick_under_chamfer = 0.8;   // plate x-end underside edges (the end face keeps lid_t - lid_chamfer - this = 1.2 of flat)

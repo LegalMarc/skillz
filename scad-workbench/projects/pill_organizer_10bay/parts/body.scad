@@ -193,8 +193,31 @@ VOID_A = [
 // pick plane (as MOUTH runs past the rim): a void top lying exactly on the
 // shell's top face is a coplanar boolean, and it left a zero-area face pair
 // on the plane once the rail-1 groove was cut out through it.
-module void_a_2d() { offset(r = fillet_r) offset(r = -fillet_r) polygon(VOID_A); }
-module void_b_2d() { offset(r = fillet_r) offset(r = -fillet_r) polygon(VOID_B); }
+// D60 (F11): the seat ledges' undersides are 45 degree (or, at the hopper divider, 34 degree) wedges that ran
+// out to a knife tip at the ledge top. Each now ends fill_ledge_land under the ledge top and a vertical land
+// finishes the tip. A triangle added to the void after the opening pass (which would round it away): c is
+// the underside line (p1 -> p2, p2 at the seat plane) cut at the land's foot, the third point is straight
+// above c at the seat plane. The part above the ledge top is the mouth's, so only the land remains.
+// The opening pass has already rounded the void's corner at p2 (inside the straight line), so the triangle's
+// slanted side is pushed 0.5 into the void, which leaves no sliver of the old wedge between it and the arc.
+module ledge_land(p1, p2) {
+    zc = fill_seat_z - seat_lip_drop - fill_ledge_land;
+    c = p1 + (p2 - p1) * (zc - p1[1]) / (p2[1] - p1[1]);
+    cl = p1 + (p2 - p1) * (zc - 0.3 - p1[1]) / (p2[1] - p1[1]);     // 0.3 further down the line, in void: overlap, no shared vertex
+    polygon([cl, [p2[0] + sign(p2[0] - p1[0]) * 0.5, p2[1]], [c[0], p2[1]], [c[0], cl[1]]]);
+}
+module void_a_2d() {
+    offset(r = fillet_r) offset(r = -fillet_r) polygon(VOID_A);
+    z0 = fill_seat_z - fill_ledge_w;
+    ledge_land([yA_hop1 + flare_dy(z0), z0], [yA_hop1 + flare_dy(z0) - fill_ledge_w, fill_seat_z]);
+    ledge_land([hopwall_A(z0), z0], [hopwall_A(fill_seat_z) + fill_ledge_w, fill_seat_z]);
+}
+module void_b_2d() {
+    offset(r = fillet_r) offset(r = -fillet_r) polygon(VOID_B);
+    z0 = fill_seat_z - fill_ledge_w;
+    ledge_land([hopwall_B(z0), z0], [hopwall_B(fill_seat_z) - fill_ledge_w, fill_seat_z]);
+    ledge_land([yB_wall1, z0], [yB_wall1 + fill_ledge_w, fill_seat_z]);
+}
 module mouth_2d()  { polygon(MOUTH); }
 
 // The accessory cubby (params.scad 4d): one void the full inner width, opening
@@ -343,8 +366,21 @@ module fill_seat_cut() {
 
     // Pull-lip notch (D23): the wall in front of the lid comes down to the seat
     // plane across fill_grip_d, so the lid's lip can carry on forward over it.
-    translate([module_w / 2 - fill_grip_d / 2, hop_mouth_y0 - wall_div - 1, fill_seat_z])
-        cube([fill_grip_d, wall_div + 3, lid_t + 2]);
+    // D60 (F12): the notch's four vertical edges (both side faces, at the wall's tray-B face and at its mouth face)
+    // are rounded pull_notch_r: a quarter-round corner piece in each, added to the cutter.
+    nx0 = module_w / 2 - fill_grip_d / 2; nx1 = nx0 + fill_grip_d;
+    ny0 = hop_mouth_y0 - wall_div - 1; ny1 = ny0 + wall_div + 3;
+    fy0 = hop_mouth_y0 - wall_div; fy1 = hop_mouth_y0;       // the wall's two faces
+    r = pull_notch_r;
+    translate([0, 0, fill_seat_z]) linear_extrude(height = lid_t + 2) {
+        translate([nx0, ny0]) square([fill_grip_d, ny1 - ny0]);
+        for (c = [[nx0, -1, fy0, 1], [nx0, -1, fy1, -1], [nx1, 1, fy0, 1], [nx1, 1, fy1, -1]])
+            // c = [x of the side face, direction away from the notch in x, y of the wall face, direction into the wall in y]
+            difference() {
+                translate([c[0] - (c[1] > 0 ? 0 : r), c[2] - (c[3] > 0 ? 0 : r)]) square([r, r]);
+                translate([c[0] + c[1] * r, c[2] + c[3] * r]) circle(r = r, $fn = 32);
+            }
+    }
 }
 
 // The fill mouth's rim (D48). Both hoppers share one rectangular opening; its four
@@ -433,10 +469,18 @@ module both_faces() {
     translate([module_w, 0, 0]) mirror([1, 0, 0]) children();
 }
 
+// D60 (F9): the two inboard vertical edges (the ones a sliding pill passes) carry a buttress_round_r round.
+// Each sits 3.7 mm from the groove's tip, which spans rail_tip_w / 2 + rail_clear either side of the rail
+// centre, so the buttress keeps its divider-thick wall either side of the groove.
 module rail_boss_one(y, z1, right) {
+    w = rail_boss + weld_embed; r = buttress_round_r;
     translate([right ? module_w - wall_out - rail_boss : wall_out - weld_embed,
                y - rail_boss_w / 2, 0])
-        cube([rail_boss + weld_embed, rail_boss_w, z1]);
+        linear_extrude(height = z1) hull() {
+            cx = right ? r : w - r;                     // the round's centre line, local x (the inboard face is at 0 on the right, w on the left)
+            translate([right ? r : 0, 0]) square([w - r, rail_boss_w]);
+            for (yy = [r, rail_boss_w - r]) translate([cx, yy]) circle(r = r, $fn = 48);
+        }
 }
 
 // The buttresses are INTERSECTED with the outer silhouette rather than capped
@@ -578,13 +622,22 @@ module stop_block_profile() {
 module stop_filler_profile() {   // in (x, z), for the LEFT side; mirrored for the right
     sa = sin(pick_lid_slope); ca = cos(pick_lid_slope);
     zt = pickplane(pick_stop_y) - pick_stop_depth * ca - pick_filler_drop;     // top at the side wall
-    xe = wall_out + pick_stop_w - 0.05;      // as wide as the stop block (less 0.3, not coplanar with its side): D43 slimmed the buttress to 3 mm, narrower than the block, and a filler to the buttress left a 3 x 6 mm nook beside it
+    xe = pick_filler_xe;      // as wide as the stop block (less 0.05, not coplanar with its side): D43 slimmed the buttress to 3 mm, narrower than the block, and a filler to the buttress left a 3 x 6 mm nook beside it
     polygon([[wall_out - weld_embed, base_z - 1], [xe, base_z - 1],
              [xe, zt - (xe - wall_out)], [wall_out, zt], [wall_out - weld_embed, zt]]);
 }
 module stop_filler_left() {
     y0 = pick_stop_back_y - 0.5; y1 = rail1_boss_y0 + 0.5;
-    translate([0, y1, 0]) rotate([90, 0, 0]) linear_extrude(height = y1 - y0) stop_filler_profile();
+    r = buttress_round_r; xe = pick_filler_xe;
+    intersection() {
+        translate([0, y1, 0]) rotate([90, 0, 0]) linear_extrude(height = y1 - y0) stop_filler_profile();
+        // D60 (F9): plan view with the back-inner corner (xe, y1) rounded
+        translate([0, 0, base_z - 2]) linear_extrude(height = hopper_rim) hull() {
+            translate([-1, y0 - 1]) square([xe + 1 - r, y1 - y0 + 1]);
+            translate([-1, y0 - 1]) square([xe + 1, y1 - y0 + 1 - r]);
+            translate([xe - r, y1 - r]) circle(r = r, $fn = 48);
+        }
+    }
 }
 OUTER_STOP_CLIP = [[0, 0], [module_d, 0], [module_d, flare_zo], [module_d_top, hopper_rim], [yB_tray1, hopper_rim],
     [yB_tray1, trayB_rim - stop_clip_drop], [0, pickplane_front - stop_clip_drop]];
