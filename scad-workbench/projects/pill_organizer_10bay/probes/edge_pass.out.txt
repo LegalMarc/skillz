@@ -1,4 +1,4 @@
-PASS  body is one watertight body (21782 triangles)
+PASS  body is one watertight body (21828 triangles)
 PASS  pick_lid is one watertight body (2418 triangles)
 PASS  fill_lid is one watertight body (460 triangles)
 
@@ -35,7 +35,7 @@ PASS  F4: wall back-top edge is bevelled: [25.0, 45.15, 120.23] is cut away, [25
 PASS  F5: tray B gusset is solid 1.6 mm under the plane, 0.3 off the corner
 PASS  F7: end bay front corner is filleted at the stop block face (0.25 from both faces is solid)
 PASS  F8: divider top edge (left face) is rounded: [47.78, 20.0, 96.12] is cut away, [47.78, 20.0, 95.25] stays
-PASS  F8: the divider's flat at the plane (0.03 under it) is 1.74 mm, 1.5 or more
+PASS  F8: the divider's flat at the plane (0.002 under it) is 1.58 mm, 1.5 or more
 PASS  F9: buttress front inboard edge is rounded r 1: [5.7, 15.9, 80.0] is cut away, [5.4, 16.3, 80.0] stays
 PASS  F9: buttress back inboard edge is rounded r 1: [5.7, 29.7, 80.0] is cut away, [5.4, 29.3, 80.0] stays
 PASS  F9: filler back-inner edge is rounded r 1: [8.65, 16.25, 40.0] is cut away, [8.15, 15.8, 40.0] stays

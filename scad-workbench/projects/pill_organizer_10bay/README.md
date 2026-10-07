@@ -15,8 +15,8 @@ now 0.05 mm or less, and `probes/step_scan.py` gates it (no persistent step over
 label recesses and the rail-1 buttress top). The divider fillets climb to the scallop arc and the tray B gussets to the
 pick plane. New rounds: r 0.8 on the scallop's front face, r 0.6 on the dividers' top edges, r 1.0 on the buttress and
 filler inboard edges, r 0.8 on the pull-lip notch; a 1 mm bevel on the back-top edge of the wall between the trays; a
-land on each knife-edged seat-ledge tip; a fillet at the end bays' front corner. The body is 2306.2 cm3 (was 2305.5),
-same 240 x 213.0 x 189 mm; the middle bay is 437.7 / 200.0 mL, the end bays 427.9 / 198.1 mL; the pick lid and fill
+land on each knife-edged seat-ledge tip; a fillet at the end bays' front corner. The body is 2306.4 cm3 (was 2305.5),
+same 240 x 213.0 x 189 mm; the middle bay is 437.7 / 200.0 mL, the end bays 427.8 / 198.1 mL; the pick lid and fill
 lid are unchanged. Left as is on purpose: the rail-1 buttress top, 0.21 mm under the plane beside the side wall (F13,
 the verified break-out zone).
 
@@ -319,7 +319,7 @@ final --export` rebuilds them from the sources and checks each against its STL):
 
 | Plate | File | Part | Size on the plate | Spans |
 |---|---|---|---|---|
-| 1 | `build/final/final_body_256.3mf` | `pill_organizer_body` | 240.0 x 213.0 x 189.0 mm, 2306.2 cm3 of solid | x 8.0-248.0, y 21.5-234.5 |
+| 1 | `build/final/final_body_256.3mf` | `pill_organizer_body` | 240.0 x 213.0 x 189.0 mm, 2306.4 cm3 of solid | x 8.0-248.0, y 21.5-234.5 |
 | 2 | `build/final/final_pick_lid_256.3mf` | `pill_organizer_pick_lid` | 239.0 x 139.5 x 22.7 mm, 105.5 cm3 | x 8.5-247.5, y 58.2-197.8 |
 | 3 | `build/final/final_fill_lid_256.3mf` | `pill_organizer_fill_lid` | 233.8 x 129.0 x 3.0 mm, 85 cm3 | x 11.1-244.9, y 63.5-192.5 |
 

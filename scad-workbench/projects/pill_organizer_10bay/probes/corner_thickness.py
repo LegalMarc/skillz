@@ -139,11 +139,17 @@ if __name__ == "__main__":
                 # at most 5 mm2 and 1.5 mm tall. Nothing else may be thin.
                 unnamed = []
                 for z, x, y, a_ in th:
-                    # D60: 0.45, not 0.31. F9 rounds the buttress's inboard edges, which retriangulates the sloped
-                    # top; the same 90 degree corner then slices (mirrored mesh, z 102, y 27 to 28) as 0.38 to 0.39
-                    # mm2. The opening shaves r^2 (cot(t/2) - (pi - t)/2) from a corner of plan angle t (r =
-                    # THIN_SKIN / 2): 0.30 at 90 degrees, 0.44 at 80. A flap is over 4 mm2 and is still caught.
-                    corner = a_ <= 0.45
+                    corner = a_ <= 0.31
+                    # D60 review: the 90 degree plan corner of the solid 3 mm buttress top beside the F13 0.2 step
+                    # (boss_clip_drop) slices as 0.38 to 0.39 mm2 on the mirrored (left) face at z 102 to 103, y 27.2 to
+                    # 28.0, x within 0.8 mm of the buttress's inboard face. Named, narrowly: that corner only (a thin
+                    # region of at most 0.45 mm2 there), not a general allowance. NOTE what actually catches the H2
+                    # knife lip: a mutation test showed it is the edge-angle check below (convex edges under 60
+                    # degrees), not this thin-region check.
+                    xin = mw - P["wall_out"] - P["rail_boss"]
+                    f13corner = (side == "right" and a_ <= 0.45 and xin - 0.1 <= x <= xin + 0.8
+                                 and y1 + 3.0 <= y <= y1 + P["rail_boss_w"] / 2
+                                 and zp(y) - 4.0 <= z <= zp(y) - 0.5)
                     lip_tip = a_ <= 0.70 and ((side == "right" and x >= mw - 0.8) or (side == "left" and x <= -2.0))
                     runout = a_ <= 5.0 and ((side == "right" and x >= mw - 2.5) or (side == "left" and x <= -2.0))
                     # (4) a horizontal slice GRAZING a bevel: the 45 degree bevel measured in the plane's own
@@ -155,7 +161,7 @@ if __name__ == "__main__":
                           <= zp(y1 - P["rail_root_w"] / 2 - P["rail_clear"]) and y1 - P["rail_tip_w"] / 2 - 2.5 <= y <= y1)
                     gb = (side == "right" and zp(y1 + P["rail_boss_w"] / 2) - 0.2 - P["boss_bevel"] - 1.5 <= z
                           <= zp(y1 + P["rail_boss_w"] / 2) and y >= y1 + P["rail_boss_w"] / 2 - 3.0)
-                    if not (corner or lip_tip or runout or gf or gb):
+                    if not (corner or lip_tip or runout or gf or gb or f13corner):
                         unnamed.append((z, x, y, a_))
                 print(f"\nbreak-out zone, {side} side, horizontal slices every 0.25 mm from z {zlo:.0f} to "
                       f"{zhi:.0f}, thin = under {THIN_SKIN:.2f} mm: "

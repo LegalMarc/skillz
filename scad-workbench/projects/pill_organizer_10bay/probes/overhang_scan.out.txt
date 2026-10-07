@@ -1,5 +1,5 @@
 
-build/print_ready/body.stl: 21782 faces, bounds [0.0, 0.0, 0.0] .. [240.0, 213.0, 189.0]
+build/print_ready/body.stl: 21828 faces, bounds [0.0, 0.0, 0.0] .. [240.0, 213.0, 189.0]
   downward faces past 45 deg from vertical, above the bed: flat 9356 mm2, steep 2834 mm2
     flat    8530.1 mm2  normal (np.float64(0.0), np.float64(0.0), np.float64(-1.0))  90.0 deg from vertical  x 18..222 y 60..72 z 103..103
     flat     313.3 mm2  normal (np.float64(0.0), np.float64(0.0), np.float64(-1.0))  90.0 deg from vertical  x 10..230 y 13..181 z 1..1

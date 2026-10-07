@@ -8,11 +8,11 @@ roundings the user asked for are in (see `plan.md` D60 and `calculations.md`, "R
 not-applicable, 0 inconclusive, 1 advisory; `check_rules.py` clean; every probe passes, including the new gating
 `probes/step_scan.py` (0 persistent steps over 0.06 mm except 20 label-recess chains and the 4 F13 chains) and the D60
 rows of `probes/edge_pass.py`; body one watertight body, 0 edges under 0.001 mm, bbox 240 x 213.013 x 189 unchanged,
-2306.225 cm3; middle bay 437.7 / 200.0, end bays 427.9 / 198.1 mL; lid retention (a)-(h) pass (slide-1-mm overlap 26.28
+2306.414 cm3; middle bay 437.7 / 200.0, end bays 427.8 / 198.1 mL; lid retention (a)-(h) pass (slide-1-mm overlap 26.28
 mm3, up-slope room 0.856 mm); overhang scan body flat 9356, steep 2834 mm2. The lid STLs and 3MFs are byte-identical
 to before. **Not proven:** anything printed; the new roundings on the real print (`TEST_PRINTS.md`, "Final print").
-**Judgement calls:** `corner_thickness.py`'s plan-corner allowance went 0.31 -> 0.45 mm2 (F9 retriangulates the buttress
-top; same 90 degree corner, derivation in `calculations.md`); `ledge_land()` adds its triangle after the void's opening
+**Judgement calls:** `corner_thickness.py` names one extra class, the 90 degree plan corner of the buttress top beside the F13 step (0.38 to
+0.39 mm2, mirrored face, z 102 to 103), the general allowance stays 0.31 (see `calculations.md`); `ledge_land()` adds its triangle after the void's opening
 pass because the opening rounds the land away; the lids' 3MFs were not rebuilt. **Next step:** deep-tier review of D60,
 then print the body plate (`build/final/final_body_256.3mf`), dried PETG, no brim, no supports.
 Everything below is the revision 15 note.

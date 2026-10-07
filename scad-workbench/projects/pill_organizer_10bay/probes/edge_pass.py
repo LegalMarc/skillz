@@ -127,9 +127,9 @@ chk("F7: end bay front corner is filleted at the stop block face (0.25 from both
 yy = 20.0
 removed(body, [dx0 + 0.02, yy, zp(yy) - 0.03], [dx0 + 0.02, yy, zp(yy) - 0.9], "F8: divider top edge (left face) is rounded")
 xs = np.arange(dx0, dx0 + wd, 0.02)
-flat = body.contains([[x, yy, zp(yy) - 0.03] for x in xs])
+flat = body.contains([[x, yy, zp(yy) - 0.002] for x in xs])
 fw = flat.sum() * 0.02
-chk(f"F8: the divider's flat at the plane (0.03 under it) is {fw:.2f} mm, 1.5 or more", fw >= 1.5)
+chk(f"F8: the divider's flat at the plane (0.002 under it) is {fw:.2f} mm, 1.5 or more", fw >= 1.5)
 # F9: vertical rounds on the rail-1 buttress's inboard edges and the filler's back-inner edge
 bi = wo + P["rail_boss"]; yf = P["rail1_y"] - P["rail_boss_w"] / 2; yb_ = P["rail1_y"] + P["rail_boss_w"] / 2
 removed(body, [bi - 0.1, yf + 0.1, 80.0], [bi - 0.4, yf + 0.5, 80.0], "F9: buttress front inboard edge is rounded r 1")

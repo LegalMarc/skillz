@@ -372,6 +372,12 @@ module fill_seat_cut() {
     ny0 = hop_mouth_y0 - wall_div - 1; ny1 = ny0 + wall_div + 3;
     fy0 = hop_mouth_y0 - wall_div; fy1 = hop_mouth_y0;       // the wall's two faces
     r = pull_notch_r;
+    // the notch floor's edge on the tray-B side (y = fy0) is rounded too: a quarter round in (y, z) along the notch.
+    // The mouth-side floor edge (y = fy1) is a 0.2 mm step down to the seat ledge (seat_lip_drop): no room for a round.
+    yz_extrude(nx0, nx1) difference() {
+        translate([fy0 - 0.5, fill_seat_z - r]) square([r + 0.5, r + 1.0]);
+        translate([fy0 + r, fill_seat_z - r]) circle(r = r + 0.03, $fn = 32);
+    }
     translate([0, 0, fill_seat_z]) linear_extrude(height = lid_t + 2) {
         translate([nx0, ny0]) square([fill_grip_d, ny1 - ny0]);
         for (c = [[nx0, -1, fy0, 1], [nx0, -1, fy1, -1], [nx1, 1, fy0, 1], [nx1, 1, fy1, -1]])
@@ -575,7 +581,7 @@ module corner_beads() {
 // tray B's floor and, from D60, runs up to the wall's top plane (clipped stop_clip_drop under it, and
 // trimmed by wall_back_bevels), so no flat ledge and no bare corner is left under the top.
 module front_fillets() {
-    corner_fillets(yA_tray0, base_z - 1, trayA_front_h + trayA_scallop_r + 1.0, pick_stop_w);   // D60: the fillet runs up past the scallop and the scallop cut trims it along the arc (no flat ledge); end bays at the stop block's face (F7)
+    corner_fillets(yA_tray0, base_z - 1, trayA_front_h + trayA_scallop_r + 1.0, pillar_w);   // D60: the fillet runs up past the scallop and the scallop cut trims it along the arc (no flat ledge); end bays at the stop block's face (F7)
     intersection() { corner_fillets(yB_tray0, trayB_floor - 1, pickplane(yB_tray0 + tray_fillet_r) + 1); yz_extrude(0, module_w) offset(delta = 0) polygon(OUTER_STOP_CLIP); }   // D60 (F5): to the plane, trimmed by wall_back_bevels
 }
 module corner_fillets(y0, z0, z1, end_inset = 0) {
@@ -627,7 +633,9 @@ module stop_filler_profile() {   // in (x, z), for the LEFT side; mirrored for t
              [xe, zt - (xe - wall_out)], [wall_out, zt], [wall_out - weld_embed, zt]]);
 }
 module stop_filler_left() {
-    y0 = pick_stop_back_y - 0.5; y1 = rail1_boss_y0 + 0.5;
+    // D60 review: the back face lies past the buttress's front inboard round (y rail1_boss_y0 .. + buttress_round_r), so the filler covers it
+    // and no 0.13 mm re-entrant groove is left where the two meet
+    y0 = pick_stop_back_y - 0.5; y1 = rail1_boss_y0 + buttress_round_r + 0.05;
     r = buttress_round_r; xe = pick_filler_xe;
     intersection() {
         translate([0, y1, 0]) rotate([90, 0, 0]) linear_extrude(height = y1 - y0) stop_filler_profile();
