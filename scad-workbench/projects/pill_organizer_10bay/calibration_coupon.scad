@@ -1,5 +1,11 @@
 // ============================================================
-// calibration_coupon.scad -- PRINT THIS FIRST.
+// calibration_coupon.scad -- SUPERSEDED BY D59; the future clip will get its own coupon.
+//
+// D59 (revision 15) postponed joining: the body has plain dovetail slots on both side
+// faces and no male rail, so this coupon no longer gates the body print. Five coupons
+// (D47, D51, D55, D56, D58) failed to give a usable fit on a 3.6 / 6.0 x 3 mm rail. It is
+// kept as the record of what was tried; do not print it for the body. The text below is
+// the historical header (written before D59, "PRINT THIS FIRST" no longer applies).
 //
 // Not part of the assembly; deliberately outside parts/ so the
 // validation bundle does not treat it as a component.
