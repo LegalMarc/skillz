@@ -65,7 +65,7 @@ for name, yc, z1, zs in rails:
         print(f"   z {z:5.1f}: gap min {min(row):.4f} max {max(row):.4f} (rail_clear {rc})")
         chk(f"{name} z {z}: both flanks' y gap equals rail_clear at 7 depths", e < 0.01, f"(worst error {e:.4f})")
 print(f"worst error over all sections {worst:.4f} mm")
-for dz in (0, 0.5, 2, 5, 10, 20, 40, 80, 120):
+for dz in (0, 0.5, 2, 5, 10, 20, 40, 80, 120, 160, 196):   # 196: full insertion (rail 2 groove opens at z ~190)
     ov = overlap_mm3(body, moved(neighbour, translation([0, 0, dz])))
     chk(f"the copy {dz} mm above its ganged height does not intersect the body", ov < 1e-6, f"(overlap {ov:.4f} mm3)")
 print("ALL PASS" if ok else "FAILED")
