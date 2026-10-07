@@ -151,7 +151,9 @@ feature in them. Results:
 | The groove block against the neighbouring stub (found after the D55 print, from the user: "the rail needs more space between the nubs to fit the test block") | At the old 18 mm pitch the seated block stood 0.4 mm from the next stub (groove bottom on the tip) or 0.0 mm (mouth on the root), and overhung the plate edge by 5 mm at the first stub: it rocked against the neighbour, so the D47 (slim rail), D51 and D55 readings are invalid; `probes/coupon_fit.py` reproduces it on the D55 mesh | D56 coupon: a PLAIN row 0.30 .. 0.10 and a crush-RIBS row, `rail_clear` 0.30 as a starting point (layout per D58: 30 mm pitch, backstop walls, triangular ribs 0 .. 0.40) |
 | The body's own male rail (found in the review of D57, fixed in D58) | Its flanks were pushed out by the underside hull, +0.17 mm per side at the root low on the rail and less above, so the ganged pair's y gap was 0.13 low on the rails and 0.29 above z 85: every earlier print of the body fitted tighter than its `rail_clear` | D58: exact section; `probes/gang_fit.py` |
 | Groove profile (found while designing the D56 coupon, fixed in D57) | The groove's flank was gentler than the male's, so the gap shrank by 0.14 mm from the mouth to the rail tip on every coupon and body so far: a stub labelled 0.20 had only 0.06 at its tip. Earlier "slightly tight" readings are explained, and the readings of every earlier coupon were taken against that profile | D57: the groove is the male offset, same slope; coupon and body share `rail_profile.scad` |
-| D56 coupon (`build/coupon/rail_coupon_256.3mf`, D58 layout) | **Planned, not printed.** Block bed-face UP, pushed DOWN onto each stub with its open face against the stub's wall; PLAIN (primary): the stub that goes on by hand without rocking; RIBS: the least interference with no rattle that still goes on and off by hand (ribs wear when rejoined) | Set `rail_clear` from the plain row, or ask for crush ribs on the body's male rail from the ribs row |
+| D56 coupon (`build/coupon/rail_coupon_256.3mf`, D58 layout) | **Printed 2026-10-07: too loose on every stub (next row).** Block bed-face UP, pushed DOWN onto each stub with its open face against the stub's wall; PLAIN (primary): the stub that goes on by hand without rocking; RIBS: the least interference with no rattle that still goes on and off by hand (ribs wear when rejoined) | Set `rail_clear` from the plain row, or ask for crush ribs on the body's male rail from the ribs row |
+| D56 coupon (first D56 layout, pitch 28, half-round ribs), printed 2026-10-06 | Invalid, no usable reading (recorded by the user). Its layout (pitch 28, half-round ribs, no backstop wall) was superseded by D58's, and the review of D57 and D58 had found the groove-flank and body-rail defects it was printed against | D58 rebuilt the coupon (backstop walls, 30 mm pitch, triangular ribs) |
+| D58 coupon (`build/coupon/rail_coupon_256.3mf`: backstop walls, PLAIN row 0.30 .. 0.10 per side, RIBS row 0 .. 0.40 interference), printed 2026-10-07, PETG | **Too loose on every stub, the 0.40 mm interference ribs included.** The play was side-to-side sliding and tilting or rocking of the block on the stub, not a uniform gap | **D59: joining postponed.** The body has slots on both faces and no male rail; a future spring clip carries the tolerance. No coupon is needed before the body |
 | Everything else in the planned checks | Not reported | None |
 
 Planned checks, kept for the final print:
@@ -178,13 +180,12 @@ filament first. Slicer settings as test print 3 (no brim, no supports).
 | Stringing | Look at the groove, bins and lid | Much less than test print 3 once the filament is dry |
 
 
-## Final print — planned, revision 12 (with D51 to D54 from revision 13)
+## Final print — planned, revision 15 (revision 12 with D51 to D54 from revision 13 and D59: joining postponed)
 
 **Printed:** three plates, `build/final/final_body_256.3mf`, `final_pick_lid_256.3mf`,
-`final_fill_lid_256.3mf`. PETG (dried), no brim, no supports, 15% infill. **Before the body: read the
-D56 coupon** (`build/coupon/rail_coupon_256.3mf`, not yet printed). Set
-`rail_clear` to the plain row's best clearance and run `python3 build/maquette/make_plate.py final --export` first:
-the body bakes in the 0.30 starting point. Test print 4 reported only the arches, the lid and the coupon, so
+`final_fill_lid_256.3mf`. PETG (dried), no brim, no supports, 15% infill. **No coupon first (D59):** five coupons
+gave no usable rail fit, joining is postponed, and the body carries two plain dovetail slots on each side face and no
+male rail (240 mm wide). Print the body. Test print 4 reported only the arches, the lid and the coupon, so
 the other revision 11 features below have never been checked on a print; the edge pass (D48) is new
 too. Report anything that is not a pass.
 
@@ -192,7 +193,7 @@ too. Report anything that is not a pass.
 |---|---|---|---|
 | D41 ribs | tray A, front-bottom corner, three per bay | Print clean as half-round ribs with a rounded end; a capsule slid to the wall rides up a rib's side and tips | A filled wedge, not larger ribs |
 | D42 flare | hopper A's back wall | A clean 60-degree lean (30 degrees from vertical: the outer face is a printable 30-degree overhang, the inner face leans up); pouring from a bottle goes in without spilling | Shallower lean or a wider mouth |
-| D43 slim rail and groove | right wall (groove) and left wall (rail), both ends | Rail enters the groove by hand at `rail_clear` (0.30 from D56, to be set from the D56 coupon), snug, comes out by hand; no tear at the break-out | Move `rail_clear` by one 0.05 step (the D56 coupon is the guide) |
+| D59 slots, both faces | both side faces, rail 1 (front, under tray A) and rail 2 (back, under hopper B) | Four clean dovetail slots, open through the top, blind at z 10; no tear at the front slots' break-out through the pick plane; the left face a mirror of the right. Try nothing in them yet: they are for a future clip | If a slot's undercut droops or strings, report it: the clip's profile depends on the printed slot |
 | K1 skin cap | the 2.4 mm skin behind the rail-1 groove, front bin | No wobble or tear; flat top, 2.3 mm above the lip at worst | Thicken or lower the cap |
 | D45 labels | the front face, two stacked strips | Both strips visible with the lid on, tape fits the 0.5 recess | |
 | Divider fillets | tray A and tray B front-wall corners (D46, D48) | Smooth quarter-rounds, no gap between them and the divider | |

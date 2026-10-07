@@ -1,3 +1,34 @@
+# Resume note -- revision 15 (read this first)
+
+**Where it stands:** revision 15 (D59, joining postponed) is implemented on branch `pill-organizer-rev15`
+(from `pill-organizer-rev13` at `f8c76fb`); not pushed, no PR. The D58 coupon (printed 2026-10-07) was too loose
+on every stub, ribs included, so the body has NO male rail and the same two dovetail slots on BOTH side faces
+(left = right mirrored: `both_faces()` in `parts/body.scad`). A future, separately printed double-dovetail
+spring clip will join two units; it is not designed. The coupon is superseded (header note only).
+Body is 240 x 213.0 x 189 mm, 2305.5 cm3; end bays 428.2 / 198.1 mL on both sides.
+
+**Proven:** `validate_scad.sh --all` COVERAGE 14 passed, 0 failed, 3 not-applicable, 0 inconclusive, 1 advisory;
+`check_rules.py` clean; every probe in `probes/`, with `gang_fit.py` rewritten as the slot gate (profile
+equality on both faces at 24 heights x 9 depths per slot, mirror symmetry, blind floor, open top, no male
+rail, bowtie cavity and double-dovetail key fit in a ganged pair) and `corner_thickness.py` and
+`skin_free_height.py` run on both faces (left on the mirrored mesh); lid retention (a)-(h) and the four motion
+sweeps unchanged; the left 60 mm of the body is the mirror of the right 60 mm to 0.06 mm3; overhang scan
+unchanged (flat 9356, steep 3028 mm2). Final body 3MF read back against its STL: same size, volume and
+triangle count, x 8.0..248.0, y 21.5..234.5, z 0. The pick lid and fill lid plates did not change.
+**Not proven:** anything printed, and the slots' undercut printing cleanly on both faces (`TEST_PRINTS.md`,
+"Final print"). Nothing joins in this print by design.
+
+**Judgement calls:** `rail_clear` stays 0.30 (an unmeasured starting value for the clip). `build/section/`
+was not rebuilt: the section is the right end bay and its mesh is identical to the D58 source's (it is stale
+since D57, as before). The `rail_male` sub-feature and its `fusions.json` row were deleted rather than
+kept empty.
+
+**Next step:** an adversarial review of revision 15 (start with `both_faces()` and the cutters it wraps in
+`parts/body.scad`, then `probes/gang_fit.py`), then print the body plate, dried PETG, no brim, no supports.
+The clip and its coupon are a separate, later piece of work.
+
+---
+
 # Resume note -- revision 13 (read this first)
 
 **Update, D55 to D58 (rail fit, newest first).** `rail_clear` is 0.30, a STARTING POINT, not a reading:

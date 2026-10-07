@@ -7,6 +7,18 @@ Lift one lid and all ten types are exposed.
 **Two lids total.** Both fill ports at the back under one flat lid, both pick
 rows at the front under one sloped lid.
 
+**Revision 15.** Fifteen revisions, fifty-nine recorded decisions (`plan.md`). Revision 15 postpones
+joining (D59). Five rail coupons (D47, D51, D55, D56, D58) never gave a usable fit on the 3.6 / 6.0 x 3 mm
+dovetail; the D58 coupon (printed 2026-10-07, PETG) was too loose on every stub, the 0.40 mm interference
+ribs included, with side-to-side sliding and rocking. Printed tolerance at this rail size is about the size of
+the clearance, so the body no longer tries: it has **no male rail**, and **both side faces carry the same two
+vertical dovetail slots** (the left face is the right face's mirror image). A future, separately printed
+spring clip (a double-dovetail key with a flexure) will join two units; the tolerance goes into that cheap part,
+tuned with clip prints, and no body is reprinted. The body is 240 mm wide (243 with the rail). The buttresses,
+stop blocks, lugs, ribs, flare, labels, cubby lip, arches and the pick lid are unchanged; capacities of both end
+bays are 428.2 / 198.1 mL. `probes/gang_fit.py` is now a slot gate. The coupon is superseded, so
+**there is nothing to print before the body** (see "Print the final unit").
+
 **Revision 13.** Thirteen revisions, fifty-four recorded decisions (`plan.md`). Revision 13
 answers test print 4, which was printed after all (the revision 11 section, PETG, 2026-10-04):
 the arches over the openings drooped a little, the pick lid looked like two rectangles welded
@@ -27,8 +39,7 @@ plain row and a crush-rib row, `rail_clear` 0.30 as a starting point). D57: the 
 section offset by `rail_clear` with the same flank slope (it was gentler, 0.14 mm tighter at the tip).
 D58: the body's male rail was itself fatter than its section (its 45 degree underside was a hull that
 pushed the flanks out by up to 0.17 mm per side low on the rail): fixed, and `probes/gang_fit.py` gates
-the ganged pair. **The coupon's reading is needed before printing the body** (see "Print the final
-unit"). Nothing here has been printed.
+the ganged pair. (Superseded by revision 15 / D59: joining postponed, no coupon needed.) Nothing here has been printed.
 
 **Revision 12.** Twelve revisions, forty-nine recorded decisions (`plan.md`). Revision
 12 is the final full-size print: the user skipped test print 4 and went straight to the unit (they printed it afterwards; see revision 13).
@@ -74,7 +85,7 @@ revision 9 fixed tray B's pile.
 
 | | |
 |---|---|
-| Overall | 243 x 213.0 x 189 mm (the 243 includes the 3 mm joining rail; 194.8 deep below z 155, the back wall leans out above; the plate allows 246 x 246 x 250) |
+| Overall | 240 x 213.0 x 189 mm (no joining rail since D59; 194.8 deep below z 155, the back wall leans out above; the plate allows 246 x 246 x 250) |
 | Bays | 10, two rows of 5, 44.96 mm clear each, trays 40 mm deep |
 | Capacity, middle bay | **438 mL front row, 200 mL back row** (437.7 / 200.0 after the D52 and D54 facets); end bays 428 / 198. About 3.2 L total, geometric maximum |
 | Printed parts | **3 designs, 3 pieces**, no hardware |
@@ -234,27 +245,27 @@ the wedge to work.
   rounded corners, the fill lid a chamfered top perimeter and the pick lid
   chamfered plate edges. Inside, every corner a pill meets has carried a 2 mm
   fillet since revision 1.
-- **Ganging.** Two dovetail rails on the left face, two grooves on the right,
-  the rails' undersides chamfered at 45 degrees so they print without droop.
-  Lift the pick lid off the left-hand unit, lower the right-hand unit's rails
-  in from above. Revisions 3 to 5 had the front groove capped by the side wall,
-  so this could not be done; it is open through the pick plane now, and the lid
-  covers the opening in use. Since D43 the rail is 3 mm out of the wall (5 before)
-  and 3.6 mm at the root, the groove 3.4 deep (D57: the male's section grown by `rail_clear` per side with
-  the SAME flank slope, so the flank gap is `rail_clear` at every depth, then straight walls for the last
-  0.4 mm; `rail_profile.scad`, shared with the coupon; before, the gap shrank by 0.14 mm toward the
-  rail tip; D58: the male rail is exactly `rail_male_2d()` at every height, cut by a wedge for its 45 degree
-  underside, where it had been fattened by a hull, and `probes/gang_fit.py` gates the ganged pair), and the buttress behind the front
-  groove protrudes 3 mm into the bay (7 before) and is 14 mm long; the skin between
-  the groove and tray A is 2.4 mm, a divider, and the groove's front lip is bevelled
-  1 mm where it meets the sloped plane (D39's lesson: no thin blade, no knife edge).
-  The plane rises toward the back, which would have left the skin standing up to
-  6.4 mm (2.6 times its own thickness) above the front lip beside it, so the skin's top
-  is trimmed flat to one skin thickness above that lip: it stands 2.3, 1.7 and 1.3 mm
-  above it at the groove's tip, middle and mouth. `probes/corner_thickness.py` checks
-  that, the edge angles, and every thin region in the break-out zone (all named
-  features, listed in `calculations.md`). Test print 3 found the old rail overbuilt;
-  the dovetail slope is unchanged.
+- **Ganging (postponed, D59).** Joining is not part of this print. Each side face carries two vertical
+  dovetail slots, the same on the left as on the right (mirror images about the module's mid-plane), and
+  there is no male rail. Two units placed side by side, faces touching, show a bowtie cavity at each of the
+  two slot positions (rail 1 under tray A, rail 2 under hopper B). A separately printed spring clip, a
+  double-dovetail key with a flexure, will fill it and hold the pair; the clip is not designed yet and gets
+  its own coupon, tuned with cheap clip prints. Why: five rail coupons (D47 to D58) chased a fit of well under
+  0.2 mm on a 3 mm dovetail and the printed tolerance is about as large as the clearance, so the tolerance
+  belongs in a small replaceable part with a flexure, not in the 27 h body. The slot is the D57 profile
+  (`rail_groove_2d()` in `rail_profile.scad`: the old male section grown by `rail_clear` 0.30 per side with
+  the same 0.4 flank slope, then straight walls for the last 0.4 mm), 3.4 mm deep, blind at z 10, open
+  through the top, 6.6 mm wide at its widest. The front slot breaks out through the sloped pick plane, so
+  the pick lid covers it in use; the D39 break-out bevel and the K1 skin cap are on both faces. The buttress
+  behind the front slot protrudes 3 mm into the bay and is 14 mm long; the skin between the slot and tray A is
+  2.4 mm, a divider; the slot's front lip is bevelled 1 mm where it meets the sloped plane (D39's lesson: no
+  thin blade, no knife edge). The plane rises toward the back, which would have left the skin standing up to
+  6.4 mm (2.6 times its own thickness) above the front lip beside it, so the skin's top is trimmed flat to
+  one skin thickness above that lip: it stands 2.3, 1.7 and 1.3 mm above it at the slot's tip, middle and
+  mouth. `probes/corner_thickness.py` and `probes/skin_free_height.py` check that, the edge angles and every
+  thin region in the break-out zone on BOTH faces (the left on the mirrored mesh; all named features, listed
+  in `calculations.md`); `probes/gang_fit.py` checks the slots against the profile, their mirror symmetry and
+  that a ganged pair's cavity takes a double-dovetail key.
 
 ## Two things that were forced, not chosen
 
@@ -288,26 +299,21 @@ it is laid. Every wall over both trays dies on that plane.
 
 ## Print the final unit
 
-Revision 13 is the full unit (revision 12's plus D51 to D54); test print 4 (the revision 11 section) was printed after revision 12 was designed and drove D51 to D53. Three
+Revision 15 is the full unit (revision 12's plus D51 to D54, with joining postponed by D59: slots on both faces, no male rail); test print 4 (the revision 11 section) was printed after revision 12 was designed and drove D51 to D53. Three
 plates, one part each, plain core-spec 3MFs that Elegoo Slicer opens as a single named
 object, already centred on the 256 x 256 plate at z = 0 (`python3 build/maquette/make_plate.py
 final --export` rebuilds them from the sources and checks each against its STL):
 
 | Plate | File | Part | Size on the plate | Spans |
 |---|---|---|---|---|
-| 1 | `build/final/final_body_256.3mf` | `pill_organizer_body` | 243.0 x 213.0 x 189.0 mm, 2.31 L of solid | x 6.5-249.5, y 21.5-234.5 |
+| 1 | `build/final/final_body_256.3mf` | `pill_organizer_body` | 240.0 x 213.0 x 189.0 mm, 2.31 L of solid | x 8.0-248.0, y 21.5-234.5 |
 | 2 | `build/final/final_pick_lid_256.3mf` | `pill_organizer_pick_lid` | 239.0 x 139.5 x 22.7 mm, 105.5 cm3 | x 8.5-247.5, y 58.2-197.8 |
 | 3 | `build/final/final_fill_lid_256.3mf` | `pill_organizer_fill_lid` | 233.8 x 129.0 x 3.0 mm, 85 cm3 | x 11.1-244.9, y 63.5-192.5 |
 
-- **Before the body: read the D56 coupon.** The body bakes in `rail_clear` 0.30 (D56), a starting
-  point: the slim-rail coupon readings (the D47 coupon in test print 4, the D51 and D55 coupons) are void
-  (the block collided with the neighbouring stub); the D51 and D55 coupons read loose on every stub. Print `build/coupon/rail_coupon_256.3mf` first
-  (PLAIN row 0.30 .. 0.10, RIBS row 0 .. 0.40 interference; see "Print this first"). Set `rail_clear`
-  in `params.scad` to the plain row's best clearance, or, if the ribs row is the better answer, keep
-  `rail_clear` 0.30 and tell the designer the rib label so the body's male rail gets crush ribs; then run
-  `python3 build/maquette/make_plate.py final --export` **before** printing the body: the groove is in
-  the body, so a wrong value is a reprint. The lids do not depend on it.
-- **Filament: PETG**, the same as the tests; in another filament run the coupon again. **Dry it first**:
+- **Nothing to calibrate first (D59).** The rail coupon is retired: joining is postponed and the body has
+  slots only. `rail_clear` 0.30 is the slots' clearance, an unmeasured starting value for the future clip.
+  Print the body when it is ready.
+- **Filament: PETG**, the same as the tests. **Dry it first**:
   the tests strung heavily (groove, bins, lid).
 - **No brim.** Elegoo Slicer: Others, Skirt and brim, Brim type, No-brim (a brim fused into
   the walls on test print 1). **No supports.** 10% cubic infill, 2 wall loops (the 2.4-2.8 mm walls are already near solid at 2 loops; a third added about 150 g), 0.2 mm layers. Bridge detection on.
@@ -317,14 +323,14 @@ final --export` rebuilds them from the sources and checks each against its STL):
 - Print the body first; it is the long one (Elegoo Slicer, revision 12 with D50: 899 g of PETG, 1 d 3 h at 10% cubic infill and 2 wall loops, so it fits one full 1 kg spool; at 15% it was 1.02 kg) and the lids are
   checked against it. The lid plates are 239 and 234 mm wide: nothing else goes on those plates.
 - Features printed for the first time in this unit: the D52 half-octagon openings, the D53 one-piece lid, the D41 ribs, the D42 flare, the D43 slim
-  rail and groove, the K1 skin cap, the D45 labels, the divider fillets. `TEST_PRINTS.md`,
+  slots on both faces (D59), the K1 skin cap, the D45 labels, the divider fillets. `TEST_PRINTS.md`,
   "Final print", lists what to look at on each.
 
 ## Bill of materials
 
 | Part | Qty | Print orientation |
 |---|---|---|
-| `body` | 1 | as modelled, flat on its base, no supports. 243 x 213.0 x 189 mm |
+| `body` | 1 | as modelled, flat on its base, no supports. 240 x 213.0 x 189 mm |
 | `pick_lid` | 1 | plate TOP face on the bed, skirt rising at about 46 degrees (`rotate([180 - pick_lid_slope, 0, 0])` — revision 5's export had the sign wrong and stood the lid on its skirt) |
 | `fill_lid` | 1 | flipped, plate top face on the bed; the pull lip is in the plate's plane |
 
@@ -358,7 +364,11 @@ full-size section" below. The 0.42 maquette plate
 (`build/maquette/test_print_plate_256.3mf`) judges shape only.
 `TEST_PRINTS.md` records what each test print showed.
 
-## Print this first
+## The rail coupon (superseded by D59, kept as a record)
+
+**Do not print this for the body.** D59 postponed joining; the D58 coupon was printed on 2026-10-07 and read
+too loose on every stub, ribs included (`TEST_PRINTS.md`). The future clip will get its own coupon. What
+follows is the revision 14 description.
 
 `calibration_coupon.scad`, as `build/coupon/rail_coupon_256.3mf` (`python3 build/maquette/make_plate.py
 coupon --export`). One fit depends on your printer rather than the geometry: the joining rail in its
@@ -405,13 +415,13 @@ parts, so every clearance, wall and bridge is the real one. What to do with it:
    against the side wall directly behind the stop block and the lid does not
    slide down the slope. Pinch it and lift it off tilted about its back edge, and
    lower it back hinged from the back: neither may jam. Try it turned round.
-4. **Groove (D43).** Lower a spare rail into the front groove; nothing tears at
+4. **Slot (D43, D59).** Look into the front slot; nothing tears at
    the break-out, and the buttress is no longer in the way in the front bin.
 5. **Labels (D45).** Stick 1/2 inch tape on both strips on the front face.
 6. **Fill lid.** Drop the lid end into the mouth: it goes in without forcing,
    sits flat without rocking, and lifts out cleanly.
 7. **The left wall** (D46) is a whole divider now: handle it.
-8. **The coupon** as above.
+8. ~~The coupon~~ (superseded by D59).
 
 ## One plate for the small test print
 
@@ -476,8 +486,8 @@ judge the shape and the lid fits; do not judge the flow from it.
   thumb. Mitigated, not eliminated.
 - The two `NEAR MISS` notes (0.150 mm, 0.100 mm since D53's fillet) are both lids' intended
   clearance, explained in `joints.json`.
-- The rail clearance (0.30, D56) is a starting point for PETG and pending the D56 coupon. The fill lid's
-  (0.30) was confirmed by test print 2.
+- The slot clearance (`rail_clear` 0.30) is an unmeasured starting value for the future clip (D59); nothing joins
+  today. The fill lid's (0.30) was confirmed by test print 2.
 
 ## Build and verify
 

@@ -1021,3 +1021,40 @@ tightest gap of the 0.10 stub +0.093), the body's sections at z 60 and 150 (gap 
 | Underside | hull to a sliver at the wall face | the exact prism cut by a 45 degree wedge, first solid at depth d is d above `rail_z0` |
 | Coupon ribs | half-round r 0.5, 0.0 to 0.2 interference | triangular 0.8 proud, 0.2 crest, 0.0 to 0.4 interference in 0.1 steps; ribbed stubs slimmer (base y clearance (0.8 - X) / 0.928) |
 | Coupon seat | block dropped anywhere along the stub | mouth on a backstop wall at the root plane, rail tip 0.4 mm off the groove floor |
+
+## Revision 15: joining postponed (D59)
+
+Five coupons (D47, D51, D55, D56, D58) found no usable rail fit on a 3.6 / 6.0 x 3 mm dovetail; the D58 coupon (PETG,
+printed 2026-10-07) was loose on every stub, the 0.40 mm interference ribs included, with side-to-side sliding and rocking.
+The printed tolerance at this rail size is about as large as the clearance itself. The body is printed without a male rail
+and with the right face's two slots on the left face too; a future double-dovetail spring clip carries the tolerance.
+
+| Quantity | Before (D58) | After (D59) |
+|---|---|---|
+| Male rails | 2 on the left face, 3.6 / 6.0 x 3.0, exact section | none; `rail_male()`, its sub-feature and its `fusions.json` row are deleted |
+| Slots | 2 on the right face | 2 on each face; left = right mirrored about x = `module_w` / 2 (`both_faces()` in `parts/body.scad`) |
+| Slot section | `rail_groove_2d()` at `rail_clear` 0.30 | unchanged: flank slope 0.4, half-width 2.1 at the mouth to 3.3 at depth 3.0, straight to the floor at depth 3.4 |
+| Slot z range | z 10 (blind floor) up through the top | unchanged, both faces: rail 1 to z 102.99 through the pick plane, rail 2 to z 190.0 |
+| Break-out treatment | right face only: D39/H2 chamfer, K1 skin cap | both faces (`rail1_countersink`, `skin_trim`) |
+| Buttresses, D38 stop blocks, fillers, lugs | symmetric already | unchanged |
+| Body bounding box | 243.0 x 213.01 x 189 (x -3 .. 240) | 240.0 x 213.01 x 189 (x 0 .. 240) |
+| Final body plate | 243.0 x 213.0 x 189.0, x 6.5 .. 249.5 | 240.0 x 213.0 x 189.0, x 8.0 .. 248.0, y 21.5 .. 234.5, z 0, inside 5 .. 251 |
+| Body solid | 2313.1 cm3, 17014 triangles (the two rails in, the left slots not cut) | 2305.5 cm3, 17112 triangles, one watertight body, shortest edge 0.0045 mm, smallest triangle 0.0002 mm2 |
+| Capacity, end bay row A / row B (`probes/capacity.py 0` and `4`) | left 427.9 / 198.1, right 428.2 / 198.1 mL | 428.2 / 198.1 mL in both end bays; middle bay 437.7 / 200.0 unchanged |
+| Overhang scan (`probes/overhang_scan.py`, body) | flat 9356 mm2, steep 3028 mm2 | the same: no new downward face past 45 degrees |
+
+Measured on the body mesh (`probes/gang_fit.py`, 24 heights x 9 depths on each of the two slots of each face): every slot flank
+equals `rail_groove_2d()` with error 0.0000 mm and the left slots are the right slots' mirror images to 0.00000 mm; the
+slot floor is at depth 3.400 on both faces; the column of each slot is solid-free from z 10.1 to 190 and solid at z 9.9 (blind
+floor); the body spans x 0 .. 240.000. In a ganged pair (a copy at +`module_w`, faces touching) the two facing slots form a bowtie
+cavity that is mirror-symmetric about the shared plane (0.00000 mm2) and centred on each rail's y, and a double-dovetail key (two male
+trapezoids base to base) shifted +-0.29 mm in y stays inside it, i.e. rail_clear 0.30 of y play per flank. Symmetry of the whole
+end region: the boolean difference of the body and its mirror image over x < 60 is 0.059 / 0.060 mm3, so the left end bay (buttress,
+stop block, filler, ribs, capsule traps) is the right end bay's mirror image, and `probes/capsule_corner.py` (last-bay pockets: 0)
+applies to both. `probes/corner_thickness.py` and `probes/skin_free_height.py` now run every check on the right face and on the
+left face (the mesh mirrored about the module's mid-plane): skin 2.40, buttress sides 3.70, 0 unnamed thin regions, 0 knife edges
+under 60 degrees, skin standing 2.30 mm of 2.4, on both. Lid probes (`probes/lid_retention.py` (a)-(h)) and the four motion sweeps pass
+unchanged (worst clearance 0.100 mm). The section plate (`fit_section.scad`, the right end bay) is not affected: its mesh is
+identical to the D58 source's.
+
+`rail_clear` stays 0.30 and is the slot's clearance, an unmeasured starting value; the future clip's own coupon sets it.
