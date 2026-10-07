@@ -458,6 +458,15 @@ declarations against what they claimed to test and by probing the mesh with
 - **Fix:** D58: the male is `linear_extrude(rail_male_2d())` intersected with a wedge (first solid at depth d is d above `rail_z0`), so the flanks are the 2D section exactly and the underside is still 45 degrees. `probes/gang_fit.py` now gates it on the mesh: a copy at +`module_w`, 12 sections over both rails, the y gap on both flanks at 7 depths equal to `rail_clear` within 0.01 (measured error 0.0000), and the copy lowered straight down with no overlap.
 - **Already promoted to a rule?** no. Candidate: check a mating pair as assembled, on the printed meshes, not each half against its own formula; and a feature built as a hull of a section with something else is not that section.
 
+## Revision 16 -- the final quality pass
+
+### 2026-10-07 -- anti-coplanar offsets of 0.15 to 0.4 mm, and fillets that stopped short, printed as visible steps
+- **Where:** `parts/body.scad` and `params.scad`: `scallop_over` 0.4, `pick_stop_w` = pillar - 0.4, the filler's 0.3, `boss_clip_drop` 0.2 on the stop blocks, the G7 `stop_trim()` (0.155), `seat_cut_over` 0.4, and `front_fillets()` stopping 1 mm under the scallop floor (tray B's gussets 2 mm under the plane).
+- **Symptom:** the user's slicer close-ups: a notch and a small ledge where each divider meets the scalloped front wall, a thin strip down every divider face, and the front wall stepping in thickness beside the pillar. Mesh scan: 0.4 mm steps on 8 divider faces and both pillars, 0.3 at both fillers, 0.155 and 0.2 along both side walls, ten 0.4 notches in the rim walls.
+- **Root cause:** each offset was chosen to keep two boolean faces off one plane (coplanar unions and differences leave zero-volume shards and non-manifold edges), and each was picked large enough to feel safe. A 0.4 mm nozzle prints 0.15 to 0.4 mm as a ledge. The fillets were stopped short of the scallop so the cut would not meet them, which left a flat 2 x 2 mm top and a bare 90 degree corner above it.
+- **Fix:** D60: every such offset is now 0.05 mm or less (below slicer resolution, and still not coplanar: the final body has no edge under 0.001 mm); the fillets run past the cut and the cut trims them along the arc; `probes/step_scan.py` gates the result. Not done, on the audit's advice: making the scallop exactly bay wide and cutting per-bay cavities, which left 18 zero-volume sheets and 28 edges under 0.001 mm.
+- **Already promoted to a rule?** no. Lesson, candidate for one: keep an anti-coplanar offset at or below 0.05 mm (0.1 at the very most); when a feature must stop short of another cut, run it past and let the cut trim it; and gate every body with a step scan of its wall faces, because the mesh checks (watertight, one body, no short edges) pass with the steps in.
+
 ## Revision 15 -- joining postponed
 
 ### 2026-10-07 -- five coupons chased a sub-0.2 mm fit on a 3 mm dovetail, and the last one was loose on every stub

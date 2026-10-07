@@ -179,7 +179,7 @@ filament first. Slicer settings as test print 3 (no brim, no supports).
 | Stringing | Look at the groove, bins and lid | Much less than test print 3 once the filament is dry |
 
 
-## Final print — planned, revision 15 (revision 12 with D51 to D54 from revision 13 and D59: joining postponed)
+## Final print — planned, revision 16 (revision 12 with D51 to D54 from revision 13, D59: joining postponed, and D60: the final quality pass)
 
 **Printed:** three plates, `build/final/final_body_256.3mf`, `final_pick_lid_256.3mf`,
 `final_fill_lid_256.3mf`. PETG (dried), no brim, no supports, 15% infill. **No coupon first (D59):** five coupons
@@ -198,7 +198,14 @@ too. Report anything that is not a pass.
 | Divider fillets | tray A and tray B front-wall corners (D46, D48) | Smooth quarter-rounds, no gap between them and the divider | |
 | Bed chamfer (D48) | body base and the four foot-pad recess mouths | A 0.5 mm bevel on the first layers; a 10 mm stick-on foot enters its recess | Raise `bed_chamfer` toward 0.6 |
 | Side-face rounds (D48) | both side faces, along the pick plane, the step and the rim | Smooth rounds, no ragged edge, no thin shell | |
-| Scallop, mouth and cubby chamfers (D48) | front wall floors, fill-mouth rim, cubby mouth | Clean 45-degree faces; the scallop chamfer fades out up the corner arcs | |
+| Scallop, mouth and cubby chamfers (D48) | front wall floors, fill-mouth rim, cubby mouth | Clean 45-degree faces; the tray-side scallop chamfer fades out up the corner arcs and runs on over the divider fillets (D60) | |
+| No steps (D60) | divider faces beside the scallop, the front wall over each pillar, the side-wall tops, the rim walls beside the dividers | The 0.4 / 0.3 / 0.2 mm steps of revision 15 are gone: the divider face is one flat from the arc up, the front wall does not step in thickness over the pillar, no notch in the rim wall beside a divider. Anything left is under 0.06 mm | Report where; `probes/step_scan.py` should have caught it |
+| Scallop front round (D60) | front face, round the whole scallop outline, divider noses | A smooth r 0.8 round from the floor up the corners and sides, a 0.7 mm flat on each nose; no ragged first layers on the near-vertical sides | Raise or lower `scallop_round_r` |
+| Divider fillets to the arc (D60) | tray A front wall, both sides of every divider; tray B gussets | The fillet climbs to the scallop's arc with no flat ledge and no bare corner; tray B's gussets run to the pick plane | |
+| Divider top rounds (D60) | both top edges of dividers 1 to 4, tray A and tray B | r 0.6 on each edge, a 1.7 mm flat between them for the lid; no ragged top layers | Smaller `divider_top_r` |
+| Wall bevel (D60) | the wall between the trays, back-top edge, every bay | A clean 1 mm bevel instead of a thin knife edge; the pick lid still sits flat on the 2.3 mm strip | |
+| Buttress and filler rounds (D60) | rail-1 and rail-2 buttress inboard edges, filler back-inner edge | r 1.0 rounds; the buttress stays over a divider thick either side of the groove | |
+| Seat ledges, pull-lip notch (D60) | the fill mouth's ledges, the 34 mm notch in front of hopper B | A vertical 0.5 mm land on each ledge tip, no 0.4 notches in the rim walls, r 0.8 rounds on the notch edges; the fill lid still drops in and its lip clears the notch | |
 | Cubby lip (D50) | the back wall's bottom 76 mm, across the cubby mouth | A 2.8 mm wall standing 76 mm above the bed with a clean 0.5 mm chamfer on its top edge, no wobble or tear while printing; the pocket behind it takes a lip balm and a pill cutter upright | Thicken the lip or lower `cubby_lip_top` |
 | Lid fit | pick lid on the body | Seats on its lugs, no jam on lift (probes pass; first time with the rounded side faces under the lid's ends) | |
 | Half-octagon openings (D52) | the tray A mouth (under the wall between the rows) and outlet B (under hopper B's front wall), every bay | A 10 mm (tray A) and 20 mm (outlet B, D54) crown flat that prints without sag or strings, and clean 45-degree facets either side (test print 4 drooped and strung along the old 29 mm flat). Pour a few capsules into hopper B and watch them leave outlet B: look for any that lodge in the side corners (the throat a pill radius from a divider is 13.8 mm, a capsule 11; the mesh sweep's worst pose clears by +1.37 mm) | If outlet B's 20 mm still droops, shorten `outletB_crown_flat` and re-run `probes/outlet_arch.py`: it fails below +1.0 mm of worst-pose margin (about 19 mm); if capsules lodge, lengthen it |

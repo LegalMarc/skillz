@@ -520,7 +520,7 @@ Geometry per side, left (the right is the mirror):
 | Quantity | Formula | Value |
 |---|---|---|
 | Stop face | perpendicular to the plane; meets the plane at `pick_stop_y` and runs `pick_stop_depth` down along the inward normal, then drops vertically to the floor | y 3.8 at the plane, 9.0 deep, back to y 10.0 |
-| Stop block | fused to the side wall and front wall, `pick_stop_w` wide, top 0.2 under the plane (clipped by OUTER_CLIP) | x 2.8 .. 8.4, y 1.0 .. 10.0 |
+| Stop block | fused to the side wall and front wall, `pick_stop_w` wide, top `stop_clip_drop` (0.05; 0.2 until D60) under the plane (clipped by OUTER_STOP_CLIP) | x 2.8 .. 8.75 (8.4 until D60), y 1.0 .. 10.0 |
 | Front wall pillar | scallop stops `pillar_w` from the side wall | x 2.8 .. 8.8 |
 | Lug | `pick_lug_t` x `pick_lug_len` x `pick_lug_d` | 4.0 (X) x 4.0 (along the slope) x 7.0 (perpendicular to the plate) |
 | Lug position | against the side wall, in front of the buttress | x 3.3 .. 7.3; lowest corner y 11.8, buttress front y 14.3 (rail1_y moved +3 for this) |
@@ -759,13 +759,13 @@ tests every T row on the real meshes.
 | B4 | Top edges in section (the step, the rim, the back lean, the pick plane's back end) | round r 1.5 | **E** unchanged | The dilation tool's lower half is a flat-bottomed cone, so the down-facing back lean (D42, 30 degrees) is dilated by r cos 30 instead of r: the whole lean sits 0.20 mm inside its nominal plane, its wall is about 2.55 mm normal instead of 2.75, and the top-back round has a 30-degree crease where it meets the lean (y 212.9, z 187.5). Cosmetic; accepted (rev 12 review F1). |
 | B5 | Side faces' perimeter (x = 0 and x = 240: along the pick plane, the step, the rim, the back lean) | square | **T** round r 1.5 (hand-carried edge; up-facing or vertical, so a round, not a chamfer) | the side walls are 2.8 thick: 1.3 of flat is left. The rail-1 break-out zone on the right face was re-probed with the round running through it (below) |
 | B6 | Front edge of the pick plane (130 degrees) | 0.16 mm easing | **E** unchanged | |
-| B7 | Tops of dividers, walls and the front wall's pillars on the pick plane, inner edges | square | **K** | the pick lid's seating plane and its 0.2 float; a 2.4 wall top with a bevel on each side keeps 1.4 of flat for nothing |
-| B8 | Scallop floor edges, front face and tray side (5 floors) | square | **T** 0.7 mm 45 degree chamfer following the outline, fading to nothing up the r 6 corners | a finger rests on it and a pill is pulled over it. Not applied up the vertical sides: the divider tips there are already thinned to 1.6 by `scallop_over` |
-| B9 | Scallop sides / divider tips above the floor, pillars beside the end bays | square | **L** | the tips are 1.6 x 3.8 mm; any bevel feathers them. The pillars are the stop blocks' front |
-| B10 | Fill mouth rim, inside, 4 edges | square | **T** 0.45 mm 45 degree chamfer (a cone of the opening), also a lead-in for the lid | 0.45 and not more: the front rim wall is 2.4 wide and loses 1.5 to the outer round (0.45 of flat left). Not 0.4 (see INCIDENTS) |
+| B7 | Tops of dividers, walls and the front wall's pillars on the pick plane, inner edges | square | **T** (D60, F8) r 0.6 quarter round on both top edges of dividers 1 to 4, tray A and tray B (`divider_top_rounds()`), ending 0.05 short of the cross walls; was **K** | the user's rule (rounded wherever possible) overrides the earlier call: these are the edges a hand passes over to pick pills. The flat the lid bears on stays 1.74 mm of the 2.4 (measured 0.03 under the plane, `edge_pass.py`). The side walls' inner top edges stay square (they run through the stop block and buttress zone) |
+| B8 | Scallop floor edges, front face and tray side (5 floors) | square | **T** tray side: 0.7 mm 45 degree chamfer following the outline, fading to nothing up the r 6 corners (D60: runs on over the divider fillets and out to the scallop's own sides). Front face (D60, F6): `scallop_front_round()`, r 0.8 (`scallop_round_r`) round on the whole outline, floor, corners and both sides up to the plane (5 hull frusta between outlines offset by r (1 - sin t) at depth r (1 - cos t)); replaces the 0.7 chamfer there | a finger rests on it and a pill is pulled over it. `edge_pass.py` names the round, checked 0.1 mm behind the face |
+| B9 | Scallop sides / divider tips above the floor, pillars beside the end bays | square | **T** (D60, F1 + F6) the same r 0.8 front-face round up the sides; was **L** | `scallop_over` 0.4 -> 0.05 widened the tips from 1.6 to 2.3 mm, which now take the round and keep 0.7 of flat. The pillars are the stop blocks' front |
+| B10 | Fill mouth rim, inside, 4 edges | square | **T** 0.45 mm 45 degree chamfer (a cone of the opening), also a lead-in for the lid | 0.45 and not more: the front rim wall is 2.4 wide and loses 1.5 to the outer round (0.45 of flat left). Kept apart from `seat_cut_over` (0.4 until D60, 0.05 now; see INCIDENTS) |
 | B11 | Fill mouth rim, outside (the step, the back lean, the sides) | round r 1.5 / square | **E** / **T** by B4, B5 | |
 | B12 | Fill-lid seat ledges, divider tops at the seat plane, the lid's 0.30 recess walls | square | **K** | the lid rests on them; the 0.30 fit |
-| B13 | Pull-lip notch (the wall cut down to the seat across 34 mm), its vertical edges and its floor edge | square | **L** | the finger works under the lid's lip, not on these edges; they bound the lip's clearance of 2 mm per side. Named as the one hand-reached edge left square |
+| B13 | Pull-lip notch (the wall cut down to the seat across 34 mm), its vertical edges and its floor edge | square | **T** (D60, F12) the four vertical edges r 0.8 (`pull_notch_r`, a quarter-round corner piece in the cutter); the floor edge stays square (**L**); was **L** | the finger passes these edges to get under the lid's lip. The rounds only widen the lip's 2 mm side clearance near the faces |
 | B14 | Cubby mouth in the back face: both side edges and the lip's top edge (z 76 since D50; the cone's low edge follows `cubby_lip_h`, nothing else changed) | square | **T** 0.5 mm 45 degree chamfer (a cone of the mouth, its top on the 45 degree ceiling less 0.05) | where a hand goes in. 0.5: the side walls are 2.8 wide and lose 1.5 to the outer round (0.8 of flat left) |
 | B15 | Cubby mouth, ceiling edge (135 degrees) | obtuse | **E** | |
 | B16 | Cubby inside corners: floor / front wall, floor / side walls, ceiling / side walls, ceiling / front wall | square | **T** 2 mm fillet, three-dimensional (the void is dilated by a ball) | easier cleaning |
@@ -777,8 +777,14 @@ tests every T row on the real meshes.
 | B22 | D41 rib geometry and roots | as D41 | **K** | the push-stop function is measured (`capsule_corner.py`); a root fillet changes it |
 | B23 | Outlet openings' lower edges (the hanging wall between the trays, hopper B's front wall) | square, with 8 mm corner chamfers | **L** | a downward bridge edge; a bevel is an overhang and nothing touches it (36 mm of clear height under it) |
 | B24 | Flow-void corners in section (tray A and B floors, chute foot, porch, both hoppers, the D42 flare, the vault) | fillet r 2 | **E** unchanged | |
-| B25 | Tray A front wall / divider and side wall vertical corners | r 2 gusset (D46) | **E** unchanged | |
-| B26 | Tray B front wall / divider and side wall vertical corners (10) | square | **T** r 2 gusset from 1 mm under the floor to 2 mm under the wall's top plane | pills pile against that wall, as against tray A's front wall |
+| B25 | Tray A front wall / divider and side wall vertical corners | r 2 gusset (D46) | **T** (D60, F2) the gusset climbs to `trayA_front_h + trayA_scallop_r + 1` and the scallop cut trims it along the r 6 arc; before it stopped 1 mm under the scallop floor (z 54) in a flat 2 x 2 mm ledge with a bare 90 degree corner above it (8.2 mm) | the user's close-up (a) |
+| B26 | Tray B front wall / divider and side wall vertical corners (10) | square | **T** r 2 gusset from 1 mm under the floor to the wall's top plane (D60, F5: clipped by `OUTER_STOP_CLIP`, trimmed by the B28 bevel; was 2 mm under the plane, a flat ledge and a bare corner) | pills pile against that wall, as against tray A's front wall |
+| B28 | Back-top edge of the wall between the trays (y 45.2, every bay, 225 mm): the vertical tray B face against the sloped plane | 46.2 degree knife edge, its top 0.4 mm thinner than one extrusion | **T** (D60, F4) 1.0 mm bevel (`wall_back_bevels()`, `wall_back_bevel`), the construction of `boss_back_bevel()` in the plane's frame, per bay from `wall_x1(i)` - 0.05 to +0.05 past the bay | prints ragged otherwise. Every remaining edge is 90 degrees or more. The lid's bearing strip on this wall goes 3.3 -> 2.3 mm |
+| B29 | Tray A end-bay front corner (stop block side face / front wall's tray face, x 8.75 and 231.25, y 2.8) | square | **T** (D60, F7) r 2 fillet at the stop block's face (`corner_fillets(..., end_inset = pick_stop_w)`) | a bare 90 degree pill corner; the bay's own fillets at x 2.8 and 237.2 were buried inside the blocks. Clear of the lugs (x 3.3 to 7.3). End bays 428.2 -> 427.9 mL |
+| B30 | Rail-1 and rail-2 buttress inboard vertical edges (4 per side; rail 2 is where pills slide past), filler back-inner vertical edge | square | **T** (D60, F9) r 1.0 (`buttress_round_r`): `rail_boss_one()` is a 2D hull with two rounded inboard corners; the filler is intersected with a plan view rounded at its back-inner corner | each round sits 3.7 mm from the groove tip, so the buttress keeps divider + 1 mm either side (`corner_thickness.py`) |
+| B31 | Fill-seat cut notches in the rim walls beside every divider and the hopper divider (10) | 0.4 x 3.2 x 3 mm notch | **T** (D60, F10) `seat_cut_over` 0.4 -> 0.05 | visible with the fill lid off; 0.05 is under the slicer's resolution. `mouth_chamfer` (0.45) stays clear of it |
+| B32 | Fill-lid seat ledge tips (front y 90.4, back y 204.7: 45 degree wedges; hopper divider y 147.5 and 155.5: 34 degree wedges) | knife edge | **T** (D60, F11) the underside ends `fill_ledge_land` (0.5) under the ledge top and a vertical land finishes the tip (`ledge_land()`) | the lid floats 0.2 over the ledges and bears on the dividers, so ledge width carries no load (ledge top 2.3 wide). The hopper-divider 54 degree overhang shrinks 1064 -> 864 mm2 |
+| B33 | Rail-1 buttress top beside the side wall (x 2.8 to 5.8, y 15.8 to 29.8, z 92 to 104) | 0.21 mm under the plane | **K** (D60, F13) left | the K1/K2-verified break-out zone; `boss_clip_drop` feeds `boss_back_bevel()`. `step_scan.py` names it as an exception |
 | B27 | Divider / floor edges along the flow, and the vertical corners of the chute, tray B's back wall and both hoppers | square | **L**, impractical | a three-dimensional fillet of those voids stands free where the later cuts take the wall away: above the seat plane (the seat cuts remove the dividers but not a 2 mm gusset beside them) and over the scallops. Tried on paper against the cuts, not hacked; the flow corners that matter (floors, ramps, the foot) are the profile fillets |
 
 ### Audit, pick lid (print orientation: plate top face on the bed)
@@ -803,9 +809,13 @@ tests every T row on the real meshes.
 | F3 | Underside perimeter of the plate | 0.6 lead-in chamfer | **K** | the fit's lead-in (0.30 clearance) |
 | F4 | Pull lip underside perimeter, front and sides (the back is buried in the plate) | square | **T** 0.5 mm chamfer | a fingertip hooks under it |
 
-Counts over the 39 rows: **T 12** (body B1, B2, B3, B5, B8, B10, B14, B16, B26; pick lid P3, P5; fill lid F4),
+Counts over the 39 rows as of D48: **T 12** (body B1, B2, B3, B5, B8, B10, B14, B16, B26; pick lid P3, P5; fill lid F4),
 **E 11** (B4, B6, B11, B15, B24, B25; P1, P2, P4; F1, F2), **K 9** (B7, B12, B18, B19, B20, B22; P6, P7; F3),
 **L 7** (B9, B13, B17, B21, B23, B27; P8; B27 is the one named impractical). Body 27 rows, pick lid 8, fill lid 4.
+
+Counts over the 45 rows after D60: **T 21** (body B1, B2, B3, B5, B7, B8, B9, B10, B13, B14, B16, B25, B26, B28, B29, B30, B31, B32; pick lid P3, P5; fill lid F4),
+**E 10** (B4, B6, B11, B15, B24; P1, P2, P4; F1, F2), **K 9** (B12, B18, B19, B20, B22, B33; P6, P7; F3),
+**L 5** (B17, B21, B23, B27; P8). Body 33 rows, pick lid 8, fill lid 4. B27 stays the one named impractical.
 
 ### Derived: the outer solid is one dilation
 
@@ -1058,3 +1068,37 @@ unchanged (worst clearance 0.100 mm). The section plate (`fit_section.scad`, the
 identical to the D58 source's.
 
 `rail_clear` stays 0.30 and is the slot's clearance, an unmeasured starting value; the future clip's own coupon sets it.
+
+
+## Revision 16: the final quality pass (D60)
+
+Source: the deep-tier QA audit `docs/reports/2026-10-07-final-qa-audit.md` (F1 to F13) and the user's two remarks, "slightly
+rounded corners wherever possible" and "this step down in the thickness of the front wall looks like a mistake". The edge-audit
+rows B7, B8, B9, B10, B13, B25, B26 above are updated and B28 to B33 added.
+
+Cause of the steps: every offset chosen to keep two boolean faces from sharing a plane was 0.15 to 0.4 mm, which a 0.4 mm nozzle
+prints as a visible ledge. The rule from here is an offset of at most 0.05 mm (below slicer resolution, still not coplanar:
+the final body has no edge under 0.001 mm), gated by `probes/step_scan.py`.
+
+| Quantity | Before (rev 15, e8f5799) | After (D60) |
+|---|---|---|
+| `scallop_over` / divider face step at the scallop | 0.40 mm, 8 faces, z 58.9 to 80.6 | 0.05 mm |
+| `pick_stop_w` (block vs pillar), filler vs block, stop block clip, G7 trim | pillar - 0.4, block - 0.3, 0.2, 0.155 | pillar - 0.05, block - 0.05, 0.05, no trim |
+| `seat_cut_over` / rim notches | 0.40, 10 notches | 0.05, none |
+| Persistent steps over 0.06 mm in wall faces (`probes/step_scan.py`, z every 1 mm, 188 sections) | 29 chains (0.4 at divider faces, pillars, seat notches; 0.3 at both fillers) | 0, except the label recesses (0.5, 20 chains) and F13 (0.21, 4 chains) |
+| Body solid | 2305.487 cm3, 17112 triangles, 0 edges < 0.001 mm | 2306.225 cm3, 21782 triangles, one watertight body, 0 edges < 0.001 mm, bbox 240 x 213.013 x 189 unchanged |
+| Capacity, middle bay row A / row B | 437.7 / 200.0 mL | 437.7 / 200.0 mL (tray B's component now reaches y 44.5: the bevel's air above the wall, no volume) |
+| Capacity, end bay row A / row B (`probes/capacity.py 0` and `4`) | 428.2 / 198.1 mL | 427.9 / 198.1 mL (the F7 fillet) |
+| `lid_retention.py` (a) slid 1 / 2 / 5 mm down the plane | 25.84 / 77.53 / 207.62 mm3 | 26.28 / 78.87 / 211.21 mm3 (the lug engages 0.15 x cos 43.8 more) |
+| `lid_retention.py` up-slope room, max tilt ride | 0.857 mm, 0.191 mm at 3.25 degrees | 0.856 mm, 0.193 mm at 3.25 degrees; (a) to (h) all pass |
+| Overhang scan, body | flat 9356 mm2, steep 3028 mm2 | flat 9356 mm2, steep 2834 mm2 (the seat-ledge overhang under the hopper divider 1064 -> 864 mm2) |
+| Divider flat on the plane (section y 20, 0.03 under it) | 2.4 mm | 1.74 mm (r 0.6 rounds on both edges) |
+| Wall between the trays, lid bearing strip | 3.3 mm along the plane, 46.2 degree knife edge | 2.3 mm, every edge 90 degrees or more |
+
+`probes/corner_thickness.py`: the "plan corner" allowance for a thin region went from 0.31 to 0.45 mm2. F9 retriangulates the
+buttress's sloped top, and the same 90 degree corner then slices as 0.38 to 0.39 mm2 on the mirrored mesh (z 102, y 27 to 28);
+the opening shaves r^2 (cot(t/2) - (pi - t)/2) from a corner of plan angle t, 0.30 at 90 degrees and 0.44 at 80. A flap is over 4
+mm2 and is still caught. Skin 2.40, buttress sides 3.70, 0 knife edges under 60 degrees on both faces, as before.
+
+F13 (the rail-1 buttress top, 0.21 mm under the plane beside the side wall, z 92 to 104) is left: the K1/K2-verified break-out
+zone, and `boss_clip_drop` feeds `boss_back_bevel()`. Changing it would re-open H2 and K1.

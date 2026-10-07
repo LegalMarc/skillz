@@ -7,6 +7,19 @@ Lift one lid and all ten types are exposed.
 **Two lids total.** Both fill ports at the back under one flat lid, both pick
 rows at the front under one sloped lid.
 
+**Revision 16.** Sixteen revisions, sixty recorded decisions (`plan.md`). Revision 16 is the final quality pass (D60)
+before the 27 h body print, from a deep-tier QA audit (`docs/reports/2026-10-07-final-qa-audit.md`) and two remarks:
+"slightly rounded corners wherever possible" and "this step down in the thickness of the front wall looks like a
+mistake". The steps were anti-coplanar offsets of 0.15 to 0.4 mm that a 0.4 mm nozzle prints as ledges; every one is
+now 0.05 mm or less, and `probes/step_scan.py` gates it (no persistent step over 0.06 mm in any wall face, except the
+label recesses and the rail-1 buttress top). The divider fillets climb to the scallop arc and the tray B gussets to the
+pick plane. New rounds: r 0.8 on the scallop's front face, r 0.6 on the dividers' top edges, r 1.0 on the buttress and
+filler inboard edges, r 0.8 on the pull-lip notch; a 1 mm bevel on the back-top edge of the wall between the trays; a
+land on each knife-edged seat-ledge tip; a fillet at the end bays' front corner. The body is 2306.2 cm3 (was 2305.5),
+same 240 x 213.0 x 189 mm; the middle bay is 437.7 / 200.0 mL, the end bays 427.9 / 198.1 mL; the pick lid and fill
+lid are unchanged. Left as is on purpose: the rail-1 buttress top, 0.21 mm under the plane beside the side wall (F13,
+the verified break-out zone).
+
 **Revision 15.** Fifteen revisions, fifty-nine recorded decisions (`plan.md`). Revision 15 postpones
 joining (D59). Five rail coupons (D47, D51, D55, D56, D58) never gave a usable fit on the 3.6 / 6.0 x 3 mm
 dovetail; the D58 coupon (printed 2026-10-07, PETG) was too loose on every stub, the 0.40 mm interference
@@ -299,14 +312,14 @@ it is laid. Every wall over both trays dies on that plane.
 
 ## Print the final unit
 
-Revision 15 is the full unit (revision 12's plus D51 to D54, with joining postponed by D59: slots on both faces, no male rail); test print 4 (the revision 11 section) was printed after revision 12 was designed and drove D51 to D53. Three
+Revision 16 is the full unit (revision 12's plus D51 to D54, with joining postponed by D59: slots on both faces, no male rail, and the D60 final quality pass); test print 4 (the revision 11 section) was printed after revision 12 was designed and drove D51 to D53. Three
 plates, one part each, plain core-spec 3MFs that Elegoo Slicer opens as a single named
 object, already centred on the 256 x 256 plate at z = 0 (`python3 build/maquette/make_plate.py
 final --export` rebuilds them from the sources and checks each against its STL):
 
 | Plate | File | Part | Size on the plate | Spans |
 |---|---|---|---|---|
-| 1 | `build/final/final_body_256.3mf` | `pill_organizer_body` | 240.0 x 213.0 x 189.0 mm, 2.31 L of solid | x 8.0-248.0, y 21.5-234.5 |
+| 1 | `build/final/final_body_256.3mf` | `pill_organizer_body` | 240.0 x 213.0 x 189.0 mm, 2306.2 cm3 of solid | x 8.0-248.0, y 21.5-234.5 |
 | 2 | `build/final/final_pick_lid_256.3mf` | `pill_organizer_pick_lid` | 239.0 x 139.5 x 22.7 mm, 105.5 cm3 | x 8.5-247.5, y 58.2-197.8 |
 | 3 | `build/final/final_fill_lid_256.3mf` | `pill_organizer_fill_lid` | 233.8 x 129.0 x 3.0 mm, 85 cm3 | x 11.1-244.9, y 63.5-192.5 |
 

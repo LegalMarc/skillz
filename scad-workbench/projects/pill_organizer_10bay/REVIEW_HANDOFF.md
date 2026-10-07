@@ -1,4 +1,23 @@
-# Resume note -- revision 15 (read this first)
+# Resume note -- revision 16 (read this first)
+
+**Update, D60 (final QA pass, newest).** Branch `pill-organizer-rev15` (code commits `91e4b6e`, `8d3eb1d`, `07ab044`,
+`c8cfd0a`; not pushed). Implements F1 to F12 of `docs/reports/2026-10-07-final-qa-audit.md`: every anti-coplanar offset
+of 0.15 to 0.4 mm is now 0.05 or less, the divider fillets climb to the scallop arc, tray B gussets to the plane, and the
+roundings the user asked for are in (see `plan.md` D60 and `calculations.md`, "Revision 16"). F13 (rail-1 buttress top,
+0.21 mm under the plane) is left on purpose. **Proven:** `validate_scad.sh --all` COVERAGE 14 passed, 0 failed, 3
+not-applicable, 0 inconclusive, 1 advisory; `check_rules.py` clean; every probe passes, including the new gating
+`probes/step_scan.py` (0 persistent steps over 0.06 mm except 20 label-recess chains and the 4 F13 chains) and the D60
+rows of `probes/edge_pass.py`; body one watertight body, 0 edges under 0.001 mm, bbox 240 x 213.013 x 189 unchanged,
+2306.225 cm3; middle bay 437.7 / 200.0, end bays 427.9 / 198.1 mL; lid retention (a)-(h) pass (slide-1-mm overlap 26.28
+mm3, up-slope room 0.856 mm); overhang scan body flat 9356, steep 2834 mm2. The lid STLs and 3MFs are byte-identical
+to before. **Not proven:** anything printed; the new roundings on the real print (`TEST_PRINTS.md`, "Final print").
+**Judgement calls:** `corner_thickness.py`'s plan-corner allowance went 0.31 -> 0.45 mm2 (F9 retriangulates the buttress
+top; same 90 degree corner, derivation in `calculations.md`); `ledge_land()` adds its triangle after the void's opening
+pass because the opening rounds the land away; the lids' 3MFs were not rebuilt. **Next step:** deep-tier review of D60,
+then print the body plate (`build/final/final_body_256.3mf`), dried PETG, no brim, no supports.
+Everything below is the revision 15 note.
+
+# Resume note -- revision 15
 
 **Where it stands:** revision 15 (D59, joining postponed) is implemented on branch `pill-organizer-rev15`
 (from `pill-organizer-rev13` at `f8c76fb`); not pushed, no PR. The D58 coupon (printed 2026-10-07) was too loose
