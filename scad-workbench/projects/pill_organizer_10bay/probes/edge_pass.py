@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""D48 probe: the edge pass is in the real meshes.
+"""D48/D60 probe: the edge pass is in the real meshes.
 
 Point-in-solid tests on the three parts, each a pair: a point that the treatment must
 have REMOVED is outside the mesh, and a point 0.1 mm further in (still on the nominal
@@ -73,7 +73,11 @@ removed(body, [wo - 0.05, 130.0, zr - 0.05], [wo - mc - 0.2, 130.0, zr - 0.05], 
 
 # the scallop's floor edge
 sc = P["scallop_chamfer"]; fh = P["trayA_front_h"]
-removed(body, [120.0, 0.1, fh - 0.1], [120.0, 0.1, fh - sc - 0.1], "scallop chamfer, front face")
+# D60 (F6): the front face takes a scallop_round_r round on the whole scallop outline, not the old 45 degree
+# chamfer: 0.1 behind the face the floor has dropped e = r (1 - sin t) with cos t = 1 - 0.1 / r
+rr = P["scallop_round_r"]; e1 = rr * (1 - np.sin(np.arccos(1 - 0.1 / rr)))
+removed(body, [120.0, 0.1, fh - e1 + 0.05], [120.0, 0.1, fh - e1 - 0.05], f"scallop front round r {rr}, floor edge, 0.1 behind the face")
+removed(body, [120.0, 0.02, fh - 0.5], [120.0, 0.02, fh - rr - 0.05], f"scallop front round r {rr}, floor edge, at the face")
 removed(body, [120.0, wo - 0.1, fh - 0.1], [120.0, wo - 0.1, fh - sc - 0.1], "scallop chamfer, tray side")
 chk("the scallop floor itself is still at trayA_front_h in the middle of the wall", body.contains([[120.0, 1.4, fh - 0.05]])[0]
     and not body.contains([[120.0, 1.4, fh + 0.05]])[0])
@@ -92,6 +96,58 @@ removed(body, [120.0, md - 0.05, zl - 0.05], [120.0, md - 0.05, zl - cc - 0.3], 
 tf = P["tray_fillet_r"]; yb = P["yB_tray0"]; bx = 2.8 + 44.96 + 2.4   # bay 1's left divider face
 chk("tray B front wall / divider corner is filleted (a point 0.25 mm from both faces is solid)",
     body.contains([[bx + 0.25, yb + 0.25, P["trayB_floor"] + 10.0]])[0])
+
+# ---- D60 final QA pass (F1 to F12) ----
+print("\nbody, D60")
+bw = P["bay_w"]; wd = P["wall_div"]; dx0 = wo + bw            # divider 1's left face
+dz = P["trayA_front_h"] + P["trayA_scallop_r"] + 1.0
+# F1/F6: the divider noses are as wide as the divider less 2 x scallop_over (0.05), and rounded on the front face
+so = P["scallop_over"]
+for yq in (2.0, 3.4):       # in the front wall, and on the tray side where the 0.4 step was
+    removed(body, [dx0 + 0.02, yq, 70.0], [dx0 + 0.08, yq, 70.0], f"F1: divider 1's face at z 70, y {yq}, steps only scallop_over ({so}) into the divider")
+e2 = rr * (1 - np.sin(np.arccos(1 - 0.1 / rr)))
+removed(body, [dx0 + so + e2 - 0.05, 0.1, 70.0], [dx0 + so + e2 + 0.05, 0.1, 70.0], f"F6: divider nose front edge is rounded r {rr} (0.1 behind the face)")
+# F2: the corner fillet climbs to the scallop arc, no flat ledge at trayA_front_h - 1
+chk("F2: no ledge at trayA_front_h - 1: the fillet is still solid 3 mm above it, 0.3 off the divider face and the wall",
+    body.contains([[dx0 - 0.3, wo + 0.3, P["trayA_front_h"] + 2.0]])[0])
+# F3: the stop block, its filler and the pillar agree within 0.05
+chk("F3: the stop block is pillar_w less 0.05 wide", abs(P["pick_stop_w"] - (P["pillar_w"] - 0.05)) < 1e-9)
+# F4: the wall between the trays has a bevel on its back-top edge (no 46 degree knife)
+y1 = P["yA_wall1"]
+removed(body, [25.0, y1 - 0.05, zp(y1) - 0.05], [25.0, y1 - 0.05, zp(y1) - 1.2], "F4: wall back-top edge is bevelled")
+# F5: tray B's corner gusset climbs to the bevel (was 2 mm under the plane at the face)
+bxb = wo + bw + wd      # divider 1's right face
+chk("F5: tray B gusset is solid 1.6 mm under the plane, 0.3 off the corner",
+    body.contains([[bxb + 0.3, y1 + 0.3, zp(y1) - 1.6]])[0])
+# F7: end bay tray A front corner has a fillet at the stop block's face
+xb = wo + P["pick_stop_w"]
+chk("F7: end bay front corner is filleted at the stop block face (0.25 from both faces is solid)",
+    body.contains([[xb + 0.25, wo + 0.25, 40.0]])[0])
+# F8: the dividers' top edges are rounded and still leave a flat of 1.5 mm or more for the lid
+yy = 20.0
+removed(body, [dx0 + 0.02, yy, zp(yy) - 0.03], [dx0 + 0.02, yy, zp(yy) - 0.9], "F8: divider top edge (left face) is rounded")
+xs = np.arange(dx0, dx0 + wd, 0.02)
+flat = body.contains([[x, yy, zp(yy) - 0.03] for x in xs])
+fw = flat.sum() * 0.02
+chk(f"F8: the divider's flat at the plane (0.03 under it) is {fw:.2f} mm, 1.5 or more", fw >= 1.5)
+# F9: vertical rounds on the rail-1 buttress's inboard edges and the filler's back-inner edge
+bi = wo + P["rail_boss"]; yf = P["rail1_y"] - P["rail_boss_w"] / 2; yb_ = P["rail1_y"] + P["rail_boss_w"] / 2
+removed(body, [bi - 0.1, yf + 0.1, 80.0], [bi - 0.4, yf + 0.5, 80.0], "F9: buttress front inboard edge is rounded r 1")
+removed(body, [bi - 0.1, yb_ - 0.1, 80.0], [bi - 0.4, yb_ - 0.5, 80.0], "F9: buttress back inboard edge is rounded r 1")
+xe = wo + P["pick_stop_w"] - 0.05
+removed(body, [xe - 0.05, yf + 0.5 - 0.05, 40.0], [xe - 0.55, yf + 0.5 - 0.5, 40.0], "F9: filler back-inner edge is rounded r 1")
+# F10: the fill-seat cut oversteps 0.05, not 0.4: no notch in the rim wall beside a divider
+chk("F10: the rim wall beside divider 1 has no 0.4 notch (0.2 behind the mouth face, z 187.5, is solid)",
+    body.contains([[dx0 + wd / 2, P["hop_mouth_y0"] - 0.2, 187.5]])[0])
+# F11: the seat ledge tip ends in a vertical land, not a 45 degree knife
+fs = P["fill_seat_z"]
+removed(body, [25.0 + 0, P["hop_mouth_y0"] + P["fill_ledge_w"] - P["seat_lip_drop"] - P["fill_ledge_land"] + 0.1, fs - 0.45],
+        [25.0, P["hop_mouth_y0"] + P["fill_ledge_w"] - P["seat_lip_drop"] - P["fill_ledge_land"] - 0.1, fs - 0.45],
+        "F11: seat ledge tip is a vertical land")
+# F12: the pull-lip notch's vertical edges are rounded
+nx0 = P["module_w"] / 2 - P["fill_grip_d"] / 2; nr = P["pull_notch_r"]; fy0 = P["hop_mouth_y0"] - wd
+removed(body, [nx0 - 0.1, fy0 + 0.1, fs + 1.0], [nx0 - 0.4, fy0 + 0.4, fs + 1.0], f"F12: pull-lip notch edge (tray side) is rounded r {nr}")
+removed(body, [nx0 - 0.1, P["hop_mouth_y0"] - 0.1, fs + 1.0], [nx0 - 0.4, P["hop_mouth_y0"] - 0.4, fs + 1.0], f"F12: pull-lip notch edge (mouth side) is rounded r {nr}")
 
 print("\npick lid (as modelled: assembled orientation)")
 w = P["pick_lid_w"]; zu = lambda y: zp(y) + P["pick_lid_gap"]
