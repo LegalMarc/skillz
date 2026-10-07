@@ -2,13 +2,6 @@
   {
     "pair": [
       "body_shell",
-      "rail_male"
-    ],
-    "reason": "each male rail carries a weld_embed=1.5mm root block reaching into the side wall, kept separate from the trapezoid so the flank geometry the neighbouring socket receives stays exact. Meeting the wall on a coincident face instead left a whole sub-feature detached in an earlier revision."
-  },
-  {
-    "pair": [
-      "body_shell",
       "vault_roof"
     ],
     "reason": "each half of the vault roof reaches weld_embed into its bay divider, vault_top_over up into the deck under hopper B's floor, and 1mm past the bay centre into its partner half; the void polygon is cut to the ridge and the roof puts the gabled solid back, so the overlap IS the feature (D26)"

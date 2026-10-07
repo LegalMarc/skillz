@@ -60,8 +60,17 @@ def measure(mesh, P, verbose=True):
 
 
 if __name__ == "__main__":
+    import trimesh
     P = params(); mesh = parts(("body",))["body"]
-    worst, t = measure(mesh, P)
-    ok = worst <= 1.0 * t + 0.05
-    print(("PASS  " if ok else "FAIL  ") + f"the skin stands at most 1 x its thickness ({t}) above the front lip (worst {worst:.2f} mm = {worst / t:.2f} x)")
-    sys.exit(0 if ok else 1)
+    # D59: both side faces carry the slots; the left face is this same measurement on the mesh mirrored
+    # about the module's mid-plane (mirroring flips the winding, so the faces are reversed back)
+    v = mesh.vertices.copy(); v[:, 0] = P["module_w"] - v[:, 0]
+    mirrored = trimesh.Trimesh(v, mesh.faces[:, ::-1], process=False)
+    allok = True
+    for side, m in (("right", mesh), ("left", mirrored)):
+        print(f"-- {side} face")
+        worst, t = measure(m, P)
+        ok = worst <= 1.0 * t + 0.05
+        allok &= ok
+        print(("PASS  " if ok else "FAIL  ") + f"{side}: the skin stands at most 1 x its thickness ({t}) above the front lip (worst {worst:.2f} mm = {worst / t:.2f} x)")
+    sys.exit(0 if allok else 1)

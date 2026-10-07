@@ -101,3 +101,5 @@ echo(str("PROBE fill_lid_y=", fill_lid_y));
 echo(str("PROBE rail2_y=", rail2_y));
 echo(str("PROBE rail2_z1=", rail2_z1));
 echo(str("PROBE rail_z0=", rail_z0));
+echo(str("PROBE rail2_soc_z1=", rail2_soc_z1));
+echo(str("PROBE rail_out=", rail_out));

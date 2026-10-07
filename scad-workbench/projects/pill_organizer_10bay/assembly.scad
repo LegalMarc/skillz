@@ -16,7 +16,7 @@ module part_by_name(name) {
 if (MODE == "assembly") {
     for (i = [0 : len(LAYOUT) - 1]) at(LAYOUT[i][0]) part_by_name(LAYOUT[i][0]);
     echo("BOM: body x1, pick_lid x1, fill_lid x1 -- all printed, no hardware");
-    echo(str("BOM: overall ", module_w + rail_out, " x ", module_d, " x ", module_h,
+    echo(str("BOM: overall ", module_w, " x ", module_d, " x ", module_h,
              " mm; ", 2 * bays, " bays"));
 } else if (MODE == "part") {
     at(PART) part_by_name(PART);

@@ -20,7 +20,7 @@
 // Print orientation: as modelled, flat on its base, no supports. The base perimeter
 // carries a bed_chamfer bevel against elephant foot (D48).
 //
-// EXPECTED_BBOX: [243.0, 213.01, 189.0]
+// EXPECTED_BBOX: [240.0, 213.01, 189.0]
 // ============================================================
 
 include <../params.scad>
@@ -421,44 +421,17 @@ module scallop_chamfer_cuts() {
 }
 
 // ------------------------------------------------------------
-// Joining rails. Trapezoid by two explicit widths, never a flank
-// angle, extruded along Z so nothing overhangs. The sections (male, and the groove
-// offset from it, D57) live in rail_profile.scad, shared with the coupon.
+// Joining slots (D59: slots only, on both side faces). Trapezoid by two explicit widths, never a flank
+// angle, extruded along Z so nothing overhangs. The sections (the groove, and the male it was
+// offset from, D57) live in rail_profile.scad, shared with the coupon.
 // ------------------------------------------------------------
 
-module rail_male_one(y, z1) {
-    // D58: the rail's flanks are EXACTLY rail_male_2d() at every height. (Until D58 the underside was a
-    // hull of the section's prism with a sliver at the wall face, which pushed both flanks outward over
-    // the whole height: +0.171 per side at the root at z 20, +0.023 at z 80, so the ganged gap was 0.13
-    // where the groove said 0.30.) The 45 degree printable underside is now a CUT of the exact prism by a
-    // wedge: the rail's first solid at x = -d is z = d above rail_z0, up to rail_lead_bot.
-    zh = z1 - rail_z0 - rail_lead;
-    translate([0, y, rail_z0]) {
-        // one solid for the section and its weld block, cut by the wedge, so the underside is one surface
-        // (the cut's edge at the wall face lies inside the bottom face, not on another solid's edge)
-        intersection() {
-            linear_extrude(height = zh)
-                union() {
-                    rail_male_2d();
-                    translate([0, -rail_root_w / 2]) square([weld_embed, rail_root_w]);
-                }
-            rotate([90, 0, 0]) linear_extrude(height = 4 * rail_tip_w, center = true)
-                polygon([[ weld_embed + 1, -1], [weld_embed + 1, zh + 1], [-rail_out - 1, zh + 1], [-rail_out - 1, rail_lead_bot],
-                         [-rail_lead_bot, rail_lead_bot], [0, 0], [weld_embed + 1, 0]]);
-        }
-        translate([0, 0, zh])
-            linear_extrude(height = rail_lead, scale = 0.45)
-                rail_male_2d();
-        // the weld block's last rail_lead (inside the wall), reaching 0.5 down into the main solid and 0.2 in
-        // from each of its faces so no two faces share a plane
-        translate([0.2, -rail_root_w / 2 + 0.2, zh - 0.5])
-            cube([weld_embed - 0.4, rail_root_w - 0.4, rail_lead + 0.5]);
-    }
-}
-
-module rail_male() {
-    rail_male_one(rail1_y, rail1_z1);
-    rail_male_one(rail2_y, rail2_z1);
+// D59: there is no male rail. Both side faces carry the two slots (rail_socket_cut) and a future
+// separately printed spring clip (a double-dovetail key) joins two units. The slot cutters below are
+// written for the RIGHT face; both_faces() adds their mirror image about the module's mid-plane.
+module both_faces() {
+    children();
+    translate([module_w, 0, 0]) mirror([1, 0, 0]) children();
 }
 
 module rail_boss_one(y, z1, right) {
@@ -733,14 +706,16 @@ module foot_pad_cuts() {
 // ------------------------------------------------------------
 module body_geometry() {
     difference() {
-        union() { body_shell(); outlet_chamfers(); vault_roof(); rail_male(); rail_bosses(); stop_blocks(); corner_beads(); front_fillets(); }
+        union() { body_shell(); outlet_chamfers(); vault_roof(); rail_bosses(); stop_blocks(); corner_beads(); front_fillets(); }
         fill_seat_cut();
         front_scallop_cut();
         stop_trim();
-        rail_socket_cut();
-        rail1_countersink();
+        both_faces() {              // D59: the same two slots on BOTH side faces, no male rail
+            rail_socket_cut();
+            rail1_countersink();
+            skin_trim();
+        }
         boss_bevels();
-        skin_trim();
         label_cuts();
         foot_pad_cuts();
         mouth_chamfer_cut();
@@ -749,13 +724,12 @@ module body_geometry() {
     }
 }
 
-// SUBFEATURES: body_shell, outlet_chamfers, vault_roof, rail_male
+// SUBFEATURES: body_shell, outlet_chamfers, vault_roof
 SUBFEATURE = is_undef(SUBFEATURE) ? "" : SUBFEATURE;
 module subfeature_by_name(name) {
     if (name == "body_shell") body_shell();
     else if (name == "outlet_chamfers") outlet_chamfers();
     else if (name == "vault_roof") vault_roof();
-    else if (name == "rail_male") rail_male();
     else assert(false, str("Unknown sub-feature '", name, "' in body.scad"));
 }
 if (SUBFEATURE != "") subfeature_by_name(SUBFEATURE);

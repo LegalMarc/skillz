@@ -106,118 +106,125 @@ if __name__ == "__main__":
     else:
         P = params(); mesh = parts(("body",))["body"]; mw = P["module_w"]
     zmax = 108.0 if P is None else P["rail1_soc_z1"] + 2
-    print(f"module_w {mw}; slices every 2 mm, thin = under {THIN} mm, window = right 26 mm x front 45 mm")
-    rows = run(mesh, mw, zmax)
-    print(" z      thin regions  total mm2  largest mm2   regions over %.0f mm2 (x, y, area)" % SLIVER)
-    for r in rows:
-        print(f" {r[0]:5.1f}  {r[1]:4d}      {r[2]:8.1f}  {r[3]:8.1f}     {r[4]}")
-    worst = max((r[3] for r in rows), default=0)
-    print(f"\nlargest thin region in any slice: {worst:.1f} mm2   (flap if it persists over {SLIVER} mm2)")
     ok = True
+    # D59: both side faces carry the same two slots. Every check below reads the RIGHT face, so the left
+    # face is checked by mirroring the mesh about the module's mid-plane and running the same code.
+    views = [("right face", mesh)]
     if P is not None:
-        zp = lambda y: P["trayA_rim"] + y * (P["trayB_rim"] - P["trayA_rim"]) / P["yB_tray1"]
-        y1 = P["rail1_y"]
-        zlo, zhi = zp(y1 - 15) - 8, zp(y1 + 15) + 3
-        for side in ("right", "left"):
-            # the left face carries the MALE rail, which has no break-out; its tapered lead
-            # (the top 3 mm) ends in a small flat and is excluded
-            th = breakout_scan(mesh, mw, y1, zlo, zhi if side == "right" else P["rail1_z1"] - 4.0, side)
-            # Thin regions of the whole slice (opening radius THIN_SKIN/2: nothing thinner than the
-            # skin survives it), clipped to the zone. Every region must be one of these named features;
-            # anything else FAILS. (1) the convex plan corners of the buttress and wall, which an
-            # opening always shaves to r^2 (1 - pi/4) = 0.30 mm2 per 90 degree corner, wherever they
-            # are cut by the sloped plane; (2) the dovetail lips' 70 degree wedge tips at the outer
-            # face, 0.64 mm2 and below, the same at every height; (3) where the 1 mm bevel and the
-            # sloped plane run out across one of those wedge tips: within 2.5 mm of the outer face,
-            # at most 5 mm2 and 1.5 mm tall. Nothing else may be thin.
-            unnamed = []
-            for z, x, y, a_ in th:
-                corner = a_ <= 0.31
-                lip_tip = a_ <= 0.70 and ((side == "right" and x >= mw - 0.8) or (side == "left" and x <= -2.0))
-                runout = a_ <= 5.0 and ((side == "right" and x >= mw - 2.5) or (side == "left" and x <= -2.0))
-                # (4) a horizontal slice GRAZING a bevel: the 45 degree bevel measured in the plane's own
-                # frame is 2.4 degrees from horizontal in the body (the plane rises 0.96 per mm, the
-                # bevel falls 1 per mm), so a slice within a millimetre of its height shows the
-                # lip's end as a sliver although the lip under it is solid: the front lip's bevel near the groove,
-                # and the buttress's back-top bevel.
-                gf = (side == "right" and zp(y1 - P["rail_tip_w"] / 2 - P["rail_clear"]) - P["groove_chamfer"] - 1.5 <= z
-                      <= zp(y1 - P["rail_root_w"] / 2 - P["rail_clear"]) and y1 - P["rail_tip_w"] / 2 - 2.5 <= y <= y1)
-                gb = (side == "right" and zp(y1 + P["rail_boss_w"] / 2) - 0.2 - P["boss_bevel"] - 1.5 <= z
-                      <= zp(y1 + P["rail_boss_w"] / 2) and y >= y1 + P["rail_boss_w"] / 2 - 3.0)
-                if not (corner or lip_tip or runout or gf or gb):
-                    unnamed.append((z, x, y, a_))
-            print(f"\nbreak-out zone, {side} side, horizontal slices every 0.25 mm from z {zlo:.0f} to "
-                  f"{zhi if side == 'right' else P['rail1_z1'] - 4:.0f}, thin = under {THIN_SKIN:.2f} mm: "
-                  f"{len(th)} thin regions of >= {TIP} mm2; {len(unnamed)} are none of the named features")
-            if unnamed:
-                print("      unnamed:", unnamed[:12])
-            okh = not unnamed
-            ok &= okh
-            print(("PASS  " if okh else "FAIL  ") + f"every thin region (under the skin's thickness) in the {side} break-out zone is a named feature")
-    if P is not None:
-        y = P["rail1_y"]; wo = P["wall_out"]; ro = P["rail_out"]
-        print("\nline measurements (solid runs along the line: start point, length mm):")
-        skins = []
-        for z in (30.0, 60.0, 90.0):
-            r = run_len(mesh, [mw - 25, y, z], [mw + 0.5, y, z]); skins.append(r[0][1])
-            print(f"  skin, along X at y={y:.1f}, z={z:.0f}: ", r)
-        # at the groove's widest (its bottom, x = mw - rail_out) the buttress is what is left either side
-        xg = mw - ro - 0.3
-        fb = []
-        for z in (30.0, 60.0):
-            r = run_len(mesh, [xg, 5.0, z], [xg, y + 20, z]); fb += [q[1] for q in r if 8.0 < q[0][1] < y + 10]
-            print(f"  buttress either side of the groove, along Y at x={xg:.1f}, z={z:.0f}: ", r)
-        xs = mw - wo - 3.0           # inside the right stop block (x 231.2 .. 237.2 less 0.4)
-        r = run_len(mesh, [xs, -0.5, 62.0], [xs, 14, 62.0])
-        print(f"  stop block + front wall, along Y at x={xs:.1f}, z=62: ", r)
-        # the contact zone: 4 mm down the stop face, just in front of it
-        sa = np.sin(np.radians(P["slope"])); ca = np.cos(np.radians(P["slope"]))
-        zp = lambda y: P["trayA_rim"] + y * (P["trayB_rim"] - P["trayA_rim"]) / P["yB_tray1"]
-        y0 = P["stop_y"]
-        cy, cz = y0 + 4 * sa, zp(y0) - 4 * ca            # a point on the face, 4 mm down
-        r3 = run_len(mesh, [xs, cy - 12 * ca, cz - 12 * sa], [xs, cy + 0.2 * ca, cz + 0.2 * sa], step=0.02)
-        print(f"  material behind the contact face, along the slope from the face (x={xs:.1f}): ", r3)
-        r2 = run_len(mesh, [mw - 14, 1.4, 62.0], [mw + 0.5, 1.4, 62.0])
-        print("  front wall + side wall, along X at y=1.4, z=62: ", r2)
-        # convex edges of the real mesh in the zone, by interior angle
-        adj_ang = mesh.face_adjacency_angles; conv = mesh.face_adjacency_convex
-        ed = mesh.vertices[mesh.face_adjacency_edges]; mid = ed.mean(1); elen = np.linalg.norm(ed[:, 0] - ed[:, 1], axis=1)
-        interior = 180.0 - np.degrees(adj_ang)
-        zone_r = (mid[:, 0] > mw - 12) & (mid[:, 1] > y1 - 15) & (mid[:, 1] < y1 + 15) & (mid[:, 2] > zp(y1 - 15) - 8)
-        zone_l = (mid[:, 0] < 12) & (mid[:, 1] > y1 - 15) & (mid[:, 1] < y1 + 15) & (mid[:, 2] > zp(y1 - 15) - 8) & (mid[:, 2] < P["rail1_z1"] - 4)
-        for name, zone in (("right", zone_r), ("left", zone_l)):
-            sh = conv & (interior < 60.0) & (elen > 0.5) & zone
-            allsharp = conv & (interior < 80.0) & zone
-            print(f"\n{name} break-out zone: {int(allsharp.sum())} convex edges under 80 degrees ("
-                  f"{[(int(round(i)), round(float(l), 2)) for i, l in zip(interior[allsharp], elen[allsharp])]} deg, mm); "
-                  f"{int(sh.sum())} under 60 degrees and over 0.5 mm long")
-            okk = not sh.any()
-            globals()["ok"] = ok and okk
-            print(("PASS  " if okk else "FAIL  ") + f"no knife edge (interior angle under 60 degrees, over 0.5 mm long) in the {name} break-out zone")
-        # the divider / front wall joint in tray A (revision 11): the vertical fillet exists
-        # and the joint is at least a divider thick along its diagonal at every height
-        bx0 = P["wall_out"] + 1 * (P["bay_w"] + P["wall_div"])          # bay 2's left face
-        r_f = P["tray_fillet_r"]; y0 = P["yA_tray0"]
-        diag = []
-        for z in (12.0, 25.0, 40.0, 50.0):
-            c = np.array([bx0 + r_f, y0 + r_f, z]) / 1.0
-            p_in = np.array([bx0 + r_f - r_f / np.sqrt(2) + 0.15, y0 + r_f - r_f / np.sqrt(2) + 0.15, z])   # just inside the arc
-            p_out = np.array([bx0 + r_f - r_f / np.sqrt(2) - 0.15, y0 + r_f - r_f / np.sqrt(2) - 0.15, z])  # just outside it, in the void
-            d = run_len(mesh, [bx0 + r_f - 1.2 * r_f, y0 + r_f - 1.2 * r_f, z], [bx0 - 4.0, y0 - 2.8 - 1.0, z], step=0.02)
-            diag.append((z, bool(mesh.contains([p_out])[0]) , d[0][1] if d else 0.0))
-        print("  divider / front wall joint, bay 2's left divider: (z, solid at the fillet's arc, solid run along the diagonal mm):", diag)
-        from skin_free_height import measure as skin_measure
-        worst_free, skin_t = skin_measure(mesh, P, verbose=True)
-        def chk(label, cond):
-            global ok
-            ok &= bool(cond); print(("PASS  " if cond else "FAIL  ") + label)
-        print()
-        chk(f"skin behind the groove is >= a divider ({P['wall_div']}) at every height (min {min(skins):.2f})", min(skins) >= P["wall_div"] - 1e-6)
-        chk(f"buttress on either side of the groove is >= a divider + 1 mm (min {min(fb):.2f})", min(fb) >= P["wall_div"] + 1.0 - 1e-6)
-        chk("the divider / front wall joint is filleted and over a divider thick along its diagonal at every height",
-            all(d[1] for d in diag) and min(d[2] for d in diag) >= P["wall_div"])
-        chk(f"the skin stands at most 1 x its thickness above the front lip beside the groove (worst {worst_free:.2f} mm of {skin_t})", worst_free <= skin_t + 0.05)
-        chk(f"stop block reaches back to y {P['stop_back_y']:.1f} at z=62 (run {r[0][1]:.2f})", r[0][1] >= P["stop_back_y"] - 0.1)
-        chk(f"material behind the contact face along the slope is >= 1.5 mm (min {min(q[1] for q in r3):.2f})", min(q[1] for q in r3) >= 1.5)
-        chk("front wall and side wall run unbroken across the pillar in X (no gap)", r2[0][1] >= wo + P["pillar_w"] - 0.5)
+        v = mesh.vertices.copy(); v[:, 0] = mw - v[:, 0]
+        mir = trimesh.Trimesh(v, mesh.faces[:, ::-1], process=False)      # mirroring flips the winding; flip it back
+        views.append(("left face (mirrored about x = module_w / 2)", mir))
+    for vname, mesh in views:
+        print("\n########## " + vname + " ##########")
+        print(f"module_w {mw}; slices every 2 mm, thin = under {THIN} mm, window = right 26 mm x front 45 mm")
+        rows = run(mesh, mw, zmax)
+        print(" z      thin regions  total mm2  largest mm2   regions over %.0f mm2 (x, y, area)" % SLIVER)
+        for r in rows:
+            print(f" {r[0]:5.1f}  {r[1]:4d}      {r[2]:8.1f}  {r[3]:8.1f}     {r[4]}")
+        worst = max((r[3] for r in rows), default=0)
+        print(f"\nlargest thin region in any slice: {worst:.1f} mm2   (flap if it persists over {SLIVER} mm2)")
+        if P is not None:
+            zp = lambda y: P["trayA_rim"] + y * (P["trayB_rim"] - P["trayA_rim"]) / P["yB_tray1"]
+            y1 = P["rail1_y"]
+            zlo, zhi = zp(y1 - 15) - 8, zp(y1 + 15) + 3
+            for side in ("right",):      # D59: the left face is this same code on the mirrored mesh (see the views loop)
+                th = breakout_scan(mesh, mw, y1, zlo, zhi, side)
+                # Thin regions of the whole slice (opening radius THIN_SKIN/2: nothing thinner than the
+                # skin survives it), clipped to the zone. Every region must be one of these named features;
+                # anything else FAILS. (1) the convex plan corners of the buttress and wall, which an
+                # opening always shaves to r^2 (1 - pi/4) = 0.30 mm2 per 90 degree corner, wherever they
+                # are cut by the sloped plane; (2) the dovetail lips' 70 degree wedge tips at the outer
+                # face, 0.64 mm2 and below, the same at every height; (3) where the 1 mm bevel and the
+                # sloped plane run out across one of those wedge tips: within 2.5 mm of the outer face,
+                # at most 5 mm2 and 1.5 mm tall. Nothing else may be thin.
+                unnamed = []
+                for z, x, y, a_ in th:
+                    corner = a_ <= 0.31
+                    lip_tip = a_ <= 0.70 and ((side == "right" and x >= mw - 0.8) or (side == "left" and x <= -2.0))
+                    runout = a_ <= 5.0 and ((side == "right" and x >= mw - 2.5) or (side == "left" and x <= -2.0))
+                    # (4) a horizontal slice GRAZING a bevel: the 45 degree bevel measured in the plane's own
+                    # frame is 2.4 degrees from horizontal in the body (the plane rises 0.96 per mm, the
+                    # bevel falls 1 per mm), so a slice within a millimetre of its height shows the
+                    # lip's end as a sliver although the lip under it is solid: the front lip's bevel near the groove,
+                    # and the buttress's back-top bevel.
+                    gf = (side == "right" and zp(y1 - P["rail_tip_w"] / 2 - P["rail_clear"]) - P["groove_chamfer"] - 1.5 <= z
+                          <= zp(y1 - P["rail_root_w"] / 2 - P["rail_clear"]) and y1 - P["rail_tip_w"] / 2 - 2.5 <= y <= y1)
+                    gb = (side == "right" and zp(y1 + P["rail_boss_w"] / 2) - 0.2 - P["boss_bevel"] - 1.5 <= z
+                          <= zp(y1 + P["rail_boss_w"] / 2) and y >= y1 + P["rail_boss_w"] / 2 - 3.0)
+                    if not (corner or lip_tip or runout or gf or gb):
+                        unnamed.append((z, x, y, a_))
+                print(f"\nbreak-out zone, {side} side, horizontal slices every 0.25 mm from z {zlo:.0f} to "
+                      f"{zhi:.0f}, thin = under {THIN_SKIN:.2f} mm: "
+                      f"{len(th)} thin regions of >= {TIP} mm2; {len(unnamed)} are none of the named features")
+                if unnamed:
+                    print("      unnamed:", unnamed[:12])
+                okh = not unnamed
+                ok &= okh
+                print(("PASS  " if okh else "FAIL  ") + f"every thin region (under the skin's thickness) in the {side} break-out zone is a named feature")
+        if P is not None:
+            y = P["rail1_y"]; wo = P["wall_out"]; ro = P["rail_out"]
+            print("\nline measurements (solid runs along the line: start point, length mm):")
+            skins = []
+            for z in (30.0, 60.0, 90.0):
+                r = run_len(mesh, [mw - 25, y, z], [mw + 0.5, y, z]); skins.append(r[0][1])
+                print(f"  skin, along X at y={y:.1f}, z={z:.0f}: ", r)
+            # at the groove's widest (its bottom, x = mw - rail_out) the buttress is what is left either side
+            xg = mw - ro - 0.3
+            fb = []
+            for z in (30.0, 60.0):
+                r = run_len(mesh, [xg, 5.0, z], [xg, y + 20, z]); fb += [q[1] for q in r if 8.0 < q[0][1] < y + 10]
+                print(f"  buttress either side of the groove, along Y at x={xg:.1f}, z={z:.0f}: ", r)
+            xs = mw - wo - 3.0           # inside the right stop block (x 231.2 .. 237.2 less 0.4)
+            r = run_len(mesh, [xs, -0.5, 62.0], [xs, 14, 62.0])
+            print(f"  stop block + front wall, along Y at x={xs:.1f}, z=62: ", r)
+            # the contact zone: 4 mm down the stop face, just in front of it
+            sa = np.sin(np.radians(P["slope"])); ca = np.cos(np.radians(P["slope"]))
+            zp = lambda y: P["trayA_rim"] + y * (P["trayB_rim"] - P["trayA_rim"]) / P["yB_tray1"]
+            y0 = P["stop_y"]
+            cy, cz = y0 + 4 * sa, zp(y0) - 4 * ca            # a point on the face, 4 mm down
+            r3 = run_len(mesh, [xs, cy - 12 * ca, cz - 12 * sa], [xs, cy + 0.2 * ca, cz + 0.2 * sa], step=0.02)
+            print(f"  material behind the contact face, along the slope from the face (x={xs:.1f}): ", r3)
+            r2 = run_len(mesh, [mw - 14, 1.4, 62.0], [mw + 0.5, 1.4, 62.0])
+            print("  front wall + side wall, along X at y=1.4, z=62: ", r2)
+            # convex edges of the real mesh in the zone, by interior angle
+            adj_ang = mesh.face_adjacency_angles; conv = mesh.face_adjacency_convex
+            ed = mesh.vertices[mesh.face_adjacency_edges]; mid = ed.mean(1); elen = np.linalg.norm(ed[:, 0] - ed[:, 1], axis=1)
+            interior = 180.0 - np.degrees(adj_ang)
+            zone_r = (mid[:, 0] > mw - 12) & (mid[:, 1] > y1 - 15) & (mid[:, 1] < y1 + 15) & (mid[:, 2] > zp(y1 - 15) - 8)
+            zone_l = (mid[:, 0] < 12) & (mid[:, 1] > y1 - 15) & (mid[:, 1] < y1 + 15) & (mid[:, 2] > zp(y1 - 15) - 8) & (mid[:, 2] < P["rail1_z1"] - 4)
+            for name, zone in (("right", zone_r),):
+                sh = conv & (interior < 60.0) & (elen > 0.5) & zone
+                allsharp = conv & (interior < 80.0) & zone
+                print(f"\n{name} break-out zone: {int(allsharp.sum())} convex edges under 80 degrees ("
+                      f"{[(int(round(i)), round(float(l), 2)) for i, l in zip(interior[allsharp], elen[allsharp])]} deg, mm); "
+                      f"{int(sh.sum())} under 60 degrees and over 0.5 mm long")
+                okk = not sh.any()
+                globals()["ok"] = ok and okk
+                print(("PASS  " if okk else "FAIL  ") + f"no knife edge (interior angle under 60 degrees, over 0.5 mm long) in the {name} break-out zone")
+            # the divider / front wall joint in tray A (revision 11): the vertical fillet exists
+            # and the joint is at least a divider thick along its diagonal at every height
+            bx0 = P["wall_out"] + 1 * (P["bay_w"] + P["wall_div"])          # bay 2's left face
+            r_f = P["tray_fillet_r"]; y0 = P["yA_tray0"]
+            diag = []
+            for z in (12.0, 25.0, 40.0, 50.0):
+                c = np.array([bx0 + r_f, y0 + r_f, z]) / 1.0
+                p_in = np.array([bx0 + r_f - r_f / np.sqrt(2) + 0.15, y0 + r_f - r_f / np.sqrt(2) + 0.15, z])   # just inside the arc
+                p_out = np.array([bx0 + r_f - r_f / np.sqrt(2) - 0.15, y0 + r_f - r_f / np.sqrt(2) - 0.15, z])  # just outside it, in the void
+                d = run_len(mesh, [bx0 + r_f - 1.2 * r_f, y0 + r_f - 1.2 * r_f, z], [bx0 - 4.0, y0 - 2.8 - 1.0, z], step=0.02)
+                diag.append((z, bool(mesh.contains([p_out])[0]) , d[0][1] if d else 0.0))
+            print("  divider / front wall joint, bay 2's left divider: (z, solid at the fillet's arc, solid run along the diagonal mm):", diag)
+            from skin_free_height import measure as skin_measure
+            worst_free, skin_t = skin_measure(mesh, P, verbose=True)
+            def chk(label, cond):
+                global ok
+                ok &= bool(cond); print(("PASS  " if cond else "FAIL  ") + label)
+            print()
+            chk(f"skin behind the groove is >= a divider ({P['wall_div']}) at every height (min {min(skins):.2f})", min(skins) >= P["wall_div"] - 1e-6)
+            chk(f"buttress on either side of the groove is >= a divider + 1 mm (min {min(fb):.2f})", min(fb) >= P["wall_div"] + 1.0 - 1e-6)
+            chk("the divider / front wall joint is filleted and over a divider thick along its diagonal at every height",
+                all(d[1] for d in diag) and min(d[2] for d in diag) >= P["wall_div"])
+            chk(f"the skin stands at most 1 x its thickness above the front lip beside the groove (worst {worst_free:.2f} mm of {skin_t})", worst_free <= skin_t + 0.05)
+            chk(f"stop block reaches back to y {P['stop_back_y']:.1f} at z=62 (run {r[0][1]:.2f})", r[0][1] >= P["stop_back_y"] - 0.1)
+            chk(f"material behind the contact face along the slope is >= 1.5 mm (min {min(q[1] for q in r3):.2f})", min(q[1] for q in r3) >= 1.5)
+            chk("front wall and side wall run unbroken across the pillar in X (no gap)", r2[0][1] >= wo + P["pillar_w"] - 0.5)
     sys.exit(0 if ok else 1)

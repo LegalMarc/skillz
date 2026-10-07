@@ -19,7 +19,8 @@ bed_x = 256; bed_y = 256; bed_z = 256;
 // D37 (revision 10): 5 mm of plate margin each side in X and Y, so a part's
 // footprint may be 246 mm; height may be 250. This replaces D3's 13 mm margin
 // (243 mm), which the wider, deeper bins no longer fit. The body's footprint is
-// measured INCLUDING the 3 mm joining rail (5 until D43) that stands proud of the left face.
+// measured INCLUDING the 3 mm joining rail (5 until D43) that stood proud of the left face until D59 removed it
+// (the footprint is now module_w, 240).
 plate_margin = 5.0;
 max_part_x = bed_x - 2 * plate_margin;     // 246
 max_part_y = bed_y - 2 * plate_margin;     // 246
@@ -56,14 +57,14 @@ void_top_over = 5.0;        // how far every open-topped void runs PAST the
 // ------------------------------------------------------------
 bays        = 5;
 module_w    = 240.0;        // 230 until D37: bays 42.96 -> 44.96 wide. Footprint with
-                            // the 3 mm rail is 243, inside max_part_x (246)
+                            // no rail since D59: 240, inside max_part_x (246)
 inner_w     = module_w - 2 * wall_out;
 bay_w       = (inner_w - (bays - 1) * wall_div) / bays;
 bay_pitch   = bay_w + wall_div;
 function bay_center_x(i) = wall_out + bay_w / 2 + i * bay_pitch;
 
-assert(module_w + rail_out <= max_part_x,
-       "module_w plus the joining rail exceeds the plate width less its margins (D37)");
+assert(module_w <= max_part_x,
+       "module_w exceeds the plate width less its margins (D37; no male rail since D59)");
 assert(bay_w >= pill_len * 1.5,
        "bay_w is under 1.5x pill_len -- a pill cannot lie freely across the bay");
 
@@ -1046,7 +1047,7 @@ echo(str("pick lid retention: stop face at y ", pick_stop_y, " on the plane, ", 
          " deep; lug ", pick_lug_t, " x ", pick_lug_len, " x ", pick_lug_d, ", clearance ", pick_lug_clear,
          " along the slope; engagement ", pick_lug_engage, " mm perpendicular; lug corner y ",
          pick_lug_corner_y, " vs buttress ", rail1_boss_y0, "; air ", pick_lug_air,
-         "; mouth A minimum ", mouthA_min, "; footprint ", module_w + rail_out, " x ", module_d, " x ", module_h));
+         "; mouth A minimum ", mouthA_min, "; footprint ", module_w, " x ", module_d, " x ", module_h));
 echo(str("vault: gable ", vault_deg, " deg, face ", vault_face_from_vertical,
          " from vertical; chute clear ", chute_clear - vault_down, " at the edges, ",
          chute_clear + vault_up, " at the ridge; hopper B foot ", rampB_foot,
