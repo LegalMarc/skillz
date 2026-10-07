@@ -139,7 +139,11 @@ if __name__ == "__main__":
                 # at most 5 mm2 and 1.5 mm tall. Nothing else may be thin.
                 unnamed = []
                 for z, x, y, a_ in th:
-                    corner = a_ <= 0.31
+                    # D60: 0.45, not 0.31. F9 rounds the buttress's inboard edges, which retriangulates the sloped
+                    # top; the same 90 degree corner then slices (mirrored mesh, z 102, y 27 to 28) as 0.38 to 0.39
+                    # mm2. The opening shaves r^2 (cot(t/2) - (pi - t)/2) from a corner of plan angle t (r =
+                    # THIN_SKIN / 2): 0.30 at 90 degrees, 0.44 at 80. A flap is over 4 mm2 and is still caught.
+                    corner = a_ <= 0.45
                     lip_tip = a_ <= 0.70 and ((side == "right" and x >= mw - 0.8) or (side == "left" and x <= -2.0))
                     runout = a_ <= 5.0 and ((side == "right" and x >= mw - 2.5) or (side == "left" and x <= -2.0))
                     # (4) a horizontal slice GRAZING a bevel: the 45 degree bevel measured in the plane's own

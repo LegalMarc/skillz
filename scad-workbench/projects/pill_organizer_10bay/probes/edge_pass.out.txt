@@ -1,4 +1,4 @@
-PASS  body is one watertight body (17112 triangles)
+PASS  body is one watertight body (21782 triangles)
 PASS  pick_lid is one watertight body (2418 triangles)
 PASS  fill_lid is one watertight body (460 triangles)
 
@@ -15,7 +15,8 @@ PASS  outer round, left face x pick plane: [0.04, 60.0, 134.41] is cut away, [1.
 PASS  mouth chamfer, front edge: [60.0, 87.55, 188.95] is cut away, [60.0, 86.95, 188.95] stays
 PASS  mouth chamfer, back edge: [60.0, 209.25, 188.95] is cut away, [60.0, 209.85, 188.95] stays
 PASS  mouth chamfer, left edge: [2.75, 130.0, 188.95] is cut away, [2.15, 130.0, 188.95] stays
-PASS  scallop chamfer, front face: [120.0, 0.1, 54.9] is cut away, [120.0, 0.1, 54.2] stays
+PASS  scallop front round r 0.8, floor edge, 0.1 behind the face: [120.0, 0.1, 54.64] is cut away, [120.0, 0.1, 54.54] stays
+PASS  scallop front round r 0.8, floor edge, at the face: [120.0, 0.02, 54.5] is cut away, [120.0, 0.02, 54.15] stays
 PASS  scallop chamfer, tray side: [120.0, 2.7, 54.9] is cut away, [120.0, 2.7, 54.2] stays
 PASS  the scallop floor itself is still at trayA_front_h in the middle of the wall
 PASS  cubby floor / front wall corner is filleted (a point in the corner, 0.25 mm from both faces, is solid)
@@ -23,6 +24,25 @@ PASS  cubby floor / side wall corner is filleted
 PASS  cubby mouth chamfer, left side edge: [2.75, 194.75, 100.0] is cut away, [2.0, 194.75, 100.0] stays
 PASS  cubby mouth chamfer, lip top: [120.0, 194.75, 75.95] is cut away, [120.0, 194.75, 75.2] stays
 PASS  tray B front wall / divider corner is filleted (a point 0.25 mm from both faces is solid)
+
+body, D60
+PASS  F1: divider 1's face at z 70, y 2.0, steps only scallop_over (0.05) into the divider: [47.78, 2.0, 70.0] is cut away, [47.84, 2.0, 70.0] stays
+PASS  F1: divider 1's face at z 70, y 3.4, steps only scallop_over (0.05) into the divider: [47.78, 3.4, 70.0] is cut away, [47.84, 3.4, 70.0] stays
+PASS  F6: divider nose front edge is rounded r 0.8 (0.1 behind the face): [48.17, 0.1, 70.0] is cut away, [48.27, 0.1, 70.0] stays
+PASS  F2: no ledge at trayA_front_h - 1: the fillet is still solid 3 mm above it, 0.3 off the divider face and the wall
+PASS  F3: the stop block is pillar_w less 0.05 wide
+PASS  F4: wall back-top edge is bevelled: [25.0, 45.15, 120.23] is cut away, [25.0, 45.15, 119.08] stays
+PASS  F5: tray B gusset is solid 1.6 mm under the plane, 0.3 off the corner
+PASS  F7: end bay front corner is filleted at the stop block face (0.25 from both faces is solid)
+PASS  F8: divider top edge (left face) is rounded: [47.78, 20.0, 96.12] is cut away, [47.78, 20.0, 95.25] stays
+PASS  F8: the divider's flat at the plane (0.03 under it) is 1.74 mm, 1.5 or more
+PASS  F9: buttress front inboard edge is rounded r 1: [5.7, 15.9, 80.0] is cut away, [5.4, 16.3, 80.0] stays
+PASS  F9: buttress back inboard edge is rounded r 1: [5.7, 29.7, 80.0] is cut away, [5.4, 29.3, 80.0] stays
+PASS  F9: filler back-inner edge is rounded r 1: [8.65, 16.25, 40.0] is cut away, [8.15, 15.8, 40.0] stays
+PASS  F10: the rim wall beside divider 1 has no 0.4 notch (0.2 behind the mouth face, z 187.5, is solid)
+PASS  F11: seat ledge tip is a vertical land: [25.0, 90.0, 185.55] is cut away, [25.0, 89.8, 185.55] stays
+PASS  F12: pull-lip notch edge (tray side) is rounded r 0.8: [102.9, 85.3, 187.0] is cut away, [102.6, 85.6, 187.0] stays
+PASS  F12: pull-lip notch edge (mouth side) is rounded r 0.8: [102.9, 87.5, 187.0] is cut away, [102.6, 87.2, 187.0] stays
 
 pick lid (as modelled: assembled orientation)
 PASS  skirt outer end edge, left: [0.1, -3.25, 60.0] is cut away, [1.3, -3.05, 60.0] stays

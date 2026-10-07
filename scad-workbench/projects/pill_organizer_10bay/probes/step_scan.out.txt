@@ -1,0 +1,58 @@
+step scan: 707 hits in 188 sections, 56 persistent chains, 59 single or short
+  PASS       0.05 mm  x    2.75  y  160.05  z 186.0..188.0  
+  exception  0.21 mm  x    2.80  y   15.66  z  92.0.. 94.0  F13 buttress top
+  exception  0.21 mm  x    2.80  y   26.10  z 102.0..104.0  F13 buttress top
+  PASS       0.05 mm  x    2.80  y  157.55  z 186.0..188.0  
+  exception  0.50 mm  x    7.28  y    0.50  z   8.0.. 20.0  label recess
+  exception  0.50 mm  x    7.28  y    0.50  z  25.0.. 36.0  label recess
+  PASS       0.05 mm  x    8.75  y    2.80  z  62.0.. 78.0  
+  PASS       0.05 mm  x    8.75  y   10.02  z  12.0.. 67.0  
+  exception  0.50 mm  x   43.28  y    0.00  z   8.0.. 20.0  label recess
+  exception  0.50 mm  x   43.28  y    0.00  z  25.0.. 36.0  label recess
+  PASS       0.05 mm  x   47.71  y   87.60  z 186.0..188.0  
+  PASS       0.05 mm  x   47.71  y  209.20  z 186.0..188.0  
+  PASS       0.05 mm  x   47.81  y    5.31  z  59.0.. 80.0  
+  PASS       0.05 mm  x   50.16  y    5.31  z  59.0.. 80.0  
+  PASS       0.05 mm  x   50.21  y   87.55  z 186.0..188.0  
+  PASS       0.05 mm  x   50.21  y  209.25  z 186.0..188.0  
+  exception  0.50 mm  x   54.64  y    0.50  z   8.0.. 20.0  label recess
+  exception  0.50 mm  x   54.64  y    0.50  z  25.0.. 36.0  label recess
+  exception  0.50 mm  x   90.64  y    0.00  z   8.0.. 20.0  label recess
+  exception  0.50 mm  x   90.64  y    0.00  z  25.0.. 36.0  label recess
+  PASS       0.05 mm  x   95.07  y   87.60  z 186.0..188.0  
+  PASS       0.05 mm  x   95.07  y  209.20  z 186.0..188.0  
+  PASS       0.05 mm  x   95.17  y    5.31  z  59.0.. 80.0  
+  PASS       0.05 mm  x   97.52  y    5.31  z  59.0.. 80.0  
+  PASS       0.05 mm  x   97.57  y   87.55  z 186.0..188.0  
+  PASS       0.05 mm  x   97.57  y  209.25  z 186.0..188.0  
+  exception  0.50 mm  x  102.00  y    0.50  z   8.0.. 20.0  label recess
+  exception  0.50 mm  x  102.00  y    0.50  z  25.0.. 36.0  label recess
+  exception  0.50 mm  x  138.00  y    0.00  z   8.0.. 20.0  label recess
+  exception  0.50 mm  x  138.00  y    0.00  z  25.0.. 36.0  label recess
+  PASS       0.05 mm  x  142.43  y   87.55  z 186.0..188.0  
+  PASS       0.05 mm  x  142.43  y  209.20  z 186.0..188.0  
+  PASS       0.05 mm  x  142.53  y    5.31  z  59.0.. 80.0  
+  PASS       0.05 mm  x  144.88  y    5.31  z  59.0.. 80.0  
+  PASS       0.05 mm  x  144.93  y   87.60  z 186.0..188.0  
+  PASS       0.05 mm  x  144.93  y  209.25  z 186.0..188.0  
+  exception  0.50 mm  x  149.36  y    0.50  z   8.0.. 20.0  label recess
+  exception  0.50 mm  x  149.36  y    0.50  z  25.0.. 36.0  label recess
+  exception  0.50 mm  x  185.36  y    0.00  z   8.0.. 20.0  label recess
+  exception  0.50 mm  x  185.36  y    0.00  z  25.0.. 36.0  label recess
+  PASS       0.05 mm  x  189.79  y   87.55  z 186.0..188.0  
+  PASS       0.05 mm  x  189.79  y  209.20  z 186.0..188.0  
+  PASS       0.05 mm  x  189.89  y    5.31  z  59.0.. 80.0  
+  PASS       0.05 mm  x  192.24  y    5.31  z  59.0.. 80.0  
+  PASS       0.05 mm  x  192.29  y   87.60  z 186.0..188.0  
+  PASS       0.05 mm  x  192.29  y  209.25  z 186.0..188.0  
+  exception  0.50 mm  x  196.72  y    0.50  z   8.0.. 20.0  label recess
+  exception  0.50 mm  x  196.72  y    0.50  z  25.0.. 36.0  label recess
+  PASS       0.05 mm  x  231.20  y    2.80  z  62.0.. 78.0  
+  PASS       0.05 mm  x  231.30  y   10.02  z   9.0.. 67.0  
+  exception  0.50 mm  x  232.72  y    0.00  z   8.0.. 20.0  label recess
+  exception  0.50 mm  x  232.72  y    0.00  z  25.0.. 36.0  label recess
+  exception  0.21 mm  x  237.20  y   15.87  z  92.0.. 94.0  F13 buttress top
+  exception  0.21 mm  x  237.20  y   26.32  z 102.0..104.0  F13 buttress top
+  PASS       0.05 mm  x  237.20  y  160.05  z 186.0..188.0  
+  PASS       0.05 mm  x  237.25  y  157.55  z 186.0..188.0  
+RESULT: ALL PASS: no persistent step over 0.06 mm except the named exceptions
