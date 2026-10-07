@@ -1,12 +1,12 @@
 #!/usr/bin/env python3
-"""D56 probe: the rail coupon's groove block, seated on every stub in the mesh.
+"""D56/D58 probe: the rail coupon's groove block, seated on every stub in the mesh.
 
 For each stub the block is turned bed-face UP (rotated 180 degrees about x, so the groove still
 opens toward +x), its groove bottom is put on the stub's tip, its centre on the stub's y, and its
 underside on the plate top. Then, on the meshes:
 
-  * the block overlaps no OTHER stub (exact boolean volume) and clears each by >= MIN_GAP mm;
-  * the block lies inside the plate (margin reported) and covers no label recess;
+  * the block (mouth against the stub's backstop wall) overlaps no OTHER stub or wall (exact boolean volume)
+    and clears each by >= MIN_GAP mm; it lies >= MIN_GAP inside the plate; block and wall are >= MIN_GAP from every label;
   * the stub's own root clearance (y gap, groove half-width minus stub half-width at the stub root,
     mid-height cross-section) equals its label; on a ribbed stub the deepest rib penetration into the
     groove flank equals the label's interference;
@@ -22,9 +22,11 @@ warnings.filterwarnings('ignore')
 import numpy as np
 import trimesh
 from shapely.geometry import LineString, Point, Polygon, box
-from _common import scad, moved, translation, overlap_mm3, PROJECT
+from _common import scad, moved, translation, overlap_mm3, params, PROJECT
 
-MIN_GAP = 8.0          # block to any neighbouring stub, mm (D56)
+MIN_GAP = 8.0          # block to any other stub, wall, label or the plate edge, mm (D56, D58)
+WALL_T = 3.0           # backstop wall behind each stub (D58)
+RIB_H = 0.8            # rib height normal to the flank (D58)
 PLATE_T = 4.0
 MID = PLATE_T + 6.0    # mid-height of a 12 mm stub
 ok = True
@@ -83,14 +85,20 @@ def halfspan(poly, x, yc, kind):
 
 
 def analyse(tag, plate, block, expect, ribs):
-    """plate: one mesh (plate + stubs); expect: per stub (root clearance[, interference]).
+    """plate: one mesh (plate + stubs + backstop walls); expect: per stub (root clearance[, interference]).
 
-    Two poses per stub. BOTTOM: the groove bottom on the stub tip (the block pushed fully on; the
-    mouth then stands rail_depth_clear past the stub root). ROOT: the groove mouth level with the stub
-    root, which is how the body seats the rail (the walls meet there), and where the label's
-    clearance is defined. Neighbour, edge and label checks take the worse of the two."""
+    One pose per stub, the one the user's hand makes (D58): the block bed-face up, its groove mouth
+    against the stub's backstop wall (the mouth plane is the stub's root plane, the rail tip 0.4 mm off the
+    groove floor, as in the body), its centre on the stub, its underside on the plate. A coupon without
+    walls (--old) is seated the same way."""
     top = section(plate, PLATE_T + 6)
-    stubs = sorted(top, key=lambda p: p.bounds[0])
+    stubs_full = sorted(top, key=lambda p: p.bounds[0])
+    walled = [(p.bounds[3] - p.bounds[1]) > 20 for p in stubs_full]
+    stubs = []
+    for p, w in zip(stubs_full, walled):
+        root_x = p.bounds[2] - (WALL_T if w else 0.0)
+        stubs.append(max((g for g in getattr(c, "geoms", [c]) if g.geom_type == "Polygon"), key=lambda g: g.area)
+                     if w and (c := p.intersection(box(p.bounds[0] - 1, p.bounds[1] - 1, root_x, p.bounds[3] + 1))) else p)
     labels = [Polygon(h) for p in section(plate, PLATE_T - 0.3) for h in p.interiors]
     pb = plate.bounds
     cut = trimesh.creation.box(extents=[1e3, 1e3, 40], transform=translation([0, 0, PLATE_T + 0.001 + 20]))
@@ -101,10 +109,11 @@ def analyse(tag, plate, block, expect, ribs):
     for i, (sp, exp) in enumerate(zip(stubs, expect)):
         tip, root = sp.bounds[0], sp.bounds[2]
         yc = (sp.bounds[1] + sp.bounds[3]) / 2
+        full = stubs_full[i]
         bottom = seat(block, tip, yc)
         rootpose = moved(bottom, translation([root - bottom.bounds[1][0], 0, 0]))
         worst_gap, worst_ov, edge, lab_gap, lab_ov = 1e9, 0.0, 1e9, 1e9, 0.0
-        for blk in (bottom, rootpose):
+        for blk in (rootpose,):
             bb = blk.bounds
             for j, sm in enumerate(stub_solids):
                 if j == i:
@@ -117,13 +126,14 @@ def analyse(tag, plate, block, expect, ribs):
             fp = section(blk, PLATE_T + 0.3)[0]
             lab_ov = max([lab_ov] + [fp.intersection(l).area for l in labels])
             lab_gap = min([lab_gap] + [fp.distance(l) for l in labels])
+        wall_lab = min([full.distance(l) for l in labels] + [1e9])
         # own clearance, mid-height, in the ROOT pose
         bsec = [p for p in section(rootpose, MID) if p.area > 50][0]
         lo, hi = halfspan(bsec, root - 0.001, yc, "block")
         slo, shi = halfspan(sp, root - 0.001, yc, "stub")
         root_clear = ((hi - shi) + (slo - lo)) / 2
         # flank gap (y, both flanks, mean) at several depths from the root: D57 says it is the label everywhere
-        depths = (0.3, 1.5, 2.7) if ribs else (0.1, 0.6, 1.2, 1.8, 2.4, 2.9)    # ribs sit at 0.9 and 2.1 +- 0.4
+        depths = (0.3, 1.5, 2.8) if ribs else (0.1, 0.6, 1.2, 1.8, 2.4, 2.9)    # ribs sit at 0.9 and 2.1 +- 0.4
         gaps = []
         for dep in depths:
             glo, ghi = halfspan(bsec, root - dep, yc, "block")
@@ -132,7 +142,7 @@ def analyse(tag, plate, block, expect, ribs):
         verts = [Point(x, y) for x, y in sp.exterior.coords]
         tight = min((-1 if bsec.contains(v) else 1) * bsec.exterior.distance(v) for v in verts)
         own_ov = overlap_mm3(rootpose, stub_solids[i])
-        print(f"   stub {i}: tip x {tip:6.1f}  block x {bottom.bounds[0][0]:6.1f}..{bottom.bounds[1][0]:6.1f} (bottom pose)  "
+        print(f"   stub {i}: tip x {tip:6.1f}  block x {rootpose.bounds[0][0]:6.1f}..{rootpose.bounds[1][0]:6.1f} (mouth on the wall)  "
               f"nearest other stub {worst_gap:5.2f}  overlap w/ others {worst_ov:.3f} mm3  "
               f"plate edge margin {edge:5.2f}  label gap {lab_gap:5.2f}")
         print(f"            root clearance {root_clear:+.4f} (label {exp[0]:.2f})  "
@@ -140,8 +150,9 @@ def analyse(tag, plate, block, expect, ribs):
         chk(f"{tag} stub {i}: no overlap with any other stub", worst_ov < 1e-6)
         chk(f"{tag} stub {i}: block clears every other stub by >= {MIN_GAP} mm", worst_gap >= MIN_GAP,
             f"(measured {worst_gap:.2f})")
-        chk(f"{tag} stub {i}: block inside the plate", edge >= 0, f"(margin {edge:.2f})")
-        chk(f"{tag} stub {i}: block covers no label", lab_ov < 1e-6 and lab_gap > 0.5, f"(gap {lab_gap:.2f})")
+        chk(f"{tag} stub {i}: block >= {MIN_GAP} mm inside the plate edge", edge >= MIN_GAP, f"(margin {edge:.2f})")
+        chk(f"{tag} stub {i}: block and wall >= {MIN_GAP} mm from every label", lab_ov < 1e-6 and min(lab_gap, wall_lab) >= MIN_GAP,
+            f"(block {lab_gap:.2f}, wall {wall_lab:.2f})")
         print("            flank gap at depth " + "  ".join(f"{d}: {g:.4f}" for d, g in zip(depths, gaps)))
         chk(f"{tag} stub {i}: flank gap equals the label {exp[0]:.2f} at every depth sampled",
             all(abs(g - exp[0]) < 0.005 for g in gaps), f"(worst error {max(abs(g - exp[0]) for g in gaps):.4f})")
@@ -176,8 +187,12 @@ else:
             M[part] = trimesh.load(out)
             mesh_health(part, M[part])
             chk(f"{part}: one body", len(bodies(M[part])) == 1)
+    P = params()
+    k = (P["rail_tip_w"] - P["rail_root_w"]) / 2 / P["rail_out"]
+    n_y = 1 / math.sqrt(1 + k * k)
+    xs = (0.0, 0.1, 0.2, 0.3, 0.4)
     analyse("plain", M["plain"], M["block"], [(c,) for c in (0.30, 0.25, 0.20, 0.15, 0.10)], False)
-    analyse("ribs", M["ribs"], M["block"], [(0.30, x) for x in (0.0, 0.05, 0.10, 0.15, 0.20)], True)
+    analyse("ribs", M["ribs"], M["block"], [((RIB_H - x) / n_y, x) for x in xs], True)
 
 print("ALL PASS" if ok else "FAILED")
 sys.exit(0 if ok else 1)

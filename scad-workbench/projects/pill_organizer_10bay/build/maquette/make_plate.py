@@ -86,11 +86,11 @@ PLATES = {
         ("calibration_coupon",            "build/calibration_coupon.stl", (205.0, 20.0, "rot90")),
     ]),
     # D51/D55/D56: the rail coupon alone, to confirm the fit before the final body. D56: two
-    # row plates (150.8 x 54) and the groove block, centred on the plate, probes/coupon_fit.py
+    # row plates (161 x 60, stubs with backstop walls) and the groove block, centred on the plate, probes/coupon_fit.py
     "coupon": ("build/coupon/rail_coupon_256.3mf", "rail coupon only (D56)", [
-        ("rail_coupon_d56_plain",         "build/coupon/plain.stl",       (52.0, 69.0)),
-        ("rail_coupon_d56_ribs",          "build/coupon/ribs.stl",        (52.0, 133.0)),
-        ("groove_block",                  "build/coupon/block.stl",       (213.0, 69.0)),
+        ("rail_coupon_d56_plain",         "build/coupon/plain.stl",       (40.0, 63.0)),
+        ("rail_coupon_d56_ribs",          "build/coupon/ribs.stl",        (40.0, 133.0)),
+        ("groove_block",                  "build/coupon/block.stl",       (211.0, 63.0)),
     ]),
 }
 FINAL = [   # (3mf, object name, stl)

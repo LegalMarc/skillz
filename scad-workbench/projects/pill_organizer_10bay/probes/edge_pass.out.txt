@@ -1,4 +1,4 @@
-PASS  body is one watertight body (17016 triangles)
+PASS  body is one watertight body (17014 triangles)
 PASS  pick_lid is one watertight body (2418 triangles)
 PASS  fill_lid is one watertight body (460 triangles)
 

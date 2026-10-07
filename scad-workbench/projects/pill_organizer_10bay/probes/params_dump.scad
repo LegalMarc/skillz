@@ -98,3 +98,6 @@ echo(str("PROBE pill_len=", pill_len));
 echo(str("PROBE pill_dia=", pill_dia));
 echo(str("PROBE fill_grip_d=", fill_grip_d));
 echo(str("PROBE fill_lid_y=", fill_lid_y));
+echo(str("PROBE rail2_y=", rail2_y));
+echo(str("PROBE rail2_z1=", rail2_z1));
+echo(str("PROBE rail_z0=", rail_z0));

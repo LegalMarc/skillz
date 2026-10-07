@@ -1005,8 +1005,19 @@ body spans x 6.5 to 249.5, y 21.5 to 234.5; the pick lid x 8.5 to 247.5, y 58.2 
 | Gap at the rail tip at `rail_clear` 0.20 | 0.059 | 0.200 |
 | Groove widest width | `rail_tip_w` + 2 `rail_clear` | unchanged, so `rail_boss_side` (3.8) and the skin asserts hold |
 | `rail_clear` | 0.28 (D55) | 0.30 (D56, a starting point) |
-| Coupon | 5 stubs, pitch 18, block 0.4 mm from the next stub | two rows of 5, pitch 28, the seated block 10 mm from the next stub; ribs row 0 to 0.20 mm |
+| Coupon (D56, as rebuilt in D58) | 5 stubs, pitch 18, block 0.4 mm from the next stub | two rows of 5, pitch 30, backstop wall behind every stub, the seated block 9 mm from the next stub or wall; triangular ribs row, crest interference 0 to 0.40 mm |
 
 Measured on the meshes: `probes/coupon_fit.py` (gap equal to the label at six depths on every plain stub, rib interference as labelled,
 tightest gap of the 0.10 stub +0.093), the body's sections at z 60 and 150 (gap 0.3000 at depths 0.1 to 3.2 on both grooves),
 `corner_thickness.py` (skin 2.40, buttress 3.70) and `skin_free_height.py` (2.30 of 2.4) still pass.
+
+### D58: the male rail (review of D57)
+
+| Quantity | Before | After |
+|---|---|---|
+| Male rail section at z 20 (rail 1) | root 3.94, flank slope 0.343 (hull of the prism with a root sliver) | root 3.6, slope 0.4: exactly `rail_male_2d()` |
+| Male excess per side at the root | +0.171 at z 20, +0.023 at z 80 | 0 |
+| Ganged y gap at the mouth, z 13 to 20 / above z 85 | 0.130 / 0.29 | 0.3000 at every height and depth sampled (`probes/gang_fit.py`) |
+| Underside | hull to a sliver at the wall face | the exact prism cut by a 45 degree wedge, first solid at depth d is d above `rail_z0` |
+| Coupon ribs | half-round r 0.5, 0.0 to 0.2 interference | triangular 0.8 proud, 0.2 crest, 0.0 to 0.4 interference in 0.1 steps; ribbed stubs slimmer (base y clearance (0.8 - X) / 0.928) |
+| Coupon seat | block dropped anywhere along the stub | mouth on a backstop wall at the root plane, rail tip 0.4 mm off the groove floor |

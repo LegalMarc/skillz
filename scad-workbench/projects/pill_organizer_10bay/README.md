@@ -22,9 +22,13 @@ skirt are one profile, extruded once, 3.0 mm thick all the way round, with a 3.0
 the bend and a 1.5 mm round outside it, and the 1.0 mm end chamfer runs on round the bend. D51
 (`rail_clear` 0.40) was a best guess. D56 (after the D51 and D55 coupons both read loose): the coupon's
 groove block stood 0.4 mm (0.0 with its mouth on the stub root) from the neighbouring stub, so every
-reading since D47 is void; the coupon is redesigned (28 mm pitch, a plain row and a crush-rib row,
-`rail_clear` 0.30 as a starting point) and **its reading is needed before printing the body** (see
-"Print the final unit"). Nothing here has been printed.
+reading since D47 is void; the coupon is redesigned (30 mm pitch, a backstop wall behind every stub, a
+plain row and a crush-rib row, `rail_clear` 0.30 as a starting point). D57: the groove is the male's
+section offset by `rail_clear` with the same flank slope (it was gentler, 0.14 mm tighter at the tip).
+D58: the body's male rail was itself fatter than its section (its 45 degree underside was a hull that
+pushed the flanks out by up to 0.17 mm per side low on the rail): fixed, and `probes/gang_fit.py` gates
+the ganged pair. **The coupon's reading is needed before printing the body** (see "Print the final
+unit"). Nothing here has been printed.
 
 **Revision 12.** Twelve revisions, forty-nine recorded decisions (`plan.md`). Revision
 12 is the final full-size print: the user skipped test print 4 and went straight to the unit (they printed it afterwards; see revision 13).
@@ -239,7 +243,8 @@ the wedge to work.
   and 3.6 mm at the root, the groove 3.4 deep (D57: the male's section grown by `rail_clear` per side with
   the SAME flank slope, so the flank gap is `rail_clear` at every depth, then straight walls for the last
   0.4 mm; `rail_profile.scad`, shared with the coupon; before, the gap shrank by 0.14 mm toward the
-  rail tip), and the buttress behind the front
+  rail tip; D58: the male rail is exactly `rail_male_2d()` at every height, cut by a wedge for its 45 degree
+  underside, where it had been fattened by a hull, and `probes/gang_fit.py` gates the ganged pair), and the buttress behind the front
   groove protrudes 3 mm into the bay (7 before) and is 14 mm long; the skin between
   the groove and tray A is 2.4 mm, a divider, and the groove's front lip is bevelled
   1 mm where it meets the sloped plane (D39's lesson: no thin blade, no knife edge).
@@ -297,7 +302,7 @@ final --export` rebuilds them from the sources and checks each against its STL):
 - **Before the body: read the D56 coupon.** The body bakes in `rail_clear` 0.30 (D56), a starting
   point: the slim-rail coupon readings (the D47 coupon in test print 4, the D51 and D55 coupons) are void
   (the block collided with the neighbouring stub); the D51 and D55 coupons read loose on every stub. Print `build/coupon/rail_coupon_256.3mf` first
-  (PLAIN row 0.30 .. 0.10, RIBS row 0 .. 0.20 interference; see "Print this first"). Set `rail_clear`
+  (PLAIN row 0.30 .. 0.10, RIBS row 0 .. 0.40 interference; see "Print this first"). Set `rail_clear`
   in `params.scad` to the plain row's best clearance, or, if the ribs row is the better answer, keep
   `rail_clear` 0.30 and tell the designer the rib label so the body's male rail gets crush ribs; then run
   `python3 build/maquette/make_plate.py final --export` **before** printing the body: the groove is in
@@ -363,20 +368,25 @@ loose down to 0.30; test print 3 (PETG) found 0.20 slightly tight (D47: 0.215); 
 coupon (0.30 .. 0.26, 2026-10-06) read loose on every stub. **The slim-rail readings (D47 coupon, D51, D55) are void:** the
 groove block stood 0.4 mm from the neighbouring stub at the 18 mm pitch (0.0 mm with its mouth on the
 stub root), so it rocked against it (`probes/coupon_fit.py` reproduces it). D56 sets `rail_clear` 0.30
-as a starting point and the coupon spaces the stubs 28 mm apart (the seated block is 10 mm or more from
-any other stub). Three objects, no supports, no brim: a PLAIN plate (150.8 x 54 mm), a RIBS plate of the
-same size and the groove block, cut as the body cuts its grooves.
+as a starting point. The coupon (D58) is three objects, no supports, no brim: a PLAIN plate and a RIBS plate
+(161 x 60 mm each) and the groove block, cut as the body cuts its grooves. Every stub stands against a
+backstop wall (3 mm thick, 24 wide, 14 tall) at its root plane, which is the neighbouring module's face in
+the body, and the stubs are 30 mm apart, so the seated block is 9 mm or more from every other stub, wall,
+label and the plate edge (`probes/coupon_fit.py`).
 
-- **PLAIN row:** five stubs at 0.30, 0.25, 0.20, 0.15, 0.10 mm per side against the groove
-  (labels in hundredths: 30 25 20 15 10). Turn the block over so the face that was on the bed is UP,
-  and drop it over each stub, the groove opening toward the stub's root. The one that slides on by hand
-  without rocking is your fit; set `rail_clear` to its clearance. (D57: the groove is the male's section
-  offset outward with the same flank slope, so each stub's gap is its label at every depth; the first D56
-  groove was gentler than the male and the 0.10 stub would have bound at the tip.)
-- **RIBS row:** five stubs at 0.30 clearance with two vertical half-round ribs (radius 0.5 mm) on each sloped
-  flank, tapering away over the top 1.5 mm so the block starts. The ribs press on the groove flank by 0, 5,
-  10, 15, 20 hundredths of a millimetre (labels 0 5 10 15 20). The fit is the least interference
-  that has no rattle and still slides on and off by hand. Report both rows.
+**How to read it.** Turn the block over so the face that was on the bed is UP, and push it DOWN onto the
+stub, holding its open face (the groove's mouth) against the wall; do not slide it along the wall.
+
+- **PLAIN row (the primary reading):** five stubs whose flank gap to the groove is 0.30, 0.25, 0.20, 0.15,
+  0.10 mm per side (labels in hundredths: 30 25 20 15 10; the labels are Y gaps, the gap normal to the flank
+  is 0.928 times that). The one that goes on by hand without rocking is your fit; set `rail_clear` to its
+  clearance. (D57: the groove is the male's section offset outward with the same flank slope, so each stub's
+  gap is its label at every depth.)
+- **RIBS row (a second opinion):** five slimmer stubs, each with a vertical triangular rib (0.8 mm proud, 0.2 mm
+  crest) twice on each sloped flank, tapering away over the top 1.5 mm. The crests press on the groove flank by
+  0, 0.1, 0.2, 0.3, 0.4 mm (labels 0 10 20 30 40). The fit is the least interference that has no rattle and
+  still goes on and off by hand. Ribs crush and wear on a joint that is separated and rejoined, so this row says
+  what a first fit feels like; the plain row decides `rail_clear`. Report both rows.
 
 **The reading holds for the filament it was printed in:** PETG reads differently from PLA, so print the
 unit in the same filament, or run the coupon again.

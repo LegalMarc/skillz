@@ -427,21 +427,32 @@ module scallop_chamfer_cuts() {
 // ------------------------------------------------------------
 
 module rail_male_one(y, z1) {
+    // D58: the rail's flanks are EXACTLY rail_male_2d() at every height. (Until D58 the underside was a
+    // hull of the section's prism with a sliver at the wall face, which pushed both flanks outward over
+    // the whole height: +0.171 per side at the root at z 20, +0.023 at z 80, so the ganged gap was 0.13
+    // where the groove said 0.30.) The 45 degree printable underside is now a CUT of the exact prism by a
+    // wedge: the rail's first solid at x = -d is z = d above rail_z0, up to rail_lead_bot.
+    zh = z1 - rail_z0 - rail_lead;
     translate([0, y, rail_z0]) {
-        // 45 degree underside: the full section from rail_lead_bot up, hulled
-        // with a sliver at the wall face at the bottom, so nothing flat hangs
-        // in mid-air. The sliver sits 0.5 inside the wall so no face coincides.
-        hull() {
-            translate([0, 0, rail_lead_bot])
-                linear_extrude(height = z1 - rail_z0 - rail_lead - rail_lead_bot)
-                    rail_trapezoid(rail_root_w, rail_tip_w, rail_out);
-            translate([0, -rail_root_w / 2, 0]) cube([0.5, rail_root_w, 0.01]);
+        // one solid for the section and its weld block, cut by the wedge, so the underside is one surface
+        // (the cut's edge at the wall face lies inside the bottom face, not on another solid's edge)
+        intersection() {
+            linear_extrude(height = zh)
+                union() {
+                    rail_male_2d();
+                    translate([0, -rail_root_w / 2]) square([weld_embed, rail_root_w]);
+                }
+            rotate([90, 0, 0]) linear_extrude(height = 4 * rail_tip_w, center = true)
+                polygon([[ weld_embed + 1, -1], [weld_embed + 1, zh + 1], [-rail_out - 1, zh + 1], [-rail_out - 1, rail_lead_bot],
+                         [-rail_lead_bot, rail_lead_bot], [0, 0], [weld_embed + 1, 0]]);
         }
-        translate([0, 0, z1 - rail_z0 - rail_lead])
+        translate([0, 0, zh])
             linear_extrude(height = rail_lead, scale = 0.45)
-                rail_trapezoid(rail_root_w, rail_tip_w, rail_out);
-        translate([0, -rail_root_w / 2, 0])
-            cube([weld_embed, rail_root_w, z1 - rail_z0]);
+                rail_male_2d();
+        // the weld block's last rail_lead (inside the wall), reaching 0.5 down into the main solid and 0.2 in
+        // from each of its faces so no two faces share a plane
+        translate([0.2, -rail_root_w / 2 + 0.2, zh - 0.5])
+            cube([weld_embed - 0.4, rail_root_w - 0.4, rail_lead + 0.5]);
     }
 }
 

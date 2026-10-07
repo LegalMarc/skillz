@@ -1,5 +1,16 @@
 # Resume note -- revision 13 (read this first)
 
+**Update, D55 to D58 (rail fit, newest first).** `rail_clear` is 0.30, a STARTING POINT, not a reading:
+the D47, D51 and D55 coupon readings are void (the block hit the neighbouring stub, D56). D57: the groove
+is the male's section offset by `rail_clear` with the same flank slope (`rail_profile.scad`). D58: the
+body's male rail was fattened by its own underside hull (the ganged gap was 0.13 low on the rail, not
+0.30); fixed, gated by `probes/gang_fit.py`. The coupon (`build/coupon/rail_coupon_256.3mf`: PLAIN row
+0.30 .. 0.10, RIBS row crest interference 0 .. 0.40, backstop wall behind every stub, 30 mm pitch) is
+not printed yet. **Next step:** print it (no brim, PETG, dry), read the plain row (the stub that goes on
+by hand without rocking, block pushed down with its open face on the wall), set `rail_clear`, run
+`python3 build/maquette/make_plate.py final --export`, print the body. Ribs row is a second opinion only.
+Everything below is the revision 13 note.
+
 **Where it stands:** revision 13 (D51 to D53) is implemented on branch `pill-organizer-rev13`
 (from `pill-organizer-rev12` at `348e240`); pushed after the first review, no PR. It answers test
 print 4 (the revision 11 section, printed after all): the arches drooped (D52), the pick lid read

@@ -746,8 +746,8 @@ rail_clear  = 0.30;        // 0.35 -> 0.50 (D31) -> 0.20 (D40) -> 0.215 (D47) ->
                            // root) from the neighbouring stub at pitch 18, so the block rocked against it
                            // (probes/coupon_fit.py reproduces it on the D55 mesh). D56: 0.30 is the
                            // loosest of the stubs read, a STARTING POINT, not a reading; the D56 coupon spaces
-                           // the stubs 28 mm apart and has two rows (plain 0.30 .. 0.10, and
-                           // 0.30 stubs with crush ribs, interference 0 .. 0.20). Set it from that reading.
+                           // the stubs 30 mm apart, each against a backstop wall, and has two rows (plain 0.30 .. 0.10,
+                           // and ribbed stubs, crest interference 0 .. 0.40). Set it from the plain row.
 // D57: the groove is the male's section offset outward by rail_clear with the SAME flank slope
 // (rail_profile.scad, shared with the coupon). Before, its flank was gentler (the same two widths over
 // rail_out + rail_depth_clear), so the flank gap shrank from rail_clear at the mouth to rail_clear - 0.141 at
