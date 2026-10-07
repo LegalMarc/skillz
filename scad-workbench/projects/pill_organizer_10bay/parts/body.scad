@@ -386,7 +386,7 @@ module front_scallop_cut() {
         // front wall stays at the full pick-plane height there and the pick
         // lid's lug drops in behind it. No scallop_over on that side, since the
         // cut then ends in the middle of the front wall, on no face of its own.
-        xz_extrude(-1, wall_out + 1) scallop_outline(scallop_x0(i), scallop_x1(i), r);
+        xz_extrude(-1, wall_out + tray_fillet_r + 0.5) scallop_outline(scallop_x0(i), scallop_x1(i), r);
     }
 }
 
@@ -395,27 +395,26 @@ module front_scallop_cut() {
 // a pill is pulled over. Each cutter is a frustum of the scallop's own outline SHIFTED DOWN,
 // not grown: it is scallop_chamfer deep at the wall's face and nothing at that depth into the
 // wall, so the bevel is widest on the flat floor, narrows up the rounded corners as they steepen
-// and fades out where they meet the vertical sides; it never reaches the dividers' tips (which
-// scallop_over has already thinned) and stops 0.1 short of the bay's own sides. The tray-side
-// frustum starts 0.2 into the tray and shifts a little further, so it stays above the divider
-// fillets' tops (front_fillets stops 1 under the scallop floor).
+// and fades out where they meet the vertical sides. D60: the front face takes scallop_front_round (a
+// r scallop_round_r round on the whole outline, sides included); the tray-side frustum runs on over the
+// divider fillets and out to the scallop's own sides (scallop_x0/x1), so the chamfer, fillet and divider
+// face form one sweep.
 module scallop_chamfer_cuts() {
-    c = scallop_chamfer; r = trayA_scallop_r; e = 0.2;
+    c = scallop_chamfer; r = trayA_scallop_r;
     for (i = [0 : bays - 1]) {
-        a = scallop_x0(i) + scallop_over + 0.1; b = scallop_x1(i) - scallop_over - 0.1;   // inside the bay's own width, clear of the divider tips
         // Each frustum is the hull of two thin plates of the outline, one far out in the air and one
         // far inside the scallop cut itself, so the shift runs straight through the wall's face at 45
         // degrees: shift(y) = c - y on the front face, c - (wall_out - y) on the tray side. (Plates
         // of any thickness bend the hull's slope: its lower surface runs to the plate's far edge.)
         // front face: shift c + 1.6 at y = -1.6, -0.6 (up) at y = c + 0.6
-        hull() {
-            translate([0, -1.6, 0]) xz_extrude(0, 0.01) translate([0, -(c + 1.6)]) scallop_outline(a, b, r);
-            translate([0, c + 0.6, 0]) xz_extrude(0, 0.01) translate([0, 0.6]) scallop_outline(a, b, r);
-        }
+        scallop_front_round(scallop_x0(i), scallop_x1(i));
         // tray side: shift c + e at y = wall_out + e, -0.6 at y = wall_out - c - 0.6
+        // D60 (F2): the tray-side 45 degree chamfer runs on over the corner fillets (to wall_out + tray_fillet_r + 0.5)
+        // and reaches the scallop's own sides (scallop_x0/x1, i.e. 0.05 into a divider), so no fillet sliver stands proud of it
+        ef = tray_fillet_r + 0.5;
         hull() {
-            translate([0, wall_out + e, 0]) xz_extrude(0, 0.01) translate([0, -(c + e)]) scallop_outline(a, b, r);
-            translate([0, wall_out - c - 0.6, 0]) xz_extrude(0, 0.01) translate([0, 0.6]) scallop_outline(a, b, r);
+            translate([0, wall_out + ef, 0]) xz_extrude(0, 0.01) translate([0, -(c + ef)]) scallop_outline(scallop_x0(i), scallop_x1(i), r);
+            translate([0, wall_out - c - 0.6, 0]) xz_extrude(0, 0.01) translate([0, 0.6]) scallop_outline(scallop_x0(i), scallop_x1(i), r);
         }
     }
 }
@@ -525,20 +524,20 @@ module corner_beads() {
 // (D46 fixes the section); the full module's joint is 2.4 on 2.8 mm and fused, but a
 // bare T is where a layer line wants to open, and it is a square pocket for a capsule
 // end. A tray_fillet_r quarter-round in each of the twelve corners, from the floor up
-// to just under the scallop, fixes both; the scallop cut trims anything above.
+// to above the scallop's arc, fixes both; the scallop cut trims the top along the arc (D60).
 //
 // D48 does the same for tray B's front wall (the wall between the trays, face at yB_tray0):
 // pills pile against it just as they do against tray A's front wall. Its gusset starts 1 under
-// tray B's floor and stops tray_fillet_top_under below the wall's top plane at the face, so
-// the plane's slope (the wall's top rises 0.96 mm per mm toward the back) clears it.
+// tray B's floor and, from D60, runs up to the wall's top plane (clipped stop_clip_drop under it, and
+// trimmed by wall_back_bevels), so no flat ledge and no bare corner is left under the top.
 module front_fillets() {
-    corner_fillets(yA_tray0, base_z - 1, trayA_front_h - 1.0);
-    corner_fillets(yB_tray0, trayB_floor - 1, pickplane(yB_tray0) - tray_fillet_top_under);
+    corner_fillets(yA_tray0, base_z - 1, trayA_front_h + trayA_scallop_r + 1.0, pick_stop_w);   // D60: the fillet runs up past the scallop and the scallop cut trims it along the arc (no flat ledge); end bays at the stop block's face (F7)
+    intersection() { corner_fillets(yB_tray0, trayB_floor - 1, pickplane(yB_tray0 + tray_fillet_r) + 1); yz_extrude(0, module_w) offset(delta = 0) polygon(OUTER_STOP_CLIP); }   // D60 (F5): to the plane, trimmed by wall_back_bevels
 }
-module corner_fillets(y0, z0, z1) {
+module corner_fillets(y0, z0, z1, end_inset = 0) {
     r = tray_fillet_r;
     for (i = [0 : bays - 1]) {
-        bx0 = wall_x1(i); bx1 = bx0 + bay_w;
+        bx0 = wall_x1(i) + (i == 0 ? end_inset : 0); bx1 = wall_x1(i) + bay_w - (i == bays - 1 ? end_inset : 0);
         translate([0, 0, z0]) linear_extrude(height = z1 - z0) {
             difference() {      // left corner of the bay: the fillet grows toward +x
                 translate([bx0 - 0.3, y0 - 0.3]) square([r + 0.3, r + 0.3]);
@@ -579,7 +578,7 @@ module stop_block_profile() {
 module stop_filler_profile() {   // in (x, z), for the LEFT side; mirrored for the right
     sa = sin(pick_lid_slope); ca = cos(pick_lid_slope);
     zt = pickplane(pick_stop_y) - pick_stop_depth * ca - pick_filler_drop;     // top at the side wall
-    xe = wall_out + pick_stop_w - 0.3;      // as wide as the stop block (less 0.3, not coplanar with its side): D43 slimmed the buttress to 3 mm, narrower than the block, and a filler to the buttress left a 3 x 6 mm nook beside it
+    xe = wall_out + pick_stop_w - 0.05;      // as wide as the stop block (less 0.3, not coplanar with its side): D43 slimmed the buttress to 3 mm, narrower than the block, and a filler to the buttress left a 3 x 6 mm nook beside it
     polygon([[wall_out - weld_embed, base_z - 1], [xe, base_z - 1],
              [xe, zt - (xe - wall_out)], [wall_out, zt], [wall_out - weld_embed, zt]]);
 }
@@ -587,6 +586,8 @@ module stop_filler_left() {
     y0 = pick_stop_back_y - 0.5; y1 = rail1_boss_y0 + 0.5;
     translate([0, y1, 0]) rotate([90, 0, 0]) linear_extrude(height = y1 - y0) stop_filler_profile();
 }
+OUTER_STOP_CLIP = [[0, 0], [module_d, 0], [module_d, flare_zo], [module_d_top, hopper_rim], [yB_tray1, hopper_rim],
+    [yB_tray1, trayB_rim - stop_clip_drop], [0, pickplane_front - stop_clip_drop]];
 module stop_blocks() {
     intersection() {
         union() {
@@ -595,23 +596,12 @@ module stop_blocks() {
             stop_filler_left();
             translate([module_w, 0, 0]) mirror([1, 0, 0]) stop_filler_left();
         }
-        yz_extrude(0, module_w) polygon(OUTER_CLIP);
+        yz_extrude(0, module_w) polygon(OUTER_STOP_CLIP);
     }
 }
-// G7: the block's top is clipped boss_clip_drop under the plane (a top ON the
-// plane is a coplanar union that fails to weld), which left a 0.2 mm step against
-// the front wall's top at y = 2.8. The front wall's top over the pillar is trimmed
-// to the same height with a cutter whose floor is the clip polygon itself, a hair
-// ABOVE the block's top (stop_trim_lift), so the two are flush to within 0.05 mm
-// and no two faces coincide. The lid still floats pick_lid_gap over the plane.
-module stop_trim() {
-    for (x0 = [wall_out, module_w - wall_out - pillar_w])
-        intersection() {
-            yz_extrude(x0, x0 + pillar_w) polygon([[-1, -1], [-1, 400], [pick_stop_back_y, 400], [pick_stop_back_y, -1]]);
-            translate([0, 0, stop_trim_lift]) yz_extrude(x0, x0 + pillar_w)
-                difference() { translate([-5, 20]) square([60, 400]); polygon(OUTER_CLIP); }
-        }
-}
+// D60: the block's top is stop_clip_drop (0.05) under the plane (a top ON the plane is a coplanar union that
+// fails to weld). The old G7 trim, which lowered the front wall over the pillar to match a 0.2 clip, is gone: with
+// 0.05 the side wall, pillar and block tops agree within 0.05 and nothing needs trimming.
 
 module rail_socket_cut() {
     for (r = [[rail1_y, rail1_soc_z1], [rail2_y, rail2_soc_z1]])
@@ -703,13 +693,52 @@ module foot_pad_cuts() {
             cylinder(h = 1 + bed_chamfer + 0.2, d1 = foot_pad_d + 2 * (bed_chamfer + 1.0), d2 = foot_pad_d - 0.4, $fn = 48);
 }
 
+
+// D60 (F6): front-face round along the whole scallop outline (floor, corners, sides up to the plane)
+module scallop_front_round(a, b) {
+    rr = scallop_round_r; r = trayA_scallop_r; N = 5;
+    function d(k) = rr * (1 - cos(90 * k / N));
+    function e(k) = rr * (1 - sin(90 * k / N));
+    module plate(y, g) translate([0, y, 0]) xz_extrude(0, 0.01) offset(delta = g) scallop_outline(a, b, r);
+    hull() { plate(-1.5, rr + 0.02); plate(0, rr); }
+    for (k = [0 : N - 1]) hull() { plate(d(k), e(k)); plate(d(k + 1), e(k + 1)); }
+    hull() { plate(rr, 0); plate(rr + 0.5, -0.3); }
+}
+// D60 (F4): the 46 degree back-top edge of the wall between the trays, bevelled per bay
+module wall_back_bevels() {
+    c = wall_back_bevel; y1 = yA_wall1;
+    A = [y1 - c * cos(pick_lid_slope), pickplane(y1) - c * sin(pick_lid_slope)];
+    B = [y1, pickplane(y1) - c];
+    d = B - A; L1 = A - 2 * d; L2 = B + 2 * d;
+    for (i = [0 : bays - 1]) yz_extrude(wall_x1(i) - 0.05, wall_x1(i) + bay_w + 0.05)
+        polygon([L1, L2, [L2[0], L2[1] + 10], [L1[0], L1[1] + 10]]);
+}
+
+
+// D60 (F8): round the dividers' top edges on the pick plane (tray A and tray B). The profile is a quarter
+// round in (x, z') with z' measured vertically from the plane, sheared onto the plane.
+module plane_edge_round(xf, m, y0, y1) {    // m = +1: the material is on -x of the face at xf; -1: on +x
+    r = divider_top_r; t = tan(pick_lid_slope);
+    multmatrix([[1, 0, 0, 0], [0, 1, 0, 0], [0, t, 1, pickplane_front], [0, 0, 0, 1]])
+        translate([0, y1, 0]) rotate([90, 0, 0]) linear_extrude(height = y1 - y0)
+            difference() {
+                translate([m > 0 ? xf - r : xf - 1, -r]) square([r + 1, r + 1]);
+                translate([xf - m * r, -r]) circle(r = r + 0.03, $fn = 32);
+            }
+}
+module divider_top_rounds() {
+    for (k = [1 : bays - 1]) for (span = [[-1, yA_tray1 - 0.05], [yB_tray0 + 0.05, yB_tray1 - 0.05]]) {
+        plane_edge_round(wall_x0(k), -1, span[0], span[1]);
+        plane_edge_round(wall_x1(k), +1, span[0], span[1]);
+    }
+}
+
 // ------------------------------------------------------------
 module body_geometry() {
     difference() {
         union() { body_shell(); outlet_chamfers(); vault_roof(); rail_bosses(); stop_blocks(); corner_beads(); front_fillets(); }
         fill_seat_cut();
         front_scallop_cut();
-        stop_trim();
         both_faces() {              // D59: the same two slots on BOTH side faces, no male rail
             rail_socket_cut();
             rail1_countersink();
@@ -721,6 +750,8 @@ module body_geometry() {
         mouth_chamfer_cut();
         cubby_chamfer_cut();
         scallop_chamfer_cuts();
+        wall_back_bevels();
+        divider_top_rounds();
     }
 }
 

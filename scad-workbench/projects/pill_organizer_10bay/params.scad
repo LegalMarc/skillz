@@ -414,7 +414,7 @@ pillar_w        = 6.0;      // from the side wall's inner face, in X (stop block
 // faces -- two boolean faces sharing one plane, which is what left 57
 // non-manifold edges the first time. It oversteps instead, taking a sliver off
 // each divider's front tip above the scallop line.
-scallop_over    = 0.4;
+scallop_over    = 0.05;   // D60: 0.4 left a visible 0.4 mm step on every divider face. 0.05 is under the slicer's resolution and still not coplanar. Keep every anti-coplanar offset <= 0.05 (INCIDENTS, D60)
 // Label recesses for 1/2 inch Brother TZe tape (D19). Two per bay: the lower
 // strip on the module's own front face, below the lid skirt so it reads with
 // the lid on; the upper strip on the wall between the trays, which faces
@@ -867,9 +867,8 @@ pick_lug_clear = 0.5;       // along the slope, lug face to stop face; also to t
 pick_lug_len   = 4.0;       // along the slope, front face to back face
 pick_lug_d     = 7.0;       // perpendicular to the plate, below its underside
 pick_lug_chamfer = 1.0;     // lead-in chamfer on the tip's X edges
-pick_stop_w    = pillar_w - 0.4;   // the block is a hair narrower than the pillar, so its side face does not
-                            // lie on the scallop cut's face (a coplanar boolean)
-stop_trim_lift = 0.05;      // the front wall over the pillar is trimmed to this far above the block's clipped top
+pick_stop_w    = pillar_w - 0.05;   // D60: a hair narrower than the pillar, so its side face does not lie on the scallop cut's
+                            // face (a coplanar boolean). 0.4 left a visible step; 0.05 does not
 pick_filler_drop = 0.5;     // the filler's top at the side wall, under the stop block's corner P1
 pick_filler_inset = 0.4;    // the filler ends this far inside the buttress's inner face
 pick_stop_off  = 1.0;       // where the stop face meets the plane, behind the front wall's inner face
@@ -939,7 +938,6 @@ pick_front_h    = 0.6;
 // Label recesses: section 4c, beside the scalloped front wall they sit under.
 
 tray_fillet_r = 2.0;        // vertical fillets where dividers meet tray A's front wall (revision 11)
-tray_fillet_top_under = 2.0;   // D48: tray B's divider gussets stop this far under the wall's top plane at its face
 fillet_r  = 2.0;            // internal: every flow-void corner (opening pass)
 
 // External edges (D27). Nothing a hand or a sleeve meets is left sharp: the
@@ -975,6 +973,10 @@ bed_chamfer     = 0.5;      // body base perimeter and foot-pad recess mouths
 // the tray side, is a 45 degree chamfer that follows the scallop outline and fades to
 // nothing up the scallop's rounded corners.
 scallop_chamfer = 0.7;
+scallop_round_r = 0.8;   // D60: round along the scallop outline on the front face (floor, corners, sides up to the plane)
+wall_back_bevel = 1.0;   // D60: bevel on the back-top edge of the wall between the trays (46 degree knife edge otherwise)
+stop_clip_drop  = 0.05;  // D60: stop block and filler tops sit this far under the plane (was boss_clip_drop 0.2 plus a G7 trim)
+divider_top_r   = 0.6;   // D60: quarter round on both top edges of the dividers on the pick plane (user: rounded wherever possible)
 // The fill mouth's rim (the opening both hoppers share), inside edge, all four sides.
 mouth_chamfer   = 0.45;  // the front rim wall is wall_div wide and loses edge_r_top to the outer round: 0.45 keeps 0.45 of flat. NOT 0.4: that is seat_cut_over, and the cone's corner then crossed the seat cuts' corner lines and left four zero-volume shards
 // Pick lid (print face down is the plate's top, already chamfered 1.0 on all four sides, which is the
