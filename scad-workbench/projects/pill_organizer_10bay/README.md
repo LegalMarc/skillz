@@ -236,7 +236,10 @@ the wedge to work.
   in from above. Revisions 3 to 5 had the front groove capped by the side wall,
   so this could not be done; it is open through the pick plane now, and the lid
   covers the opening in use. Since D43 the rail is 3 mm out of the wall (5 before)
-  and 3.6 mm at the root, the groove 3.4 deep, and the buttress behind the front
+  and 3.6 mm at the root, the groove 3.4 deep (D57: the male's section grown by `rail_clear` per side with
+  the SAME flank slope, so the flank gap is `rail_clear` at every depth, then straight walls for the last
+  0.4 mm; `rail_profile.scad`, shared with the coupon; before, the gap shrank by 0.14 mm toward the
+  rail tip), and the buttress behind the front
   groove protrudes 3 mm into the bay (7 before) and is 14 mm long; the skin between
   the groove and tray A is 2.4 mm, a divider, and the groove's front lip is bevelled
   1 mm where it meets the sloped plane (D39's lesson: no thin blade, no knife edge).
@@ -367,9 +370,9 @@ same size and the groove block, cut as the body cuts its grooves.
 - **PLAIN row:** five stubs at 0.30, 0.25, 0.20, 0.15, 0.10 mm per side against the groove
   (labels in hundredths: 30 25 20 15 10). Turn the block over so the face that was on the bed is UP,
   and drop it over each stub, the groove opening toward the stub's root. The one that slides on by hand
-  without rocking is your fit; set `rail_clear` to its clearance. (The groove's flank is less steep than the
-  male's, so the groove's tip corner has 0.14 mm less room than its mouth: the 0.10 stub binds at the tip by
-  0.04 mm in the mesh, as a body at `rail_clear` 0.10 would.)
+  without rocking is your fit; set `rail_clear` to its clearance. (D57: the groove is the male's section
+  offset outward with the same flank slope, so each stub's gap is its label at every depth; the first D56
+  groove was gentler than the male and the 0.10 stub would have bound at the tip.)
 - **RIBS row:** five stubs at 0.30 clearance with two vertical half-round ribs (radius 0.5 mm) on each sloped
   flank, tapering away over the top 1.5 mm so the block starts. The ribs press on the groove flank by 0, 5,
   10, 15, 20 hundredths of a millimetre (labels 0 5 10 15 20). The fit is the least interference

@@ -24,6 +24,7 @@
 // ============================================================
 
 include <../params.scad>
+include <../rail_profile.scad>
 
 module yz_extrude(x0, x1) {
     rotate([90, 0, 90]) translate([0, 0, x0])
@@ -421,14 +422,9 @@ module scallop_chamfer_cuts() {
 
 // ------------------------------------------------------------
 // Joining rails. Trapezoid by two explicit widths, never a flank
-// angle, extruded along Z so nothing overhangs.
+// angle, extruded along Z so nothing overhangs. The sections (male, and the groove
+// offset from it, D57) live in rail_profile.scad, shared with the coupon.
 // ------------------------------------------------------------
-module rail_trapezoid(root_w, tip_w, depth, clear = 0) {
-    polygon([[ 0,     -(root_w / 2 + clear)],
-             [ 0,      (root_w / 2 + clear)],
-             [-depth,  (tip_w  / 2 + clear)],
-             [-depth, -(tip_w  / 2 + clear)]]);
-}
 
 module rail_male_one(y, z1) {
     translate([0, y, rail_z0]) {
@@ -637,8 +633,7 @@ module rail_socket_cut() {
     for (r = [[rail1_y, rail1_soc_z1], [rail2_y, rail2_soc_z1]])
         translate([module_w, r[0], rail_z0]) {
             linear_extrude(height = r[1] - rail_z0)
-                rail_trapezoid(rail_root_w, rail_tip_w,
-                               rail_out + rail_depth_clear, rail_clear);
+                rail_groove_2d();
             translate([0, -(rail_root_w / 2 + rail_clear), 0])
                 cube([weld_embed, rail_root_w + 2 * rail_clear, r[1] - rail_z0]);
         }
@@ -654,7 +649,7 @@ module rail_socket_cut() {
 // lip 134 degrees. It stops at the groove's floor plane so the skin behind the
 // groove keeps its full thickness. The groove stays open through the top.
 module groove_outline() {
-    rail_trapezoid(rail_root_w, rail_tip_w, rail_out + rail_depth_clear, rail_clear);
+    rail_groove_2d();
 }
 // The skin's free height (revision 11 review K1). The plane rises 0.96 mm per mm toward
 // the back, so over the groove's width the skin's top climbed up to 6.4 mm (2.6 x its

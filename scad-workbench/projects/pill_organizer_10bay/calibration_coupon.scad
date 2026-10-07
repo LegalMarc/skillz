@@ -35,10 +35,11 @@
 //   PLAIN row: five stubs at clearance 0.30, 0.25, 0.20, 0.15, 0.10
 //     mm per side against the block's groove (labels in hundredths:
 //     30 25 20 15 10). The fit is the stub that slides on by hand
-//     WITHOUT ROCKING. Set rail_clear to that clearance. (The groove
-//     flank is less steep than the male's, so its tip corner has
-//     0.14 mm less room than its mouth: below about 0.15 the tip
-//     corner binds on the mesh, exactly as it would on the body.)
+//     WITHOUT ROCKING. Set rail_clear to that clearance. (D57: the
+//     groove is the male's section offset outward, same flank slope
+//     (rail_profile.scad), so the clearance is the label at every
+//     depth; before D57 its flank was gentler and the gap shrank by
+//     0.14 mm toward the rail tip.)
 //
 //   RIBS row: five stubs with the plain profile at 0.30 clearance and
 //     two vertical half-round ribs (radius 0.5) on each sloped flank,
@@ -60,6 +61,7 @@
 // ============================================================
 
 include <params.scad>
+include <rail_profile.scad>
 
 PART      = "all";      // "plain" | "ribs" | "block" | "all" (preview layout)
 
@@ -96,12 +98,6 @@ module label(s, size = 4) {
 function hundredths(v) = str(round(v * 100));
 function two_dp(v) = let(h = round(v * 100)) str(floor(h / 100), ".", floor((h % 100) / 10), h % 10);
 
-module rail_trapezoid(root_w, tip_w, depth, clear = 0) {
-    polygon([[ 0,     -(root_w / 2 + clear)],
-             [ 0,      (root_w / 2 + clear)],
-             [-depth,  (tip_w  / 2 + clear)],
-             [-depth, -(tip_w  / 2 + clear)]]);
-}
 
 // The body's male rail section, offset per side by off = rail_clear - clearance
 module stub_section(off) {
@@ -112,7 +108,7 @@ module stub_section(off) {
 // peak stands X beyond the groove's flank, measured along the stub flank's normal, at its own position,
 // so the interference is the same on both ribs although the groove's flank is not parallel to the stub's.
 k_stub = (rail_tip_w - rail_root_w) / 2 / rail_out;
-k_grv  = (rail_tip_w - rail_root_w) / 2 / groove_d;
+k_grv  = k_stub;     // D57: the groove's flank is the male's, offset: same slope
 n_x    = k_stub / sqrt(1 + k_stub * k_stub);
 n_y    = 1 / sqrt(1 + k_stub * k_stub);
 function stub_hw(off, d)  = rail_root_w / 2 + off + k_stub * d;
@@ -174,15 +170,15 @@ module groove_block() {
     difference() {
         cube([blk_w, blk_d, blk_h]);
         translate([blk_w, blk_d / 2, -1]) linear_extrude(height = blk_h + 2)
-            rail_trapezoid(rail_root_w, rail_tip_w, rail_out + rail_depth_clear, rail_clear);
+            rail_groove_2d();
         // elephant's-foot relief: the groove's outline grown 0.5 at the bed,
         // tapering to nothing 0.5 up -- a 45 degree chamfer round the mouth
         translate([blk_w, blk_d / 2, 0]) hull() {
             translate([0, 0, -1]) linear_extrude(height = 1.01)
                 offset(delta = 0.5)
-                    rail_trapezoid(rail_root_w, rail_tip_w, rail_out + rail_depth_clear, rail_clear);
+                    rail_groove_2d();
             linear_extrude(height = 0.5)
-                rail_trapezoid(rail_root_w, rail_tip_w, rail_out + rail_depth_clear, rail_clear);
+                rail_groove_2d();
         }
     }
 }

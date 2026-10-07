@@ -122,6 +122,13 @@ def analyse(tag, plate, block, expect, ribs):
         lo, hi = halfspan(bsec, root - 0.001, yc, "block")
         slo, shi = halfspan(sp, root - 0.001, yc, "stub")
         root_clear = ((hi - shi) + (slo - lo)) / 2
+        # flank gap (y, both flanks, mean) at several depths from the root: D57 says it is the label everywhere
+        depths = (0.3, 1.5, 2.7) if ribs else (0.1, 0.6, 1.2, 1.8, 2.4, 2.9)    # ribs sit at 0.9 and 2.1 +- 0.4
+        gaps = []
+        for dep in depths:
+            glo, ghi = halfspan(bsec, root - dep, yc, "block")
+            plo, phi = halfspan(sp, root - dep, yc, "stub")
+            gaps.append(((ghi - phi) + (plo - glo)) / 2)
         verts = [Point(x, y) for x, y in sp.exterior.coords]
         tight = min((-1 if bsec.contains(v) else 1) * bsec.exterior.distance(v) for v in verts)
         own_ov = overlap_mm3(rootpose, stub_solids[i])
@@ -135,6 +142,11 @@ def analyse(tag, plate, block, expect, ribs):
             f"(measured {worst_gap:.2f})")
         chk(f"{tag} stub {i}: block inside the plate", edge >= 0, f"(margin {edge:.2f})")
         chk(f"{tag} stub {i}: block covers no label", lab_ov < 1e-6 and lab_gap > 0.5, f"(gap {lab_gap:.2f})")
+        print("            flank gap at depth " + "  ".join(f"{d}: {g:.4f}" for d, g in zip(depths, gaps)))
+        chk(f"{tag} stub {i}: flank gap equals the label {exp[0]:.2f} at every depth sampled",
+            all(abs(g - exp[0]) < 0.005 for g in gaps), f"(worst error {max(abs(g - exp[0]) for g in gaps):.4f})")
+        if not ribs:
+            chk(f"{tag} stub {i}: no part of the stub touches the groove", tight > 0, f"(tightest {tight:+.4f})")
         chk(f"{tag} stub {i}: root clearance equals its label {exp[0]:.2f}", abs(root_clear - exp[0]) < 0.005,
             f"(measured {root_clear:.4f})")
         if ribs:

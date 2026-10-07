@@ -994,3 +994,19 @@ the fill lid plate did not; the section plate (`build/section/`) was rebuilt too
 and the pick lid. The coupon was not touched. Final part sizes, print orientation: body 243.0 x 213.0 x 189.0 mm
 (2315 cm3), pick lid 239.0 x 139.5 x 22.7 mm (105.5 cm3), fill lid 233.8 x 129.0 x 3.0 mm (85 cm3). Centred, the
 body spans x 6.5 to 249.5, y 21.5 to 234.5; the pick lid x 8.5 to 247.5, y 58.2 to 197.8.
+
+
+## Revision 14: the rail coupon (D56) and the groove profile (D57)
+
+| Quantity | Before | After |
+|---|---|---|
+| Groove section | the male's two widths over `rail_out + rail_depth_clear` (flank slope 0.353) | the male section offset by `rail_clear` (slope 0.4), straight walls for the last 0.4 mm |
+| Flank gap at depth 0 / 1 / 2 / 3 mm, `rail_clear` 0.30 | 0.300 / 0.253 / 0.206 / 0.159 | 0.300 at every depth |
+| Gap at the rail tip at `rail_clear` 0.20 | 0.059 | 0.200 |
+| Groove widest width | `rail_tip_w` + 2 `rail_clear` | unchanged, so `rail_boss_side` (3.8) and the skin asserts hold |
+| `rail_clear` | 0.28 (D55) | 0.30 (D56, a starting point) |
+| Coupon | 5 stubs, pitch 18, block 0.4 mm from the next stub | two rows of 5, pitch 28, the seated block 10 mm from the next stub; ribs row 0 to 0.20 mm |
+
+Measured on the meshes: `probes/coupon_fit.py` (gap equal to the label at six depths on every plain stub, rib interference as labelled,
+tightest gap of the 0.10 stub +0.093), the body's sections at z 60 and 150 (gap 0.3000 at depths 0.1 to 3.2 on both grooves),
+`corner_thickness.py` (skin 2.40, buttress 3.70) and `skin_free_height.py` (2.30 of 2.4) still pass.

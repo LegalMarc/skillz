@@ -44,7 +44,7 @@ def measure(mesh, P, verbose=True):
     worst = 0.0
     for label, x in (("groove floor +0.2", floor_x + 0.2), ("mid groove", mw - P["rail_out"] / 2),
                      ("mouth -0.3", mw - 0.3)):
-        half = root_half + (tip_half - root_half) * (mw - x) / (P["rail_out"] + P["rail_depth_clear"])
+        half = root_half + (tip_half - root_half) * min(mw - x, P["rail_out"]) / P["rail_out"]   # D57: flanks to the rail tip depth, straight below it
         yf = y1 - half                                              # front lip's edge at this depth
         front = top_z(mesh, x, [yf - 0.5], zlo, zhi)[0]             # the front lip's top beside the groove
         gy = ys[(ys > yf + 0.05) & (ys < y1 + half - 0.05)]         # over the groove's width
