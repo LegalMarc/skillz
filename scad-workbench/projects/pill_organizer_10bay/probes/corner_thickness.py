@@ -191,7 +191,6 @@ if __name__ == "__main__":
             ed = mesh.vertices[mesh.face_adjacency_edges]; mid = ed.mean(1); elen = np.linalg.norm(ed[:, 0] - ed[:, 1], axis=1)
             interior = 180.0 - np.degrees(adj_ang)
             zone_r = (mid[:, 0] > mw - 12) & (mid[:, 1] > y1 - 15) & (mid[:, 1] < y1 + 15) & (mid[:, 2] > zp(y1 - 15) - 8)
-            zone_l = (mid[:, 0] < 12) & (mid[:, 1] > y1 - 15) & (mid[:, 1] < y1 + 15) & (mid[:, 2] > zp(y1 - 15) - 8) & (mid[:, 2] < P["rail1_z1"] - 4)
             for name, zone in (("right", zone_r),):
                 sh = conv & (interior < 60.0) & (elen > 0.5) & zone
                 allsharp = conv & (interior < 80.0) & zone

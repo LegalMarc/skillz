@@ -1,9 +1,9 @@
 // ============================================================
 // rail_profile.scad -- the joining rail's two 2D sections, in ONE place (D57).
 //
-// Included by parts/body.scad (the male rail and both grooves) and by
-// calibration_coupon.scad (the stubs and the groove block), so the body and the
-// coupon cannot disagree about the groove again. Needs params.scad (section 9).
+// Included by parts/body.scad (since D59 only the groove: the body has slots on both faces and no
+// male rail) and by calibration_coupon.scad (the stubs and the groove block; superseded, kept as
+// a record), so the body and the coupon cannot disagree about the groove. Needs params.scad (section 9).
 //
 // Section frame: x = 0 at the wall face (the root), x < 0 into the rail, y across it.
 // The male rail is the trapezoid root_w -> tip_w over rail_out.

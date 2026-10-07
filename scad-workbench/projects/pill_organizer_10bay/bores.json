@@ -128,6 +128,38 @@
     "_why": "same for the back groove: ends at 192, in open air above the rim (189) and the groove top (190), so the exit is what is tested"
   },
   {
+    "name": "rail_groove_left_front",
+    "part": "body",
+    "start": [
+      1.7,
+      22.8,
+      12.0
+    ],
+    "end": [
+      1.7,
+      22.8,
+      106.0
+    ],
+    "step_mm": 0.5,
+    "_why": "D59: the left-face mirror of rail_groove_front (x = module_w - 238.3): the same slot, open end to end through the top. the front joining groove must be open from its floor OUT OF THE TOP of the side wall, or a neighbouring module's rail cannot be lowered in. Its top is the pick plane over tray A, which is highest at the groove's back edge (about 102). This line ends at 106, in open air above the plane. D43 slimmed the groove to 3.4 deep and bevelled its front lip; this proves it is still open end to end."
+  },
+  {
+    "name": "rail_groove_left_back",
+    "part": "body",
+    "start": [
+      1.7,
+      122.6,
+      12.0
+    ],
+    "end": [
+      1.7,
+      122.6,
+      192.0
+    ],
+    "step_mm": 0.5,
+    "_why": "D59: the left-face mirror of rail_groove_back (x = module_w - 238.3): the same slot, open end to end through the top. same for the back groove: ends at 192, in open air above the rim (189) and the groove top (190), so the exit is what is tested"
+  },
+  {
     "name": "porch_centre_bay3",
     "part": "body",
     "start": [

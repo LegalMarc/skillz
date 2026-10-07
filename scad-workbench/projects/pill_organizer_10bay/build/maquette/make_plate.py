@@ -100,8 +100,8 @@ FINAL = [   # (3mf, object name, stl)
 ]
 PLATE, MARGIN, MIN_GAP = 256.0, 10.0, 10.0
 # the final plates carry ONE part, so the limit is the printer's usable footprint (params.scad max_part_x/y:
-# 5 mm of margin each side), not the 10 mm the multi-part test plates keep between parts. The 243 mm body
-# (with its rail) cannot lie within 10..246.
+# 5 mm of margin each side), not the 10 mm the multi-part test plates keep between parts. The 240 mm body
+# cannot lie within 10..246 (a 236 mm window).
 FINAL_MARGIN = 5.0
 
 CT = '''<?xml version="1.0" encoding="UTF-8"?>

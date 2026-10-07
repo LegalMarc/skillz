@@ -597,7 +597,7 @@ labelled by the offset from the default: -100, -50, 0, +50, +100.
   a 45 degree countersink built in the plane's own frame and sheared to the slope, now leaves
   that lip a 90 degree or wider edge; it stops at the groove's floor plane so the skin keeps 4.4 mm.
   `probes/corner_thickness.py` slices the zone every 0.25 mm and fails if any region under 2 mm
-  stands over 1 mm tall. Left (male rail) side has no break-out; its lead taper is excluded.
+  stands over 1 mm tall. Since D59 both faces carry a groove with a break-out, and the probe runs this scan on both (the left on the mirrored mesh).
 
 
 ## Revision 11 (test print 3)

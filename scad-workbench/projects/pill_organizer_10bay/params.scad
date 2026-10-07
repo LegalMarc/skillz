@@ -760,12 +760,7 @@ assert(rail_tip_w > rail_root_w && rail_root_w > 0,
 assert(rail_clear * 2 < rail_root_w / 2, "rail clearance has eaten the rail root");
 
 rail_z0   = 10.0;
-// The male rail's underside is a 45 degree chamfer from the wall face at
-// rail_z0 out to full depth rail_out higher: a flat 5 x 9mm underside 10mm
-// above the bed drooped on the review's face scan, and a drooped rail bottom
-// is exactly what jams the neighbour's groove (revision 7 review, finding 2).
-rail_lead_bot = rail_out;
-rail_lead = 3.0;
+// D59: the slot's blind floor sits at rail_z0 on both side faces (there is no male rail, so no 45 degree underside or lead).
 // D43 (revision 11, supersedes D39's numbers): the buttress behind the rail-1
 // groove protrudes rail_boss = 3 mm into the bay beyond the side wall's inner face
 // (was 7: "the buttress protrudes too far into the front bin", and the
@@ -821,12 +816,8 @@ rail1_y      = (yA_tray0 + yA_tray1) / 2;                  //  22.8, mid tray A
 // edge; the pick lid covers the opening in use.
 rail1_groove_y1 = rail1_y + rail_tip_w / 2 + rail_clear;   //  28.5, groove back edge
 rail1_soc_z1 = pickplane(rail1_groove_y1) + 1.0;           // 105.3, out through the plane
-// The male on the neighbour stays below ITS OWN wall's lowest point across
-// the male's footprint, so it never stands proud of the plane it is under.
-rail1_z1     = pickplane(rail1_y - rail_tip_w / 2) - 4.0;  //  89.6
 rail2_y      = (yB_wall1 + yB_hop1) / 2;                   // 122.6, mid hopper B
 rail2_soc_z1 = hopper_rim + 1.0;                           // 190.0
-rail2_z1     = 112.0;
 
 skin_trim_over = 0.4;       // the skin-top trim reaches this far past the groove floor, into the groove's air
 // the lowest front-lip top beside the groove (at the tip depth, 0.5 mm in front of the flank, where
@@ -835,13 +826,11 @@ skin_trim_over = 0.4;       // the skin-top trim reaches this far past the groov
 skin_cap_z = pickplane(rail1_y - rail_tip_w / 2 - rail_clear - 0.5) - max(boss_clip_drop, groove_chamfer - 0.5) + rail_skin - 0.1;
 rail_sep  = rail2_y - rail1_y;                             //  99.8
 
-assert(rail1_soc_z1 > rail1_z1 + rail_lead && rail2_soc_z1 > rail2_z1 + rail_lead,
-       "a rail groove is shorter than its own male plus its lead");
+assert(rail1_soc_z1 > rail_z0 + 2 * rail_out && rail2_soc_z1 > rail_z0 + 2 * rail_out,
+       "a slot is shorter than twice its depth: too short for a clip key to seat in (D59)");
 assert(rail1_soc_z1 >= pickplane(rail1_groove_y1) + 0.5
        && rail2_soc_z1 >= hopper_rim + 0.5,
        "a rail groove does not break out of the top of the wall that carries it -- a blind dovetail cannot be entered");
-assert(rail1_z1 + rail_lead < pickplane(rail1_y - rail_tip_w / 2),
-       "the front male rail stands proud of the pick plane on its own module");
 assert(rail1_y + rail_boss_w / 2 < yA_tray1,
        "rail 1's buttress reaches back into the chute mouth");
 // rail_skin is wall_out + rail_boss - rail_out - rail_depth_clear and is exactly wall_div today:

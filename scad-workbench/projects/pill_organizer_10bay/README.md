@@ -14,7 +14,7 @@ ribs included, with side-to-side sliding and rocking. Printed tolerance at this 
 the clearance, so the body no longer tries: it has **no male rail**, and **both side faces carry the same two
 vertical dovetail slots** (the left face is the right face's mirror image). A future, separately printed
 spring clip (a double-dovetail key with a flexure) will join two units; the tolerance goes into that cheap part,
-tuned with clip prints, and no body is reprinted. The body is 240 mm wide (243 with the rail). The buttresses,
+tuned with clip prints, and no body is reprinted. The body is 240 mm wide. The buttresses,
 stop blocks, lugs, ribs, flare, labels, cubby lip, arches and the pick lid are unchanged; capacities of both end
 bays are 428.2 / 198.1 mL. `probes/gang_fit.py` is now a slot gate. The coupon is superseded, so
 **there is nothing to print before the body** (see "Print the final unit").
@@ -261,7 +261,7 @@ the wedge to work.
   2.4 mm, a divider; the slot's front lip is bevelled 1 mm where it meets the sloped plane (D39's lesson: no
   thin blade, no knife edge). The plane rises toward the back, which would have left the skin standing up to
   6.4 mm (2.6 times its own thickness) above the front lip beside it, so the skin's top is trimmed flat to
-  one skin thickness above that lip: it stands 2.3, 1.7 and 1.3 mm above it at the slot's tip, middle and
+  one skin thickness above that lip: it stands 2.30, 1.76 and 1.58 mm above it at the slot's tip, middle and
   mouth. `probes/corner_thickness.py` and `probes/skin_free_height.py` check that, the edge angles and every
   thin region in the break-out zone on BOTH faces (the left on the mirrored mesh; all named features, listed
   in `calculations.md`); `probes/gang_fit.py` checks the slots against the profile, their mirror symmetry and
