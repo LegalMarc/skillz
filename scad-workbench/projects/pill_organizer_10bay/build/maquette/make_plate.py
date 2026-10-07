@@ -24,6 +24,9 @@ import numpy as np
 import trimesh
 
 # what --export renders: (output stl, scad file, -D arguments)
+# NOTE: since D56 calibration_coupon.scad's default output is a 150 x 118 mm three-object layout; the
+# "calibration_coupon" entries of the maquette and section modes predate it and would not fit their
+# plates if re-exported. The coupon is the "coupon" mode.
 EXPORTS = {
     "maquette": [
         ("build/maquette/body.stl",     "test_model.scad", ['PART="body"']),
@@ -38,7 +41,9 @@ EXPORTS = {
         ("build/calibration_coupon.stl", "calibration_coupon.scad", []),
     ],
     "coupon": [
-        ("build/calibration_coupon.stl", "calibration_coupon.scad", []),
+        ("build/coupon/plain.stl", "calibration_coupon.scad", ['PART="plain"']),
+        ("build/coupon/ribs.stl",  "calibration_coupon.scad", ['PART="ribs"']),
+        ("build/coupon/block.stl", "calibration_coupon.scad", ['PART="block"']),
     ],
     "final": [
         ("build/print_ready/body.stl",     "print_export.scad", ['PART="body"']),
@@ -80,9 +85,12 @@ PLATES = {
         ("fill_lid_end_full_size",        "build/section/fill_lid.stl",   (145.0, 20.0)),
         ("calibration_coupon",            "build/calibration_coupon.stl", (205.0, 20.0, "rot90")),
     ]),
-    # D51/D55: the rail coupon alone, to confirm the fit before the final body
-    "coupon": ("build/coupon/rail_coupon_256.3mf", "rail coupon only (D55)", [
-        ("rail_coupon_d55",               "build/calibration_coupon.stl", (66.0, 113.0)),
+    # D51/D55/D56: the rail coupon alone, to confirm the fit before the final body. D56: two
+    # row plates (150.8 x 54) and the groove block, centred on the plate, probes/coupon_fit.py
+    "coupon": ("build/coupon/rail_coupon_256.3mf", "rail coupon only (D56)", [
+        ("rail_coupon_d56_plain",         "build/coupon/plain.stl",       (52.0, 69.0)),
+        ("rail_coupon_d56_ribs",          "build/coupon/ribs.stl",        (52.0, 133.0)),
+        ("groove_block",                  "build/coupon/block.stl",       (213.0, 69.0)),
     ]),
 }
 FINAL = [   # (3mf, object name, stl)

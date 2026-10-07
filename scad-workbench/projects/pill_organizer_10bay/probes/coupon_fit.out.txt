@@ -1,0 +1,108 @@
+PASS  plain: watertight, winding consistent, no zero-area face  (8008 faces, smallest 1.09e-04 mm2)
+PASS  plain: one body
+PASS  ribs: watertight, winding consistent, no zero-area face  (10192 faces, smallest 4.70e-06 mm2)
+PASS  ribs: one body
+PASS  block: watertight, winding consistent, no zero-area face  (44 faces, smallest 2.07e-02 mm2)
+PASS  block: one body
+-- plain: 5 stubs, plate x 0.0..150.8, y 0.0..54.0
+   stub 0: tip x   25.0  block x   10.4..  28.4 (bottom pose)  nearest other stub 24.60  overlap w/ others 0.000 mm3  plate edge margin 10.00  label gap  6.09
+            root clearance +0.3000 (label 0.30)  tightest gap, any stub vertex +0.1498  overlap with its own groove 0.0000 mm3
+PASS  plain stub 0: no overlap with any other stub
+PASS  plain stub 0: block clears every other stub by >= 8.0 mm  (measured 24.60)
+PASS  plain stub 0: block inside the plate  (margin 10.00)
+PASS  plain stub 0: block covers no label  (gap 6.09)
+PASS  plain stub 0: root clearance equals its label 0.30  (measured 0.3000)
+   stub 1: tip x   53.0  block x   38.4..  56.4 (bottom pose)  nearest other stub 10.00  overlap w/ others 0.000 mm3  plate edge margin 16.00  label gap 11.03
+            root clearance +0.2500 (label 0.25)  tightest gap, any stub vertex +0.1026  overlap with its own groove 0.0000 mm3
+PASS  plain stub 1: no overlap with any other stub
+PASS  plain stub 1: block clears every other stub by >= 8.0 mm  (measured 10.00)
+PASS  plain stub 1: block inside the plate  (margin 16.00)
+PASS  plain stub 1: block covers no label  (gap 11.03)
+PASS  plain stub 1: root clearance equals its label 0.25  (measured 0.2500)
+   stub 2: tip x   81.0  block x   66.4..  84.4 (bottom pose)  nearest other stub 10.00  overlap w/ others 0.000 mm3  plate edge margin 16.00  label gap 11.03
+            root clearance +0.2000 (label 0.20)  tightest gap, any stub vertex +0.0555  overlap with its own groove 0.0000 mm3
+PASS  plain stub 2: no overlap with any other stub
+PASS  plain stub 2: block clears every other stub by >= 8.0 mm  (measured 10.00)
+PASS  plain stub 2: block inside the plate  (margin 16.00)
+PASS  plain stub 2: block covers no label  (gap 11.03)
+PASS  plain stub 2: root clearance equals its label 0.20  (measured 0.2000)
+   stub 3: tip x  109.0  block x   94.4.. 112.4 (bottom pose)  nearest other stub 10.00  overlap w/ others 0.000 mm3  plate edge margin 16.00  label gap 11.06
+            root clearance +0.1500 (label 0.15)  tightest gap, any stub vertex +0.0083  overlap with its own groove 0.0000 mm3
+PASS  plain stub 3: no overlap with any other stub
+PASS  plain stub 3: block clears every other stub by >= 8.0 mm  (measured 10.00)
+PASS  plain stub 3: block inside the plate  (margin 16.00)
+PASS  plain stub 3: block covers no label  (gap 11.06)
+PASS  plain stub 3: root clearance equals its label 0.15  (measured 0.1500)
+   stub 4: tip x  137.0  block x  122.4.. 140.4 (bottom pose)  nearest other stub 10.00  overlap w/ others 0.000 mm3  plate edge margin 10.40  label gap  6.04
+            root clearance +0.1000 (label 0.10)  tightest gap, any stub vertex -0.0388  overlap with its own groove 0.4111 mm3
+PASS  plain stub 4: no overlap with any other stub
+PASS  plain stub 4: block clears every other stub by >= 8.0 mm  (measured 10.00)
+PASS  plain stub 4: block inside the plate  (margin 10.40)
+PASS  plain stub 4: block covers no label  (gap 6.04)
+PASS  plain stub 4: root clearance equals its label 0.10  (measured 0.1000)
+-- ribs: 5 stubs, plate x 0.0..150.8, y 0.0..54.0
+   stub 0: tip x   25.0  block x   10.4..  28.4 (bottom pose)  nearest other stub 24.60  overlap w/ others 0.000 mm3  plate edge margin 10.00  label gap  6.03
+            root clearance +0.3000 (label 0.30)  tightest gap, any stub vertex +0.0003  overlap with its own groove 0.0000 mm3
+PASS  ribs stub 0: no overlap with any other stub
+PASS  ribs stub 0: block clears every other stub by >= 8.0 mm  (measured 24.60)
+PASS  ribs stub 0: block inside the plate  (margin 10.00)
+PASS  ribs stub 0: block covers no label  (gap 6.03)
+PASS  ribs stub 0: root clearance equals its label 0.30  (measured 0.3000)
+PASS  ribs stub 0: rib interference equals its label 0.00  (measured -0.0003)
+   stub 1: tip x   53.0  block x   38.4..  56.4 (bottom pose)  nearest other stub 10.00  overlap w/ others 0.000 mm3  plate edge margin 16.00  label gap 11.06
+            root clearance +0.3000 (label 0.30)  tightest gap, any stub vertex -0.0497  overlap with its own groove 0.6128 mm3
+PASS  ribs stub 1: no overlap with any other stub
+PASS  ribs stub 1: block clears every other stub by >= 8.0 mm  (measured 10.00)
+PASS  ribs stub 1: block inside the plate  (margin 16.00)
+PASS  ribs stub 1: block covers no label  (gap 11.06)
+PASS  ribs stub 1: root clearance equals its label 0.30  (measured 0.3000)
+PASS  ribs stub 1: rib interference equals its label 0.05  (measured 0.0497)
+   stub 2: tip x   81.0  block x   66.4..  84.4 (bottom pose)  nearest other stub 10.00  overlap w/ others 0.000 mm3  plate edge margin 16.00  label gap 11.03
+            root clearance +0.3000 (label 0.30)  tightest gap, any stub vertex -0.0996  overlap with its own groove 1.7202 mm3
+PASS  ribs stub 2: no overlap with any other stub
+PASS  ribs stub 2: block clears every other stub by >= 8.0 mm  (measured 10.00)
+PASS  ribs stub 2: block inside the plate  (margin 16.00)
+PASS  ribs stub 2: block covers no label  (gap 11.03)
+PASS  ribs stub 2: root clearance equals its label 0.30  (measured 0.3000)
+PASS  ribs stub 2: rib interference equals its label 0.10  (measured 0.0996)
+   stub 3: tip x  109.0  block x   94.4.. 112.4 (bottom pose)  nearest other stub 10.00  overlap w/ others 0.000 mm3  plate edge margin 16.00  label gap 11.06
+            root clearance +0.3000 (label 0.30)  tightest gap, any stub vertex -0.1496  overlap with its own groove 3.1220 mm3
+PASS  ribs stub 3: no overlap with any other stub
+PASS  ribs stub 3: block clears every other stub by >= 8.0 mm  (measured 10.00)
+PASS  ribs stub 3: block inside the plate  (margin 16.00)
+PASS  ribs stub 3: block covers no label  (gap 11.06)
+PASS  ribs stub 3: root clearance equals its label 0.30  (measured 0.3000)
+PASS  ribs stub 3: rib interference equals its label 0.15  (measured 0.1496)
+   stub 4: tip x  137.0  block x  122.4.. 140.4 (bottom pose)  nearest other stub 10.00  overlap w/ others 0.000 mm3  plate edge margin 10.40  label gap  6.04
+            root clearance +0.3000 (label 0.30)  tightest gap, any stub vertex -0.1995  overlap with its own groove 4.7402 mm3
+PASS  ribs stub 4: no overlap with any other stub
+PASS  ribs stub 4: block clears every other stub by >= 8.0 mm  (measured 10.00)
+PASS  ribs stub 4: block inside the plate  (margin 10.40)
+PASS  ribs stub 4: block covers no label  (gap 6.04)
+PASS  ribs stub 4: root clearance equals its label 0.30  (measured 0.3000)
+PASS  ribs stub 4: rib interference equals its label 0.20  (measured 0.1995)
+ALL PASS
+
+# Old coupon (D55 mesh, build/calibration_coupon.stl as of 8acdd31), same probe, --old mode
+-- old coupon: 5 stubs, plate x 0.0..100.0, y 0.0..30.0
+   stub 0: tip x   10.0  block x   -4.6..  13.4 (bottom pose)  nearest other stub 14.60  overlap w/ others 0.000 mm3  plate edge margin -5.00  label gap  0.12
+            root clearance +0.3000 (label 0.30)  tightest gap, any stub vertex +0.1498  overlap with its own groove 0.0000 mm3
+FAIL  old coupon stub 0: block inside the plate  (margin -5.00)
+FAIL  old coupon stub 0: block covers no label  (gap 0.12)
+   stub 1: tip x   28.0  block x   13.4..  31.4 (bottom pose)  nearest other stub  0.00  overlap w/ others 0.000 mm3  plate edge margin  5.00  label gap  0.12
+            root clearance +0.2900 (label 0.29)  tightest gap, any stub vertex +0.1403  overlap with its own groove 0.0000 mm3
+FAIL  old coupon stub 1: block clears every other stub by >= 8.0 mm  (measured 0.00)
+FAIL  old coupon stub 1: block covers no label  (gap 0.12)
+   stub 2: tip x   46.0  block x   31.4..  49.4 (bottom pose)  nearest other stub  0.00  overlap w/ others 0.000 mm3  plate edge margin  5.00  label gap  0.00
+            root clearance +0.2800 (label 0.28)  tightest gap, any stub vertex +0.1309  overlap with its own groove 0.0000 mm3
+FAIL  old coupon stub 2: block clears every other stub by >= 8.0 mm  (measured 0.00)
+FAIL  old coupon stub 2: block covers no label  (gap 0.00)
+   stub 3: tip x   64.0  block x   49.4..  67.4 (bottom pose)  nearest other stub  0.00  overlap w/ others 0.000 mm3  plate edge margin  5.00  label gap  0.00
+            root clearance +0.2700 (label 0.27)  tightest gap, any stub vertex +0.1215  overlap with its own groove 0.0000 mm3
+FAIL  old coupon stub 3: block clears every other stub by >= 8.0 mm  (measured 0.00)
+FAIL  old coupon stub 3: block covers no label  (gap 0.00)
+   stub 4: tip x   82.0  block x   67.4..  85.4 (bottom pose)  nearest other stub  0.00  overlap w/ others 0.000 mm3  plate edge margin  5.00  label gap  0.12
+            root clearance +0.2600 (label 0.26)  tightest gap, any stub vertex +0.1120  overlap with its own groove 0.0000 mm3
+FAIL  old coupon stub 4: block clears every other stub by >= 8.0 mm  (measured 0.00)
+FAIL  old coupon stub 4: block covers no label  (gap 0.12)
+FAILED
