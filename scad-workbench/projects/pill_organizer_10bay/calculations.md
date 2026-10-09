@@ -1113,7 +1113,7 @@ The body is printed (revision 16); only the lid changed. Every measurement below
 
 | Quantity | Revision 17 (D38) | Revision 18 |
 |---|---|---|
-| Tip, X x along the slope x depth | 4.0 x 4.0 x 7.0 | 4.0 x 6.0 x 7.0 (D64: 2 mm longer toward the back) |
+| Tip, X x along the slope x depth | 4.0 x 4.0 x 7.0 | 4.0 x 6.0 x 7.0 (D64: 2 mm longer toward the back). The tip chamfer is 1 x 1 (X x depth) on the outboard edge as before, but 1.57 x 1.0 on the inboard edge: the loft's second ring carries the draft |
 | Root at the plate, X x along the slope | 4.0 x 4.0 | 8.0 x 10.0 (D62: `pick_lug_grow` 4.0 on the inboard and the back side, a 29.7 degree draft) |
 | Front face (the stop face), outboard face | s0 = stop face + 0.5; 0.5 from the side wall | unchanged, both straight along the plane's normal |
 | Root fillet | none | r 1.5 on the back and the inboard side (D63), tangent length 0.87 in the 119.7 degree wedge between plate and drafted face |
@@ -1123,9 +1123,9 @@ The body is printed (revision 16); only the lid changed. Every measurement below
 | Section modulus there, knock along the slope (Z_s) | 10.67 mm3 | 132.50 mm3 (**12.4 x**) |
 | Peak bending stress for a unit tip load, sideways / along the slope | 0.633 / 0.633 per mm3 at the root | 0.0734 at 3.0 mm above the root / 0.0560 at 2.5 mm (**8.6 x / 11.3 x lower**) |
 | Lug volume, one lug on its own (reaches into the plate) | about 136 mm3 | 437 mm3; the lid goes 105.37 -> 105.83 cm3 |
-| Engagement on the stop face, perpendicular | 6.86 mm | 6.86 mm (unchanged) |
+| Engagement on the stop face, perpendicular | 6.86 mm | 6.86 mm; the contact patch covers the same depth band (n -7.00 to -0.18) and first contact is still 0.500, but its X width grew from 4.0 to 5.45 mm (the front face is 8 mm wide at the root; the stop block ends at x 8.75 / 231.25, so only 5.45 bear, and the rest of the front face touches nothing). Overlap per lug at a 1 mm slide 17.16 mm3 against 13.14 |
 | Tip's lowest back corner, body y | 11.8 | 13.2 (buttress front face y 15.8: 2.5 mm) |
-| Root fillet's back edge on the underside, body y | 6.95 (the back face meets the plate) | 12.4 (3.4 mm to the buttress) |
+| Root fillet's back edge on the underside, body y | 6.95 (the back face meets the plate) | 11.91 (`pick_lug_root_y`; about 11.77 on the actual underside, which floats 0.2 mm above the plane); 3.9 mm to the buttress at 15.8 |
 | Air under the tip's lowest corner to tray A's pile line | 29.7 | 30.2 |
 | EXPECTED_BBOX | 239.0 x 87.35 x 111.63 | unchanged |
 
@@ -1143,7 +1143,7 @@ and back faces end on the same two planes and sit just as close there):
 |---|---|---|
 | Nominal pose (0.5 mm up-slope of the stops) | 1.500 | 0.500 |
 | Rest pose (on the stops) | 1.017 (the strip boundary) | 0.000 (the stop contact) |
-| Tilt about the back edge 0..15 degrees, from nominal and from rest + 0.25 mm ride | 1.081 | 0.027 |
+| Tilt about the back edge 0..15 degrees, from nominal and from rest + 0.25 mm ride | 1.081 | 0.027 (see the note below on the ride) |
 | Straight lift 0..30 mm | 1.500 | 0.500 |
 | Lift along the plane's normal 0..30 mm | 1.500 | 0.500 |
 | Lift 8 / 15 / 24 mm, then forward 0..60 mm | 1.500 | 0.500 |
@@ -1152,7 +1152,7 @@ Excluding only the front 2 mm and the outboard 2 mm the closest new surface is t
 buttress, 2.51 mm (the formula gives 15.8 - 13.24 = 2.56 along y). The 1.5 mm figures are the side wall, 1.0 mm outboard of the lug's
 outboard face. `probes/lid_retention.py` (a) to (h) all pass: first contact 0.507 mm (0.500 by construction), slide-1/2/5 mm overlaps
 34.33 / 103.02 / 310.79 mm3 (26.28 / 78.87 / 211.21 before: the front face is wider at the root, so more of it bears), up-slope
-room 0.856 mm, max tilt ride 0.194 mm at 3.25 degrees (0.193 before). The four motion sweeps of `validate_scad.sh` hold the
+room 0.856 mm, max tilt ride 0.194 mm at 3.25 degrees (0.193 before). The tilt rows assume the 0.25 mm up-slope ride that the lid needs from the rest pose; with 0.2 mm of ride the closest new surface is 0.974 mm, and with 0 to 0.1 mm it is 0.77 to 0.95 mm, in poses where the old lug's front face already contacts the stop block too (the lid does not tilt cleanly there, e2). That is not a regression from D62-D64. The four motion sweeps of `validate_scad.sh` hold the
 same 0.100 mm worst clearance (the lid's bend fillet beside the body's front edge, not the lugs).
 
 Printability in the lid's print orientation (plate top face on the bed, lugs pointing up): both drafted faces lean outward going

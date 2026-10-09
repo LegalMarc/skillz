@@ -6,7 +6,7 @@ section is M / Z with M the same for both lugs, so the ratio of section moduli Z
 measured on the meshes by slicing the lug with planes parallel to the plate, at depth g below the underside:
   Z_x = I about the s axis / half-width in X   (a knock sideways, across the lug's thickness)
   Z_s = I about the x axis / half-length in s  (a knock along the slope)
-The old lug is build/pick_lid.stl as committed at revision 17 (git show), the new one is a fresh render.
+The old lug is build/pick_lid.stl as committed at c28771a, the pre-D62 revision 17 lid (git show, pinned so the output reproduces), the new one is a fresh render.
 
     source ~/.local/opt/openscad/env.sh
     python3 probes/lug_section.py [old_lid.stl]
@@ -26,7 +26,7 @@ new = parts(("pick_lid",), defs=('SUBFEATURE="pick_lugs"',))["pick_lid"]
 if len(sys.argv) > 1:
     old = trimesh.load(sys.argv[1])
 else:
-    out = subprocess.run(["git", "show", "HEAD:scad-workbench/projects/pill_organizer_10bay/build/pick_lid.stl"],
+    out = subprocess.run(["git", "show", "c28771a:scad-workbench/projects/pill_organizer_10bay/build/pick_lid.stl"],
                          capture_output=True, cwd=PROJECT, check=True).stdout
     with tempfile.NamedTemporaryFile(suffix=".stl", delete=False) as f:
         f.write(out); old_path = f.name

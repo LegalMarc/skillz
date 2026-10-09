@@ -10,8 +10,8 @@ on those two sides (`pick_lug_fillet_r`). The lug is one lofted polyhedron (`lug
 root), not a hull of slabs. **Proven (commands in `calculations.md`, "Revision 18"):** root section modulus 9.9 x (sideways)
 and 12.4 x (along the slope), peak stress for a tip load 8.6 x and 11.3 x lower (`probes/lug_section.py`); distance of the new
 surfaces to the committed `build/body.stl` at rest and along tilt, straight lift, normal lift and lift-then-forward 1.0 mm or
-more outside the two D38 contact faces' 1 mm edge strips, 2.5 mm to the buttress (`probes/lug_clearance.py`); `lid_retention.py`
-(a) to (h) all pass, first contact 0.507, ride 0.194; `edge_pass.py` D62/D63 rows pass; `overhang_scan.py` on the lid unchanged
+more (with the 0.25 mm up-slope ride the tilt needs; 0.77 to 0.97 with less, in poses where the old lug already touches) outside the two D38 contact faces' 1 mm edge strips, 2.5 mm to the buttress (`probes/lug_clearance.py`); `lid_retention.py`
+(a) to (h) all pass, first contact 0.507, ride 0.194 (the stop contact patch is the same depth band but 5.45 mm wide in X instead of 4.0, capped by the stop block; the rest of the wider front face touches nothing; the inboard tip chamfer is 1.57 x 1.0, the outboard 1 x 1); `edge_pass.py` D62/D63 rows pass; `overhang_scan.py` on the lid unchanged
 (no new downward faces, the lug narrows going up); `validate_scad.sh --all` COVERAGE 14 passed, 0 failed, 3 not-applicable, 0
 inconclusive, 1 advisory; lid one watertight body, 900 triangles, bbox unchanged. **Not proven:** a print. **Judgement calls:**
 the back-inboard edge is rounded r 0.3 so that every loft ring has the same shape (no collapsed vertices); the clearance

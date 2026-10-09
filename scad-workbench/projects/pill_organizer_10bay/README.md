@@ -244,9 +244,9 @@ the wedge to work.
   the outboard face and the tip are as before (tip 4 mm thick, 7 mm deep, engaged 6.9 mm);
   the back and inboard faces now draft outward toward the plate to an 8 x 10 mm root, the
   tip is 2 mm longer toward the back (4 x 6 mm), and a r 1.5 fillet runs round the root on
-  those two sides. About 10 times the root's section modulus (12 along the slope), the
-  nearest new surface 2.5 mm from the buttress, 1 mm or more clear of the body through
-  every removal motion, and nothing new to support: the lug narrows going up in the print.
+  those two sides. Root section modulus x9.9 sideways and x12.4 along the slope; the peak stress for a tip load falls 8.6x and 11.3x.
+  The nearest new surface is 2.5 mm from the buttress, and 1 mm or more clear of the body
+  through every removal motion (with the 0.25 mm up-slope ride the tilt needs), and nothing new to support: the lug narrows going up in the print.
 - **The pick lid is one piece** (D53). Until revision 12 the plate and the skirt
   were two polygons, unioned, with a seam at the bend. Now one profile is
   extruded once: 3.0 mm thick through plate, bend and skirt, a 3.0 mm fillet on
