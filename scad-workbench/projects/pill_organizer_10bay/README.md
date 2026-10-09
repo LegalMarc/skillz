@@ -239,6 +239,14 @@ the wedge to work.
   closes the slot between each block and the rail buttress so nothing can lodge
   there. The lid carries no lettering (D61). Test print 3 confirmed the lug keeps the
   lid seated; the finger notches of revisions 6 to 10 are gone (D44).
+  **Revision 18 stiffens the lugs (D62-D64)** without touching the printed body: a lug
+  prints standing up from the plate, so a knock bent it across its layers. The stop face,
+  the outboard face and the tip are as before (tip 4 mm thick, 7 mm deep, engaged 6.9 mm);
+  the back and inboard faces now draft outward toward the plate to an 8 x 10 mm root, the
+  tip is 2 mm longer toward the back (4 x 6 mm), and a r 1.5 fillet runs round the root on
+  those two sides. About 10 times the root's section modulus (12 along the slope), the
+  nearest new surface 2.5 mm from the buttress, 1 mm or more clear of the body through
+  every removal motion, and nothing new to support: the lug narrows going up in the print.
 - **The pick lid is one piece** (D53). Until revision 12 the plate and the skirt
   were two polygons, unioned, with a seam at the bend. Now one profile is
   extruded once: 3.0 mm thick through plate, bend and skirt, a 3.0 mm fillet on
@@ -357,7 +365,7 @@ the seat ledge's underside along the leaning divider; the pick lid has a 1 mm
 strip at the tip of its skirt, its plate chamfers and the bend's round on the bed (the round's
 first 1.2 mm, 0.36 mm worst step), and nothing else (the "FRONT" relief was removed, D61); the fill lid has only its 1
 mm top chamfer, which lies on the bed. The lugs' front faces, perpendicular to the plane, stand
-vertical in print; the stop blocks' contact faces print facing up and back.
+vertical in print, and their tapered back and inboard faces lean in going up (D62); the stop blocks' contact faces print facing up and back.
 
 Slicer: **no brim** (Elegoo Slicer: Others, Skirt and brim, Brim type,
 No-brim). Test print 1 used one and it fused into the walls. Enable bridge

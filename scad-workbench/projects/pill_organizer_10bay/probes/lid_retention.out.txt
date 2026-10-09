@@ -2,21 +2,21 @@ pick plane 43.76 deg; lug clearance 0.5 mm; asserted engagement 6.86 mm
 
 PASS  (b) at rest: lid does not intersect the body   overlap 0.000 mm3
 
-PASS  (a) slid 1 mm down the plane intersects the body   overlap 26.28 mm3
-PASS  (a) slid 2 mm down the plane intersects the body   overlap 78.87 mm3
-PASS  (a) slid 5 mm down the plane intersects the body   overlap 211.21 mm3
-PASS  (a) first contact within 1 mm of travel   first contact at 0.510 mm (expected 0.500 = the clearance: both stop faces are perpendicular to the slope)
+PASS  (a) slid 1 mm down the plane intersects the body   overlap 34.33 mm3
+PASS  (a) slid 2 mm down the plane intersects the body   overlap 103.02 mm3
+PASS  (a) slid 5 mm down the plane intersects the body   overlap 310.79 mm3
+PASS  (a) first contact within 1 mm of travel   first contact at 0.507 mm (expected 0.500 = the clearance: both stop faces are perpendicular to the slope)
       overlap region at 2 mm: z 74.65 .. 80.61 (height 5.96 mm), x 3.3 .. 236.7, y 2.71 .. 8.54
 
 PASS  (c) lifts straight up 30 mm (31 poses, 1 mm steps) with no intersection   worst overlap 0.000 mm3
 PASS      sideways -0.45 mm is still free   overlap 0.000 mm3
 PASS      sideways +0.45 mm is still free   overlap 0.000 mm3
-PASS      sideways -0.80 mm is blocked by a lug or the side wall   overlap 7.21 mm3
-PASS      sideways +0.80 mm is blocked by a lug or the side wall   overlap 7.21 mm3
+PASS      sideways -0.80 mm is blocked by a lug or the side wall   overlap 14.81 mm3
+PASS      sideways +0.80 mm is blocked by a lug or the side wall   overlap 14.81 mm3
 
-PASS  (d) turned 180 degrees about the plane normal: intersects the body   overlap 2730.7 mm3
+PASS  (d) turned 180 degrees about the plane normal: intersects the body   overlap 2707.1 mm3
 PASS  (d) no in-plane position within +-60 mm along the slope lets it seat   min overlap over the scan 1087.0 mm3; free positions []
-      reversed lid meets the body at y 69.5 .. 97.6, z 142.8 .. 146.9
+      reversed lid meets the body at y 69.8 .. 98.0, z 143.1 .. 147.1
 
       back edge pivot at y 84.00, z 157.86
 PASS  (e) tilting about the back edge, 0..15 deg x back edge raised 0/1/3 mm (183 poses): no intersection   worst overlap 0.000 mm3
@@ -26,13 +26,13 @@ PASS  (e) tilting about the back edge, 0..15 deg x back edge raised 0/1/3 mm (18
 PASS  (e2) the rest pose touches the stops without intersecting   overlap 0.000 mm3 (lid 0.5 mm down-slope of nominal)
       up-slope room from the rest pose: 0.856 mm before the lid meets the body (0.356 mm past the nominal pose)
       closest skirt / fillet to body, rest (on the stops, 0.5 down-slope of nominal): 0.141 mm
-      closest skirt / fillet to body, nominal pose: 0.111 mm
-      closest skirt / fillet to body, nominal + 0.2 up-slope: 0.055 mm
-      closest skirt / fillet to body, nominal + 0.3 up-slope: 0.010 mm
+      closest skirt / fillet to body, nominal pose: 0.115 mm
+      closest skirt / fillet to body, nominal + 0.2 up-slope: 0.048 mm
+      closest skirt / fillet to body, nominal + 0.3 up-slope: 0.020 mm
       from the rest pose with no ride, overlap at 13 of 60 angles (0.25 .. 3.25 deg)
       up-slope ride needed to clear it, mm, by degree of tilt (max over each degree's four steps):
       1:0.09  2:0.16  3:0.19  4:0.19  5:0.00  6:0.00  7:0.00  8:0.00  9:0.00  10:0.00  11:0.00  12:0.00  13:0.00  14:0.00  15:0.00
-PASS  (e2) tilting 0.25..15 deg from the rest pose clears with an up-slope ride inside the room there is (measured above)   max ride 0.193 mm at 3.25 deg, room 0.856 mm
+PASS  (e2) tilting 0.25..15 deg from the rest pose clears with an up-slope ride inside the room there is (measured above)   max ride 0.194 mm at 3.25 deg, room 0.856 mm
 
       a straight lift meets the fill lid's pull lip after 26.0 mm
 PASS  (h) lift 8/10/15/20/24 mm, then draw forward 0..140 mm: clears the body and the fill lid

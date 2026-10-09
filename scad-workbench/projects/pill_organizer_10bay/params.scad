@@ -863,11 +863,19 @@ assert(rail_sep > 50, "the two rails are too close together to resist yaw");
 // knife edge. The face prints facing up and back (about 46 degrees above
 // horizontal), so it needs no support and sheds pills; the lug's face stands
 // vertical in the lid's print orientation.
-pick_lug_t     = 4.0;       // thickness in X (3 until the review: a cantilever across layers)
+pick_lug_t     = 4.0;       // TIP thickness in X (3 until the review: a cantilever across layers)
 pick_lug_clear = 0.5;       // along the slope, lug face to stop face; also to the side wall in X
-pick_lug_len   = 4.0;       // along the slope, front face to back face
+pick_lug_len   = 6.0;       // TIP length along the slope, front face to back face (4 until D64: 2 mm longer toward the back)
 pick_lug_d     = 7.0;       // perpendicular to the plate, below its underside
 pick_lug_chamfer = 1.0;     // lead-in chamfer on the tip's X edges
+// D62-D64 (revision 18, "nubs look weak"): the lug prints standing up from the plate, so a knock bends it across
+// layer lines. It is stiffened WITHOUT touching the stop face, the outboard face or the tip: the back face and the
+// inboard face draft outward toward the plate (a taper that narrows going up in the print), and the same two
+// sides get a root fillet. Front face, outboard face, tip position and depth are exactly as in D38.
+pick_lug_grow  = 4.0;       // D62: the root is this much wider than the tip, on the inboard side (X) and on the back side (along the slope)
+pick_lug_fillet_r = 1.5;    // D63: root fillet between lug and plate underside, back and inboard sides only
+pick_lug_round = 0.3;       // vertical round on the back-inboard edge (keeps every loft ring the same shape: no collapsed points)
+pick_lug_plate_embed = 0.02; // the fillet is drawn for a plate plane this far below the real underside, so it ends 0.02 under the plate and no vertex lies in the plate's face
 pick_stop_w    = pillar_w - 0.05;   // D60: a hair narrower than the pillar, so its side face does not lie on the scallop cut's
                             // face (a coplanar boolean). 0.4 left a visible step; 0.05 does not
 pick_filler_xe = wall_out + pick_stop_w - 0.05;   // D60: the filler is as wide as the stop block, less 0.05 (not coplanar with its side)
@@ -882,9 +890,14 @@ pick_stop_y    = yA_tray0 + pick_stop_off;                              //   3.8
 pick_stop_s    = pick_stop_y / cos(pick_lid_slope) - pick_lid_gap * sin(pick_lid_slope);
 pick_lug_s0    = pick_stop_s + pick_lug_clear;
 pick_lug_s1    = pick_lug_s0 + pick_lug_len;
+// D62-D64 derived: the root (at the plate) and the fillet's reach along the plate
+pick_lug_root_t   = pick_lug_t + pick_lug_grow;             // X, at the plate (8.0)
+pick_lug_root_len = pick_lug_len + pick_lug_grow;           // along the slope, at the plate (10.0)
+pick_lug_fillet_T = pick_lug_fillet_r / tan((90 + atan(pick_lug_grow / pick_lug_d)) / 2);   // tangent length of the root fillet in the draft's wedge
+pick_lug_root_y   = (pick_lug_s1 + pick_lug_grow + pick_lug_fillet_T) * cos(pick_lid_slope);  // where the fillet's back edge meets the underside, body y
 pick_lug_x_left  = wall_out + pick_lug_clear;                           //   3.3, low-X face (wall side)
 pick_lug_x_right = module_w - wall_out - pick_lug_clear - pick_lug_t;   // 232.7, low-X face (interior side)
-rail1_boss_y0  = rail1_y - rail_boss_w / 2;                             //  14.3, buttress front face
+rail1_boss_y0  = rail1_y - rail_boss_w / 2;                             //  15.8, buttress front face
 // Contact depth: the lug's depth below the plane, perpendicular to it (the
 // underside floats pick_lid_gap above the plane). The stop block's top is
 // boss_clip_drop under the plane; the face is perpendicular, so that costs
@@ -912,6 +925,12 @@ assert(pick_lug_corner_y + 2.0 <= rail1_boss_y0,
        "a pick-lid lug's lowest corner is within 2mm of the rail-1 buttress in front of which it hangs");
 assert(pick_stop_back_y + 2.0 <= rail1_boss_y0,
        "the stop block's lower back face is within 2mm of the rail-1 buttress");
+assert(pick_lug_root_y + 2.0 <= rail1_boss_y0,
+       "the lug's root fillet ends within 2mm of the rail-1 buttress's front face (D62-D64)");
+assert(pick_lug_grow >= 0 && pick_lug_grow <= pick_lug_d,
+       "the lug's root grows by more than its depth: a draft past 45 degrees (D62)");
+assert(abs(pick_lug_s0 - (pick_stop_s + pick_lug_clear)) < 1e-9 && abs(pick_lug_x_left - (wall_out + pick_lug_clear)) < 1e-9 && pick_lug_d == 7.0 && pick_lug_t == 4.0,
+       "D62-D64 leave the printed body's contact geometry alone: front face 0.5 mm from the stop face, outboard face 0.5 mm from the side wall, tip 4 mm thick and 7 mm deep");
 assert(pick_lug_air > 10,
        "a pick-lid lug hangs within 10mm of tray A's pill line");
 assert(pick_lug_t + pick_lug_clear < bay_w / 4,

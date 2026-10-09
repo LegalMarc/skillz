@@ -1,0 +1,10 @@
+lug surface samples: 6280, of which 3626 are not on the front or outboard faces
+nominal pose: new material min 1.500 mm, all-in min 0.500 mm (0.5 = front/outboard faces by design)
+PASS  nominal pose: new material min 1.500 mm (at nominal); all-in min 0.500 mm
+PASS  rest pose (0.5 mm down-slope, on the stops; all-in 0 is the stop contact): new material min 1.017 mm (at rest); all-in min 0.000 mm
+PASS  tilt about the back edge 0..15 deg, from nominal and from the rest pose: new material min 1.081 mm (at 3 deg from rest + 0.25 mm ride); all-in min 0.027 mm
+PASS  straight lift 0..30 mm: new material min 1.500 mm (at 0 mm); all-in min 0.500 mm
+PASS  lift along the plane's normal 0..30 mm: new material min 1.500 mm (at 0 mm); all-in min 0.500 mm
+PASS  lift 8/15/24 mm then draw forward 0..60 mm: new material min 1.500 mm (at lift 8 then forward 0); all-in min 0.500 mm
+
+RESULT: ALL PASS (worst new-material distance 1.017 mm, limit 1.0)

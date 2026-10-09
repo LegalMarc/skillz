@@ -16,7 +16,7 @@
 // forward, which takes the skirt AWAY from that face. Revisions 6 to 9 said
 // otherwise, and test print 2 slid the lid straight off. The retention is the
 // pair of lugs under the plate's ends (D38): each drops into an end bay of tray
-// A directly behind a stop block in the front corner. Both stop faces are
+// A directly behind a stop block in the front corner. They are tapered and filleted at the root (D62-D64). Both stop faces are
 // perpendicular to the pick plane, so the lid stops after 0.5 mm of down-slope
 // travel, while lifting it by the front edge (it pivots about its back edge, and
 // the lug swings along the plane's normal, i.e. along the faces) or straight up
@@ -185,7 +185,7 @@ module pick_end_chamfers() {
 // step by the assert in layout.scad.
 lid_dx_local = (module_w - pick_lid_w) / 2;                 // 0.5
 
-// Retention lugs (D32, D34, D38): one under each end of the plate, hanging into
+// Retention lugs (D32, D34, D38, D62-D64): one under each end of the plate, hanging into
 // the end bay of tray A directly behind a stop block in the front corner (params.scad
 // 9). Both stop faces are PERPENDICULAR TO THE PICK PLANE: the lug's front face
 // here, the block's back face in body.scad. Going down the slope the lid moves
@@ -193,21 +193,70 @@ lid_dx_local = (module_w - pick_lid_w) / 2;                 // 0.5
 // edge swings the lug along the plane's normal, which is along the faces, so
 // nothing jams. Built in the plate's own frame (s along the slope, n normal to
 // it, negative below the underside) and placed by the ONE rotation that lays
-// that frame on the plane; it reaches 1.5 mm up into the plate so the union is
+// that frame on the plane; it reaches 1 mm up into the plate so the union is
 // volumetric. The tip's X edges are chamfered (pick_lug_chamfer) to lead it in.
+// Revision 18 (D62-D64) stiffens it without moving the front face, the outboard face or the tip: the
+// back and inboard faces draft outward toward the plate, the back is 2 mm longer, and the same two
+// sides carry a root fillet. The body is already printed; every added surface keeps 1 mm or more to it
+// (probes/lug_clearance.py).
 function lug_s(y) = y / cos(pick_lid_slope);
-module pick_lug(x_low) {
-    c = pick_lug_chamfer; t = pick_lug_t; d = pick_lug_d;
-    s0 = pick_lug_s0; L = pick_lug_len;
-    translate([0, 0, zu(0)]) rotate([pick_lid_slope, 0, 0])
-        hull() {
-            translate([x_low, s0, -d + c]) cube([t, L, d - c + 1.5]);
-            translate([x_low + c, s0, -d]) cube([t - 2 * c, L, 0.01]);
-        }
+
+// D62-D64: the lug is one lofted solid, built in the plate's own frame as (x, s, n) with x measured
+// INBOARD from the lug's outboard face (the face that keeps pick_lug_clear to the side wall), s along
+// the slope from the lid frame's origin and n normal to the plate (negative below the underside).
+// Seen from the tip (n = -d) to the root (n = 0) it widens on its INBOARD side and its BACK side only,
+// by pick_lug_grow over the whole depth (the same slope on both, k = grow / d); the front face (the stop
+// face, s = s0) and the outboard face (x = 0) are straight along n, exactly as in D38. Printed with the
+// plate on the bed the lug narrows going up: no overhang. At the root a fillet of radius pick_lug_fillet_r
+// runs round the same two sides (D63). Every cross-section is the same kind of ring, a rectangle whose
+// back-inboard corner is rounded, so rings loft one to the next with no collapsed vertices and the solid
+// is watertight by construction. A ring at level n: x from xlo to xw, s from s0 to sw, grown by u on the
+// inboard and back sides, with the corner radius pick_lug_round + u centred on the lug's own corner.
+LUG_ARC_N = 10;      // segments of the fillet's arc (rings along n)
+LUG_CORNER_N = 6;    // segments of the rounded back-inboard corner in each ring
+function lug_k()       = pick_lug_grow / pick_lug_d;
+function lug_xw(n)     = pick_lug_t + lug_k() * (n + pick_lug_d);              // inboard face at level n
+function lug_sw(n)     = pick_lug_s0 + pick_lug_len + lug_k() * (n + pick_lug_d);   // back face at level n
+function lug_ring(n, xlo, xw, sw, u) =
+    let(rho = pick_lug_round, cx = xw - rho, cs = sw - rho, R = rho + u)
+    concat([[xlo, pick_lug_s0, n], [xw + u, pick_lug_s0, n]],
+           [for (j = [0 : LUG_CORNER_N]) let(a = 90 * j / LUG_CORNER_N) [cx + R * cos(a), cs + R * sin(a), n]],
+           [[xlo, sw + u, n]]);
+// the fillet arc in the (x, n) section: a circle of radius r tangent to the plate plane (n = np) and to the
+// drafted face, which meets the plate at the angle 90 + theta. np is the plate plane the fillet is drawn for.
+lug_theta = atan(lug_k());
+lug_np    = -pick_lug_plate_embed;
+lug_T     = pick_lug_fillet_T;                                                  // tangent length from the corner (params.scad)
+lug_xc    = lug_xw(lug_np);                                                    // the wall at the plate plane
+lug_C     = [lug_xc + lug_T, lug_np - pick_lug_fillet_r];                      // fillet circle centre (x, n)
+function lug_arc(j) = let(a = 90 + (90 - lug_theta) * j / LUG_ARC_N)
+                      lug_C + pick_lug_fillet_r * [cos(a), sin(a)];            // j = 0: plate tangent point; j = N: tangent point on the wall
+LUG_RINGS = concat(
+    [lug_ring(-pick_lug_d, pick_lug_chamfer, pick_lug_t - pick_lug_chamfer, pick_lug_s0 + pick_lug_len, 0),
+     lug_ring(-pick_lug_d + pick_lug_chamfer, 0, lug_xw(-pick_lug_d + pick_lug_chamfer), lug_sw(-pick_lug_d + pick_lug_chamfer), 0)],
+    [for (j = [LUG_ARC_N : -1 : 0]) let(p = lug_arc(j), n = p[1], u = p[0] - lug_xw(n))
+        lug_ring(n, 0, lug_xw(n), lug_sw(n), j == LUG_ARC_N ? 0 : u)],
+    // 1 mm up into the plate (3 thick), the fillet's outer edge carried straight on
+    [let(n = 1.0, u = lug_xc + lug_T - lug_xw(n)) lug_ring(n, 0, lug_xw(n), lug_sw(n), u)]);
+assert(lug_xc + lug_T - lug_xw(1.0) > 0.05, "the lug's fillet is too small for its draft (D63)");
+assert(lug_arc(LUG_ARC_N)[1] > -pick_lug_d + pick_lug_chamfer + 0.5, "the root fillet reaches the tip chamfer (D63)");
+module lug_loft(rings) {
+    m = len(rings[0]); k = len(rings);
+    pts = [for (r = rings) each r];
+    side = [for (i = [0 : k - 2]) for (v = [0 : m - 1])
+               let(w = (v + 1) % m, a = i * m + v, b = i * m + w, c = (i + 1) * m + w, d = (i + 1) * m + v)
+               each [[a, c, b], [a, d, c]]];
+    bottom = [[for (v = [0 : m - 1]) v]];
+    top = [[for (v = [m - 1 : -1 : 0]) (k - 1) * m + v]];
+    polyhedron(points = pts, faces = concat(side, bottom, top), convexity = 6);
+}
+// x_out: lid-local X of the lug's outboard face; sgn = +1 when the inboard side is +X (left lug), -1 (right lug)
+module pick_lug(x_out, sgn) {
+    translate([x_out, 0, zu(0)]) rotate([pick_lid_slope, 0, 0]) mirror([sgn > 0 ? 0 : 1, 0, 0]) lug_loft(LUG_RINGS);
 }
 module pick_lugs() {
-    pick_lug(pick_lug_x_left  - lid_dx_local);
-    pick_lug(pick_lug_x_right - lid_dx_local);
+    pick_lug(pick_lug_x_left - lid_dx_local, 1);
+    pick_lug(pick_lug_x_right + pick_lug_t - lid_dx_local, -1);
 }
 
 // No "FRONT" mark (D61): the D38 embossed lettering is removed. The lugs already make the lid go on one way

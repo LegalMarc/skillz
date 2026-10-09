@@ -1,0 +1,7 @@
+section g mm below the plate | area mm2 | Z_x (sideways knock) mm3 | Z_s (knock along the slope) mm3
+  g 0.3  old  16.00   10.67   10.67   new  79.73  105.97  132.50   ratio area 4.98  Z_x  9.93  Z_s 12.42
+  g 1.0  old  16.00   10.67   10.67   new  70.02   86.62  109.94   ratio area 4.38  Z_x  8.12  Z_s 10.31
+  g 2.0  old  16.00   10.67   10.67   new  60.71   69.32   89.54   ratio area 3.79  Z_x  6.50  Z_s  8.39
+  g 3.5  old  16.00   10.67   10.67   new  47.98   47.92   63.90   ratio area 3.00  Z_x  4.49  Z_s  5.99
+  g 5.0  old  16.00   10.67   10.67   new  36.71   31.42   43.64   ratio area 2.29  Z_x  2.95  Z_s  4.09
+  g 6.5  old  12.00    6.00    8.00   new  20.63   11.27   21.56   ratio area 1.72  Z_x  1.88  Z_s  2.69

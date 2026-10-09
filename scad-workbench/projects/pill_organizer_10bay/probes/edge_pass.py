@@ -174,6 +174,31 @@ for frac in (0.25, 0.5, 0.75):
 a = np.radians(180 - turn * 0.5)
 chk("the bend is solid 0.3 mm inside its round, mid-width", pick.contains([[120.0, *(cen + (Ro - 0.3) * np.array([np.cos(a), np.sin(a)]))]])[0])
 
+# D62-D64: the stiffened retention lugs. Points are placed in the lug's own frame (x from the lug's outboard face,
+# s along the slope, n normal to the plate, negative below the underside) and mapped to the lid's modelled
+# coordinates. The left lug's inboard side is +x; the front face and outboard face are as in D38.
+lx_out = P["pick_lug_x_left"] - P["lid_dx"]; ls0 = P["pick_lug_s0"]; lt = P["pick_lug_t"]; ll = P["pick_lug_len"]
+ld = P["pick_lug_d"]; lg = P["pick_lug_grow"]; lk = lg / ld
+def lug_pt(x, s_, n):
+    return [lx_out + x, s_ * np.cos(al) - n * np.sin(al), zu(0.0) + s_ * np.sin(al) + n * np.cos(al)]
+def xw(n): return lt + lk * (n + ld)
+def sw(n): return ls0 + ll + lk * (n + ld)
+print("  retention lugs (D62-D64)")
+removed(pick, lug_pt(xw(-6.0) + 0.25, ls0 + 2.0, -6.0), lug_pt(xw(-0.6) - 0.25, ls0 + 2.0, -0.6), "D62: inboard face drafts out toward the plate (6 mm down is cut away, 0.6 down at the same x stays)")
+removed(pick, lug_pt(1.5, sw(-6.0) + 0.25, -6.0), lug_pt(1.5, sw(-0.6) - 0.25, -0.6), "D62: back face drafts out toward the plate")
+chk("D62: the tip is 4 mm in X and the lug's root 8 mm (section at 0.3 mm under the plate)", pick.contains([lug_pt(lt + lg - 0.1, ls0 + 2.0, -0.3), lug_pt(lt + 0.15, ls0 + 2.0, -ld + 0.5)]).tolist() == [True, False])
+removed(pick, lug_pt(1.5, ls0 + ll + 0.3, -ld + 0.5), lug_pt(1.5, ls0 + ll - 0.2, -ld + 0.5), "D38/D64: the tip's back face is at s0 + the tip length (6 mm, 4 until D64)")
+removed(pick, lug_pt(1.5, ls0 - 0.1, -3.0), lug_pt(1.5, ls0 + 0.1, -3.0), "D38: the front (stop) face stays at s0, no fillet or draft on it")
+removed(pick, lug_pt(-0.1, ls0 + 2.0, -3.0), lug_pt(0.1, ls0 + 2.0, -3.0), "D38: the outboard face stays at its clearance from the side wall")
+fT = P["pick_lug_fillet_T"]
+chk("D63: the root fillet fills the inboard corner (0.2 mm under the plate, 0.1 beyond the drafted face)",
+    pick.contains([lug_pt(xw(-0.2) + 0.1, ls0 + 2.0, -0.2)])[0])
+chk("D63: the back fillet fills the back corner (same offsets)", pick.contains([lug_pt(1.5, sw(-0.2) + 0.1, -0.2)])[0])
+chk("D63: and ends within its tangent length (3 mm down the same offset is air, inboard and back)",
+    not pick.contains([lug_pt(xw(-3.0) + 0.1, ls0 + 2.0, -3.0), lug_pt(1.5, sw(-3.0) + 0.1, -3.0)]).any())
+chk("D63: no fillet on the front face or the outboard face", not pick.contains([lug_pt(1.5, ls0 - 0.15, -0.2), lug_pt(-0.15, ls0 + 2.0, -0.2)]).any())
+chk("the tip's X edges keep their lead-in chamfer (corner of the unchamfered tip is empty)", not pick.contains([lug_pt(0.2, ls0 + 2.0, -ld + 0.2)])[0])
+
 print("\nfill lid (as modelled: plate top up)")
 fc = P["fill_lip_chamfer"]
 sl_ = fill.section(plane_origin=[0, 0, 1.0], plane_normal=[0, 0, 1])   # above the chamfer: the lip's full width

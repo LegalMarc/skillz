@@ -25,6 +25,6 @@
       "pick_body",
       "pick_lugs"
     ],
-    "reason": "each retention lug reaches 1.5mm up into the lid body along its full length, so it welds volumetrically instead of meeting the underside on a plane (D32, D38)"
+    "reason": "each retention lug reaches 1mm up into the lid body along its full length (1.5mm until D62-D64), so it welds volumetrically instead of meeting the underside on a plane (D32, D38)"
   }
 ]

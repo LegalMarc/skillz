@@ -1,3 +1,25 @@
+# Resume note -- revision 18 (read this first)
+
+**Update, D62-D64 (stronger pick-lid lugs, newest).** Branch `pill-organizer-rev15`. The user: "nubs look weak, can we make
+them stronger without changing the design of the already printed base?" Only `parts/pick_lid.scad` and the lug parameters in
+`params.scad` (section 12) changed; the body (revision 16, printed) and the fill lid are untouched and their build files were
+restored byte-for-byte after the rebuild reordered their vertices. The lug's front (stop) face, outboard face, tip position and
+depth and the lid's 1.2 mm back clearance are exactly as before. New: the back and inboard faces draft outward toward the
+plate to an 8 x 10 mm root (`pick_lug_grow` 4.0), the tip is 4 x 6 mm (`pick_lug_len` 4 -> 6), a r 1.5 fillet round the root
+on those two sides (`pick_lug_fillet_r`). The lug is one lofted polyhedron (`lug_loft`, rings of the same shape from tip to
+root), not a hull of slabs. **Proven (commands in `calculations.md`, "Revision 18"):** root section modulus 9.9 x (sideways)
+and 12.4 x (along the slope), peak stress for a tip load 8.6 x and 11.3 x lower (`probes/lug_section.py`); distance of the new
+surfaces to the committed `build/body.stl` at rest and along tilt, straight lift, normal lift and lift-then-forward 1.0 mm or
+more outside the two D38 contact faces' 1 mm edge strips, 2.5 mm to the buttress (`probes/lug_clearance.py`); `lid_retention.py`
+(a) to (h) all pass, first contact 0.507, ride 0.194; `edge_pass.py` D62/D63 rows pass; `overhang_scan.py` on the lid unchanged
+(no new downward faces, the lug narrows going up); `validate_scad.sh --all` COVERAGE 14 passed, 0 failed, 3 not-applicable, 0
+inconclusive, 1 advisory; lid one watertight body, 900 triangles, bbox unchanged. **Not proven:** a print. **Judgement calls:**
+the back-inboard edge is rounded r 0.3 so that every loft ring has the same shape (no collapsed vertices); the clearance
+criterion for "new material" excludes the 1 mm strips beside the front and outboard planes because the old lug's faces end on the
+same planes at the same 0.5 mm; the fillet is 0.87 mm long along the plate because the drafted face makes the wedge 119.7
+degrees (the radius is still 1.5). **Next step:** deep-tier review of D62-D64, then print `build/final/final_pick_lid_256.3mf`.
+Everything below is the revision 16 note.
+
 # Resume note -- revision 16 (read this first)
 
 **Update, D60 (final QA pass, newest).** Branch `pill-organizer-rev15` (code commits `91e4b6e`, `8d3eb1d`, `07ab044`,

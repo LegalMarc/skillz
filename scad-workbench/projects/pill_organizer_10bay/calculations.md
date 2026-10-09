@@ -522,8 +522,8 @@ Geometry per side, left (the right is the mirror):
 | Stop face | perpendicular to the plane; meets the plane at `pick_stop_y` and runs `pick_stop_depth` down along the inward normal, then drops vertically to the floor | y 3.8 at the plane, 9.0 deep, back to y 10.0 |
 | Stop block | fused to the side wall and front wall, `pick_stop_w` wide, top `stop_clip_drop` (0.05; 0.2 until D60) under the plane (clipped by OUTER_STOP_CLIP) | x 2.8 .. 8.75 (8.4 until D60), y 1.0 .. 10.0 |
 | Front wall pillar | scallop stops `pillar_w` from the side wall | x 2.8 .. 8.8 |
-| Lug | `pick_lug_t` x `pick_lug_len` x `pick_lug_d` | 4.0 (X) x 4.0 (along the slope) x 7.0 (perpendicular to the plate) |
-| Lug position | against the side wall, in front of the buttress | x 3.3 .. 7.3; lowest corner y 11.8, buttress front y 14.3 (rail1_y moved +3 for this) |
+| Lug | `pick_lug_t` x `pick_lug_len` x `pick_lug_d` | 4.0 (X) x 4.0 (along the slope) x 7.0 (perpendicular to the plate); tip 4.0 x 6.0 and tapered to an 8 x 10 root since D62-D64, see "Revision 18" below |
+| Lug position | against the side wall, in front of the buttress | x 3.3 .. 7.3; lowest corner y 11.8 (13.2 since D64), buttress front y 15.8 (the 14.3 written here was the revision 10 figure, before D43 widened the buttress) |
 | Clearance | `pick_lug_clear`, along the slope, face to face | 0.5 (probe: first contact 0.51) |
 | Engagement | lug depth below the plane, perpendicular | 6.86 mm; stop face runs 9.0 deep |
 | Material behind the face | along the slope from the face | 5.3 at the top (`y / cos(slope)`), 9.1 at 4 mm down |
@@ -1105,3 +1105,59 @@ The front round (`scallop_front_round()`) starts with a 0.01 mm flat at y 0 (the
 
 F13 (the rail-1 buttress top, 0.21 mm under the plane beside the side wall, z 92 to 104) is left: the K1/K2-verified break-out
 zone, and `boss_clip_drop` feeds `boss_back_bevel()`. Changing it would re-open H2 and K1.
+
+## Revision 18: stiffer pick-lid lugs (D62-D64)
+
+The body is printed (revision 16); only the lid changed. Every measurement below is on meshes: the lid rendered from
+`parts/pick_lid.scad` and the committed `build/body.stl`.
+
+| Quantity | Revision 17 (D38) | Revision 18 |
+|---|---|---|
+| Tip, X x along the slope x depth | 4.0 x 4.0 x 7.0 | 4.0 x 6.0 x 7.0 (D64: 2 mm longer toward the back) |
+| Root at the plate, X x along the slope | 4.0 x 4.0 | 8.0 x 10.0 (D62: `pick_lug_grow` 4.0 on the inboard and the back side, a 29.7 degree draft) |
+| Front face (the stop face), outboard face | s0 = stop face + 0.5; 0.5 from the side wall | unchanged, both straight along the plane's normal |
+| Root fillet | none | r 1.5 on the back and the inboard side (D63), tangent length 0.87 in the 119.7 degree wedge between plate and drafted face |
+| Corner between back and inboard faces | sharp | rounded r 0.3 at the tip, r 0.3 + fillet at the root (keeps every loft ring the same shape) |
+| Cross-section 0.3 mm under the plate | 16.0 mm2 | 79.7 mm2 (4.98 x) |
+| Section modulus there, sideways knock (Z_x = I about the slope direction / half-width) | 10.67 mm3 | 105.97 mm3 (**9.9 x**) |
+| Section modulus there, knock along the slope (Z_s) | 10.67 mm3 | 132.50 mm3 (**12.4 x**) |
+| Peak bending stress for a unit tip load, sideways / along the slope | 0.633 / 0.633 per mm3 at the root | 0.0734 at 3.0 mm above the root / 0.0560 at 2.5 mm (**8.6 x / 11.3 x lower**) |
+| Lug volume, one lug on its own (reaches into the plate) | about 136 mm3 | 437 mm3; the lid goes 105.37 -> 105.83 cm3 |
+| Engagement on the stop face, perpendicular | 6.86 mm | 6.86 mm (unchanged) |
+| Tip's lowest back corner, body y | 11.8 | 13.2 (buttress front face y 15.8: 2.5 mm) |
+| Root fillet's back edge on the underside, body y | 6.95 (the back face meets the plate) | 12.4 (3.4 mm to the buttress) |
+| Air under the tip's lowest corner to tray A's pile line | 29.7 | 30.2 |
+| EXPECTED_BBOX | 239.0 x 87.35 x 111.63 | unchanged |
+
+Section moduli by `probes/lug_section.py`, which slices the lug at depths of 0.3 to 6.5 mm under the plate (`probes/lug_section.out.txt`):
+the table in that file gives the ratio at each depth (Z_x 9.9, 8.1, 6.5, 4.5, 3.0, 1.9 and Z_s 12.4, 10.3, 8.4, 6.0, 4.1, 2.7 at 0.3, 1,
+2, 3.5, 5 and 6.5 mm). The peak-stress row is the largest of (7 - g) / Z over g, a unit load at the tip: with a draft that starts at the tip
+the worst section is a few millimetres above the root, which is where a sheared lug would be expected to break.
+
+Clearance to the printed body, `probes/lug_clearance.py` (surface samples plus all lug vertices, exact point-to-triangle distance
+to `build/body.stl`). The lug keeps two faces 0.5 mm from the body by design (front face to the stop block, outboard face to the
+side wall); everything D62-D64 added is measured with the strips within 1 mm of those two planes left out (the old lug's inboard
+and back faces end on the same two planes and sit just as close there):
+
+| Pose or motion | New surfaces, minimum distance to the body | Whole lug, minimum |
+|---|---|---|
+| Nominal pose (0.5 mm up-slope of the stops) | 1.500 | 0.500 |
+| Rest pose (on the stops) | 1.017 (the strip boundary) | 0.000 (the stop contact) |
+| Tilt about the back edge 0..15 degrees, from nominal and from rest + 0.25 mm ride | 1.081 | 0.027 |
+| Straight lift 0..30 mm | 1.500 | 0.500 |
+| Lift along the plane's normal 0..30 mm | 1.500 | 0.500 |
+| Lift 8 / 15 / 24 mm, then forward 0..60 mm | 1.500 | 0.500 |
+
+Excluding only the front 2 mm and the outboard 2 mm the closest new surface is the tip's lowest back corner against the
+buttress, 2.51 mm (the formula gives 15.8 - 13.24 = 2.56 along y). The 1.5 mm figures are the side wall, 1.0 mm outboard of the lug's
+outboard face. `probes/lid_retention.py` (a) to (h) all pass: first contact 0.507 mm (0.500 by construction), slide-1/2/5 mm overlaps
+34.33 / 103.02 / 310.79 mm3 (26.28 / 78.87 / 211.21 before: the front face is wider at the root, so more of it bears), up-slope
+room 0.856 mm, max tilt ride 0.194 mm at 3.25 degrees (0.193 before). The four motion sweeps of `validate_scad.sh` hold the
+same 0.100 mm worst clearance (the lid's bend fillet beside the body's front edge, not the lugs).
+
+Printability in the lid's print orientation (plate top face on the bed, lugs pointing up): both drafted faces lean outward going
+DOWN toward the plate, so the lug narrows going up. `probes/overhang_scan.py` on `build/print_ready/pick_lid.stl`: downward faces
+past 45 degrees from vertical, flat 0 and steep 280 mm2, the same list as before (all of it the skirt's and bend's); the lugs add
+none. One watertight body, 900 triangles, smallest triangle 0.0008 mm2 (on the tip's rounded corner), shortest edge 0.0083 mm
+(the 0.02 mm plate-embed step of D63), against 0.0028 and 0.0098 on the revision 17 lid.
+
