@@ -798,7 +798,7 @@ tests every T row on the real meshes.
 | P5 | Skirt outer end edges (2 vertical edges, where the lid is pinched) | square | **T** 1.0 mm chamfer, not a round | the outer face hangs 43.8 degrees off vertical in print; a chamfer between it and the vertical end face stays inside that. Revision 13: now one chain with the plate's top chamfer, see P11 |
 | P6 | Skirt inner end edges | square | **K** | they face the body's front face across the 0.35 clearance |
 | P7 | Seating plane (underside), skirt clearance, lug and its contact face | | **K** | |
-| P8 | "FRONT" relief edges | square | **L** | 0.6 mm of text |
+| P8 | "FRONT" relief edges | removed (D61) | n/a | the lettering is gone |
 
 ### Audit, fill lid (print orientation: plate top face on the bed)
 

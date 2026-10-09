@@ -641,8 +641,7 @@ pick_lid_gap    = 0.2;   // vertical float above the pick plane; keeps the pair 
 // sliding BACKWARD, up the slope. Sliding down the slope moves the lid forward,
 // and the skirt, which hangs 0.35 outside that face, simply moves further from
 // it: nothing touches. Test print 2 slid the lid straight off. Retention is the
-// lug-and-pillar pair of D38 (section 12 below); this is a cover and a place for
-// the "FRONT" mark.
+// lug-and-pillar pair of D38 (section 12 below); this is a cover (no lettering, D61).
 pick_lid_skirt_over = 6.0;                       // overlap onto the scalloped wall
 pick_lid_hook_h = pickplane_front + pick_lid_gap
                 - (trayA_front_h - pick_lid_skirt_over);       //  31.2
@@ -926,15 +925,7 @@ assert(pick_stop_top_thick >= 1.5,
 // here because the formula is the definition; probes/lid_retention.py measures
 // it on the meshes.
 
-// The "FRONT" mark on the skirt's outer face (D38): embossed, raised by
-// pick_front_h, readable from the front with the lid on. Printed with the plate
-// on the bed the skirt leans out at 43.8 degrees and the relief is 0.6mm tall:
-// the letters' TOP edges face down at 46.2 degrees from vertical, 1.2 past the
-// 45 degree rule, over a 0.6mm step (about 0.2mm of overhang per layer). Accepted
-// and listed, not fixed: about 3 mm2 in all.
-pick_front_text = "FRONT";
-pick_front_size = 9.0;
-pick_front_h    = 0.6;
+// The D38 "FRONT" mark is removed (D61, user decision 2026-10-09): no lettering on the lid.
 
 // ------------------------------------------------------------
 // 10. Cosmetic / ergonomic

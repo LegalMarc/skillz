@@ -31,7 +31,7 @@
 //
 // The skirt closes the scalloped front wall, which is cut well below the plane
 // so the front tray is open to the front once the lid is lifted, and carries
-// the embossed "FRONT". It has no finger notches or anything hung from it (D44):
+// no lettering (D61). It has no finger notches or anything hung from it (D44):
 // you pinch it between thumb and forefinger.
 //
 // Local origin: the module's front-bottom-left outer corner,
@@ -54,7 +54,7 @@
 //   forward; none of these touches the stop blocks after the first few
 //   millimetres (probes/lid_retention.py, joints.json motion). Nothing to unclip.
 //
-// EXPECTED_BBOX: [239.0, 87.95, 111.63]
+// EXPECTED_BBOX: [239.0, 87.35, 111.63]   (87.95 until D61 removed the 0.6 mm FRONT relief)
 // ============================================================
 
 include <../params.scad>
@@ -180,7 +180,7 @@ module pick_end_chamfers() {
         translate([end * pick_lid_w, 0, 0]) mirror([end, 0, 0]) chain_cut(lid_chamfer);
 }
 
-// layout.scad offsets the lid by lid_dx in X; the lugs and the FRONT mark are
+// layout.scad offsets the lid by lid_dx in X; the lugs are
 // placed on the BODY's coordinates, so the same offset is taken off here. Kept in
 // step by the assert in layout.scad.
 lid_dx_local = (module_w - pick_lid_w) / 2;                 // 0.5
@@ -210,20 +210,9 @@ module pick_lugs() {
     pick_lug(pick_lug_x_right - lid_dx_local);
 }
 
-// "FRONT" (D38), embossed pick_front_h proud of the skirt's outer face (y = -3),
-// centred on the lid. rotate([90, 0, 0]) stands
-// the text up facing -Y with its baseline along +X, so it reads left to right
-// from the front; the extrusion then runs toward -Y, away from the skirt. It
-// overlaps 0.4 mm into the skirt so the union is volumetric.
-module pick_front_mark() {
-    cx = module_w / 2 - lid_dx_local;
-    cz = (pick_lid_skirt_bot + zu(0)) / 2 - pick_front_size / 2 - 4;
-    translate([cx, hook_front + 0.4, cz])
-        rotate([90, 0, 0])
-            linear_extrude(height = pick_front_h + 0.4)
-                text(pick_front_text, size = pick_front_size, halign = "center",
-                     font = "Liberation Sans:style=Bold");
-}
+// No "FRONT" mark (D61): the D38 embossed lettering is removed. The lugs already make the lid go on one way
+// only, and printed with the plate on the bed the raised letters on the downward-facing skirt made the slicer
+// report floating regions and ask for supports.
 
 // Underside x-end edges (D48): the plate's end face meets its underside in a 90 degree
 // convex edge along the whole slope. Same construction as the top chamfers, mirrored onto the
@@ -243,7 +232,7 @@ module pick_under_chamfers() {
 
 module pick_lid_geometry() {
     difference() {
-        union() { pick_body(); pick_lugs(); pick_front_mark(); }
+        union() { pick_body(); pick_lugs(); }
         pick_end_chamfers();
         pick_under_chamfers();
     }

@@ -237,7 +237,7 @@ the wedge to work.
   version had a vertical stop face; the lug drove into it at 0.5 to 2 degrees
   of tilt and jammed. The review of revision 10 found it.) A 45-degree filler
   closes the slot between each block and the rail buttress so nothing can lodge
-  there. "FRONT" is embossed on the skirt. Test print 3 confirmed the lug keeps the
+  there. The lid carries no lettering (D61). Test print 3 confirmed the lug keeps the
   lid seated; the finger notches of revisions 6 to 10 are gone (D44).
 - **The pick lid is one piece** (D53). Until revision 12 the plate and the skirt
   were two polygons, unioned, with a seam at the bend. Now one profile is
@@ -355,8 +355,7 @@ now 45 x 40 mm per bay, and the 10 mm and 20 mm crown flats of the two outlet op
 and label recess ceilings, the 1 mm lips at the ends of each vault ridge, and
 the seat ledge's underside along the leaning divider; the pick lid has a 1 mm
 strip at the tip of its skirt, its plate chamfers and the bend's round on the bed (the round's
-first 1.2 mm, 0.36 mm worst step), and the edges of
-the "FRONT" relief (0.6 mm, 45.3 to 46.2 degrees); the fill lid has only its 1
+first 1.2 mm, 0.36 mm worst step), and nothing else (the "FRONT" relief was removed, D61); the fill lid has only its 1
 mm top chamfer, which lies on the bed. The lugs' front faces, perpendicular to the plane, stand
 vertical in print; the stop blocks' contact faces print facing up and back.
 

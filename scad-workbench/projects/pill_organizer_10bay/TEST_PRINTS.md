@@ -93,7 +93,7 @@ wall (27 mm above the rim on the real body).
 | Lower it hinged from the back | Same support. Rest the back edge on the plane and lower the front | The lugs find the gap behind the blocks and the lid settles 0.5 mm from the stops without catching |
 | Lift straight up, then draw forward | Lift it vertically 8 mm or more, then pull it toward you | Comes off clean. (On the full body a straight lift beyond 26 mm meets the fill lid's pull lip; lift-then-forward never does)  |
 | Pick lid reversed | Try to fit it turned round | It cannot sit flat; the skirt hits the wall behind tray B |
-| "FRONT" | Look at the skirt | Legible, no stringing, printed without support |
+| "FRONT" | Removed (D61) | No lettering on the lid |
 | Groove corner (D39) | Lower a spare rail into the front groove from above, handle the section | Nothing tears or cracks at the break-out; no flap inside tray A |
 | Groove fit (D40) | Coupon: turn the block over, drop it over each stub | Report the label that goes down by hand without rocking (0.20 default = "0") |
 | Fill-lid corner | As test print 2 | Unchanged at 0.30 |
