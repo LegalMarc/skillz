@@ -216,3 +216,14 @@ too. Report anything that is not a pass.
 | Fill lid | in the mouth | 0.30 all round, lifts out by the lip; the lip's underside bevel is a fingertip rest | |
 | Stringing | groove, bins, lids | Much less than test print 3 once the PETG is dry | Dry longer; tune retraction |
 | Print time | body | About 960 g at 15% infill: start on a full spool | |
+
+### Final print results (reported 2026-10-21)
+
+Body revision 16 (`pill_organizer_final_body_rev16 (lightning fill).3mf`: Generic PETG, 0.20 mm, **2 wall loops**, 10%
+Lightning, no brim, no supports), front lid rev 18 (strong lugs), fill lid rev 16.
+
+| Watch | Result | Change |
+|---|---|---|
+| Lid fit, stronger lugs (D62-D64), fill lid | Both lids printed; **fit well** (user, 2026-10-21) | None |
+| Side walls | "Outer left and right walls on the container need to be more sturdy" | Under study (revision 19). Two causes found: (1) slicer: 2 loops are 0.87 mm per face, so a 2.8 mm wall has a 1.06 mm core that 10% Lightning leaves nearly empty; (2) geometry: from y 150 to 195 and z 76 to about 125 nothing spans between the side walls (the cubby mouth is open across the whole width), so each wall's back edge there is free |
+| Every other watch row above | Not reported | None |
