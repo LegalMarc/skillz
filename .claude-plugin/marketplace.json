@@ -24,6 +24,11 @@
       "name": "workflow-loop",
       "source": "./workflow-loop",
       "description": "Turn a goal into self-contained GitHub issues, then autonomously grind through them AFK with a multi-agent loop that gives every ticket clean context: a coder implements and stages, an independent reviewer adversarially verifies, a committer lands — and blocked tickets are parked with findings posted to the issue so the loop keeps going without human intervention. Use when the user wants to break work into tickets and solve them automatically, run an AFK/autonomous/overnight/unattended build loop, grind a ticket queue with fresh context per ticket, or says \"create issues and solve them\". Model- agnostic: roles are defined by capability tier and effort, not model names."
+    },
+    {
+      "name": "email-triage",
+      "source": "./email-triage",
+      "description": "General-purpose, model-neutral inbox triage with configurable personal rules, verified recoverable filing, durable follow-ups, and an offline HTML undo/comment review. Apple Mail adapter for macOS; personal settings remain under ignored-resources."
     }
   ]
 }

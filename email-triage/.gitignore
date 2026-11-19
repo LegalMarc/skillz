@@ -1,0 +1,11 @@
+
+local-config.json
+__pycache__/
+
+# Private runtime state must never enter a public skill commit.
+proposals.md
+runs/
+recovery/
+digest/
+queues/
+history.sqlite3*

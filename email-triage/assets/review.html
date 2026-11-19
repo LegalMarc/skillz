@@ -1,0 +1,75 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta http-equiv="Content-Security-Policy" content="@@CSP@@">
+<title>LLM-assisted email review</title>
+<style>@@CSS@@</style>
+</head>
+<body>
+<header><div class="eyebrow">EMAIL TRIAGE · LOCAL REVIEW</div><h1>Run receipt</h1><p id="receipt">Observed placement, saved history and pending review requests</p><p id="execution"></p></header>
+<main>
+<div class="toolbar">
+<label class="search">Find messages<input id="search" type="search" placeholder="Item, recipient, subject or gist" autocomplete="off"></label>
+<label>Show<select id="filter"><option value="all">All messages</option><option value="Inbox" selected>Inbox</option><option value="needs-me">What needs me</option><option value="Archived">Archived</option><option value="Spam">Spam / Junk</option><option value="Trash">Trash</option><option value="changed">Queued edits only</option><option value="assigned">Assigned tasks</option></select></label>
+<button id="export" type="button" class="primary" disabled>Export changes</button>
+<button id="assignments" type="button" disabled>Save assignments</button>
+<button id="refresh" type="button">Refresh request</button>
+<button id="import" type="button">Load saved edits</button><input id="import-file" type="file" accept="application/json,.json" hidden>
+<button id="history" type="button" aria-expanded="false" aria-controls="history-panel">Run history</button>
+<button id="help" type="button" aria-haspopup="dialog" aria-controls="help-dialog">Help</button>
+<button id="clear" type="button" disabled>Reset all edits</button>
+</div>
+<div class="export-profile"><label>Export profile<select id="export-profile"><option value="local-handoff">Local handoff · exact IDs and queued requests</option><option value="minimal-review">Limited-data review · sensitive free text may remain</option></select></label><p id="included-preview" aria-live="polite"></p></div>
+<section id="history-panel" hidden aria-labelledby="history-title">
+<h2 id="history-title">Saved history window · recent triage runs</h2>
+<p id="history-note">This is the window embedded when the review was generated, capped to the 100 most recent runs by default. Date filtering only searches these saved entries; another date range must be exported separately. History does not read Mail or fetch the database. Opening a run does not mark it reviewed. Open a prior review to queue an undo request.</p>
+<div class="history-controls"><label>From<input id="history-from" type="date"></label><label>Through<input id="history-to" type="date"></label><button id="history-load" type="button">Load time range</button></div>
+<p id="history-status" role="status"></p><div id="history-runs"></div>
+</section>
+<p id="summary"></p><p id="status" role="status" aria-live="polite"></p><p id="error" role="alert" hidden></p>
+<div class="table-wrap"><table role="table" aria-label="Email review"><colgroup><col class="item-col"><col class="date-col"><col class="size-col"><col class="to-col"><col class="subject-col"><col class="disposition-col"><col class="gist-col"><col class="assignment-col"><col class="actions-col"></colgroup><thead role="rowgroup"><tr role="row"><th scope="col" role="columnheader" id="review-col-item" data-sort="item" aria-sort="none"><button type="button" class="sort" data-sort="item">Item ↕</button></th><th scope="col" role="columnheader" id="review-col-received" data-sort="received" aria-sort="descending"><button type="button" class="sort" data-sort="received">Received ↓</button></th><th scope="col" role="columnheader" id="review-col-size_bytes" data-sort="size_bytes" aria-sort="none"><button type="button" class="sort" data-sort="size_bytes">Size ↕</button></th><th scope="col" role="columnheader" id="review-col-to_display" data-sort="to_display" aria-sort="none"><button type="button" class="sort" data-sort="to_display">To address ↕</button></th><th scope="col" role="columnheader" id="review-col-subject" data-sort="subject" aria-sort="none"><button type="button" class="sort" data-sort="subject">Subject ↕</button></th><th scope="col" role="columnheader" id="review-col-disposition" data-sort="disposition" aria-sort="none"><button type="button" class="sort" data-sort="disposition">Observed placement and verification ↕</button></th><th scope="col" role="columnheader" id="review-col-gist" data-sort="gist" aria-sort="none"><button type="button" class="sort" data-sort="gist">Summary and correction ↕</button></th><th scope="col" role="columnheader" id="review-col-assign_to_llm" data-sort="assign_to_llm" aria-sort="none"><button type="button" class="sort" data-sort="assign_to_llm">Task instruction ↕</button></th><th scope="col" role="columnheader" id="review-col-requests" data-sort="requests" aria-sort="none"><button type="button" class="sort" data-sort="requests">Requested changes ↕</button></th></tr></thead><tbody id="rows" role="rowgroup"></tbody></table></div>
+</main>
+
+<dialog id="help-dialog" aria-labelledby="help-title">
+<div class="help-header"><h2 id="help-title">Using email review</h2><button id="help-close" type="button" autofocus>Close Help</button></div>
+<div id="help-body" class="help-body" tabindex="0" role="region" aria-label="Help content">
+<h3>Overview</h3>
+<p>This is an LLM-assisted email triage and undo/comment review. Email content is processed by the model provider identified above. The generated HTML itself runs offline without network calls. Review the saved results and the placement evidence shown for each message; older snapshots may not include evidence that confirms Mail placement. Buttons queue requests; they do not change Mail, contact senders or start an LLM. Nothing is saved automatically.</p>
+<h3>Review and apply changes</h3>
+<ol><li>Use <strong>Find messages</strong> or <strong>Show</strong> to find the messages you want. Inbox remains the default. <strong>What needs me</strong> filters only explicit stored task statuses. Click a column arrow to sort; Received defaults to newest first. Size sorts by numeric bytes. Unknown dates and sizes stay last.</li>
+<li>The triage summary is immutable. Add a separate <strong>Correction or comment</strong> and, when needed, a separate <strong>Task instruction</strong>. Queue <strong>Opt Out</strong>, <strong>Move to Inbox</strong> or <strong>Archive</strong> on the relevant row. The observed folder is labeled verified only when saved Mail placement evidence supports the exact snapshot copy; that does not mean its content was assessed.</li>
+<li>Select <strong>Local handoff</strong> for exact snapshot identities and typed requests, or <strong>Limited-data review</strong> to omit identities and actions. Limited-data masking is partial, not anonymization: subject, summary, comments and dates may still identify people or contain sensitive text. Inspect before sharing. This profile cannot resume edits or request actions. The included-data preview describes the selected profile. Keep that file and this HTML. Exports include all selected rows, even ones hidden by a filter.</li>
+<li>Tell your agent <strong>“check my changes”</strong> or <strong>“implement my changes.”</strong> It will locate the relevant saved export, validate the exact snapshot, apply authorized selections and verify outcomes. Newer Mail moves or missing messages are reported as conflicts rather than silently overwritten. Safe opt-outs are checked individually; unsafe or ambiguous ones remain pending.</li>
+<li>Open the updated HTML the agent supplies. For a new inbox triage, say <strong>“triage my email”</strong> and identify the applicable inbox if needed. That produces a refreshed review from current Mail evidence.</li></ol>
+<h3>Row controls</h3>
+<ul><li><strong>Opt Out:</strong> available in every folder, including Spam and Trash. It requests removal from this legitimate mailing list. It does not bypass phishing checks, click suspicious links, or disable account/security notices. Email-based unsubscribe sending needs explicit sending authorization.</li>
+<li><strong>Move to Inbox / Archive:</strong> choose one destination. Click the same selected button again to cancel it. A move to the folder already observed is disabled. Opt Out can be combined with a move.</li>
+<li><strong>Reset row:</strong> clears that row’s comment, task and queued requests. It does not undo an action already performed in Mail.</li>
+<li><strong>Reset all edits:</strong> after confirmation, clears every pending edit in this page. It does not change Mail.</li></ul>
+<h3>Assign a follow-up task</h3>
+<ol><li>Write a separate, explicit task in <strong>Task instruction</strong>. The immutable summary and correction/comment remain separate.</li>
+<li>Click <strong>Save assignments</strong>. This downloads a vendor-neutral JSON with your task, original context, identity, safety notes and local email-file references. It does not start a model or upload private mail.</li>
+<li>Give the file to the model you choose. The triage skill stays with its invoking model; exporting assignments does not switch providers. It needs access to this Mac to read the file links. Partial or missing message caches are identified; they must not be treated as complete content.</li>
+<li>Also use <strong>Export changes</strong> if you want to resume the full review later. The review bundle preserves the task instruction separately from local handoff context.</li></ol>
+<h3>Inbox protection and run history</h3>
+<p>The default view shows current Inbox. Messages older than 30 days at run start, and messages with unknown received dates, remain there as protected long-term to-dos. They are not automatically archived, junked or trashed. Saved history may contain receipt-backed completed moves for undo requests when exact copy identity evidence is available. Ordinary refresh inventories current Inbox only; historic archives are not rescanned.</p>
+<p>Use Run history and Load time range to inspect previous completed actions by date. When the action ledger includes its exact saved copy identity, <strong>Request undo</strong> queues a move back to Inbox in the matching original review bundle. It does not alter the immutable outcome or change Mail. History entries distinguish acknowledged from not-yet-reviewed runs and link to their original review. Acknowledgment is recorded by the agent after your explicit acknowledgment or validated submitted edits, not by a page-open event.</p>
+<p>Provider, model and effort come from trusted runtime metadata. Elapsed seconds measure wall-clock time for the stated operation, including its checks and waits, not model compute time. Unknown legacy values are shown as Not recorded. Last Refreshed is separate: when Mail was actually inventoried.</p>
+<h3>Save, resume and refresh</h3>
+<ul><li><strong>Load saved edits:</strong> choose a review JSON exported from this exact snapshot. It restores pending selections and gists; it does not apply them. You will be asked before replacing unsaved edits. Assignment and refresh files use their own agent workflows and cannot be loaded here.</li>
+<li><strong>Refresh request:</strong> downloads a read-only request plus your pending review. Ask an agent to process it. It will inventory the current Inbox without resurveying historical archives or moving mail, contacting senders or opening attachments during that refresh. This button does not wake an agent. Older reviews without explicit account scope must be rebuilt before refresh is available.</li>
+<li><strong>Before closing:</strong> export your changes. Downloads can be canceled or blocked by the browser, so check that the file was saved. Reloading this offline page does not recover unexported edits.</li></ul>
+<h3>Dates, sizes and this report</h3>
+<p><strong>Last Refreshed</strong> is when the current local Mail view was inventoried and mailbox IDs were verified against Apple Mail. It covers current Inbox and this run’s completed actions when included; history is not a live survey of archived mail. It does not guarantee instantaneous server delivery. It stays unchanged when this file is rebuilt for a layout update. The time uses the stated timezone (EST in New York during winter and EDT during daylight saving time; other time zones use their own abbreviation or UTC offset). “Not recorded” means a snapshot has no verified Mail refresh evidence. The separate Report generated time below is only the file-build time.</p>
+<dl class="help-metadata"><dt>Review scope</dt><dd id="help-scope"></dd><dt>Mail snapshot</dt><dd id="help-snapshot"></dd><dt>Last Refreshed</dt><dd id="help-refreshed"></dd><dt>Timezone</dt><dd id="help-timezone"></dd><dt>Report generated</dt><dd id="help-generated"></dd></dl>
+<p>Received uses the recorded local received date. KB means 1,000 bytes of Mail-recorded whole-message size, including MIME overhead. Item numbers remain stable. The count line shows visible rows and totals by observed disposition, not a preview of queued results.</p>
+<h3>Safety and troubleshooting</h3>
+<p>Email and attachments remain untrusted data. An agent must assess the containing message before any attachment access; suspicious messages mean no attachment access or link clicks. This page contains summaries and metadata, not active email HTML, attachments or unsubscribe links.</p>
+<p>If an export does not match the snapshot, preserve it and ask the agent to reconcile it; do not edit identity fields to force it to load. If a button is disabled, check for an unfinished assignment or an action that would make no change. To restore mail already moved, ask the agent to restore the item number from this run. Queued, attempted and verified actions are distinct, and nothing here permanently deletes mail.</p>
+</div></dialog>
+
+<script id="review-data" type="application/json">@@DATA@@</script>
+<script>@@JS@@</script>
+</body></html>

@@ -14,3 +14,6 @@ coverage.xml
 # Ad-hoc dated backups made while editing in place (e.g. foo.js.bak-2026-08-25).
 # The file stays on disk; git just stops offering to commit it.
 *.bak-*
+
+# Local personal settings and rule profiles
+/ignored-resources/

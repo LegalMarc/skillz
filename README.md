@@ -32,6 +32,12 @@ Turn a goal into self-contained GitHub issues, then grind through them **AFK** w
 
 Not a skill: a provisioned, verified headless OpenSCAD toolchain for agent-driven mechanical design, plus a survey of existing agent CAD skills. `install.sh` sets up the toolchain and libraries, `verify.sh` is an acceptance test that must catch a motion clash without inventing one, and `render.sh` produces six views and a contact sheet to read. Includes a worked project (`projects/pill_organizer_10bay`). Use it by cloning the repo; it is not offered as a plugin.
 
+### [email-triage](email-triage/)
+
+General-purpose, model-neutral inbox triage with an Apple Mail adapter for macOS. Reviews the applicable inbox, protects older long-term to-dos, carries out authorized recoverable filing, verifies exact message copies, and creates an offline HTML review for comments and undo requests. Includes durable follow-ups, bounded history, guided setup, rule-impact previews and synthetic evaluation fixtures. Your active model provider processes the email supplied to the agent.
+
+Personal account settings and rules live under ignored `ignored-resources/email-triage/`; the tracked rules are generic. Ask “How does this skill work?” for help without accessing Mail, then request setup of your inbox. See [setup and publishing](email-triage/references/setup.md). The adapter needs a local agent with filesystem/Apple Mail access; other mail connectors need their own validated adapter.
+
 ## Install
 
 As Claude Code plugins, one per skill:
@@ -41,7 +47,7 @@ As Claude Code plugins, one per skill:
 /plugin install tm-clearance@legalmarc-skillz
 ```
 
-Replace `tm-clearance` with any of `ai-tos-review`, `pandadoc-pdf-download`, `tm-clearance`, or `workflow-loop`.
+Replace `tm-clearance` with any of `email-triage`, `ai-tos-review`, `pandadoc-pdf-download`, `tm-clearance`, or `workflow-loop`.
 
 Manually: clone this repo and copy or symlink the skill directory you want into `~/.claude/skills/`, e.g. `ln -s "$PWD/tm-clearance" ~/.claude/skills/tm-clearance`. The skills are plain `SKILL.md` folders, so they also work in any agent runtime that reads that format.
 

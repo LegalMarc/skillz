@@ -1,0 +1,12 @@
+{
+  "account": "synthetic-account",
+  "mailbox_prefix": "imap://synthetic-account/",
+  "database": "/synthetic/Mail/Envelope Index",
+  "state_root": "/synthetic/private/email-triage",
+  "folder_map": {
+    "INBOX": "INBOX",
+    "Archive": "Archive",
+    "Junk": "Junk",
+    "Trash": "Trash"
+  }
+}

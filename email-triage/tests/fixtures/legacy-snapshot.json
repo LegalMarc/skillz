@@ -1,0 +1,20 @@
+{
+  "run_id": "compatibility",
+  "scope": "Legacy snapshot contract",
+  "snapshot_as_of": "2026-11-15",
+  "timezone": "America/New_York",
+  "records": [
+    {
+      "item": "M001",
+      "account": "test",
+      "message_id": "odd:message@example.test",
+      "current_id": 7,
+      "observed_mailbox": "Archive",
+      "to_display": "test@example.test",
+      "subject": "Legacy message",
+      "received": "2026-11-14T01:00:00+00:00",
+      "size_bytes": 42600,
+      "gist": "Plain note"
+    }
+  ]
+}
