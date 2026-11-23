@@ -168,9 +168,10 @@ class HistoryTests(unittest.TestCase):
     def test_assessment_invalidation_deadline_and_followup_lifecycle(self):
         identity={'account':'test','message_id':'odd:mid@example.test','current_id':42}
         h.record_assessment(self.db,'test',identity,fingerprint='fp',assessed_at='2026-11-17T12:00:00+00:00',rules_digest='r',content_digest='c',thread_digest='t',deadline='2026-11-20T00:00:00+00:00',evidence=[{'source':'header','ref':'message-id'}],result={'status':'review'})
-        self.assertEqual(h.get_cached_assessment(self.db,'test',identity,fingerprint='fp',rules_digest='r',content_digest='c',thread_digest='t')['result']['status'],'review')
+        self.assertEqual(h.get_cached_assessment(self.db,'test',identity,fingerprint='fp',rules_digest='r',content_digest='c',thread_digest='t',now='2026-11-18T12:00:00+00:00')['result']['status'],'review')
+        self.assertIsNone(h.get_cached_assessment(self.db,'test',identity,fingerprint='fp',rules_digest='r',content_digest='c',thread_digest='t',now='2026-11-20T00:00:00+00:00'))
         h.invalidate_assessments(self.db,'test',identity,'thread_reply','2026-11-18T00:00:00+00:00')
-        self.assertIsNone(h.get_cached_assessment(self.db,'test',identity,fingerprint='fp',rules_digest='r',content_digest='c',thread_digest='t'))
+        self.assertIsNone(h.get_cached_assessment(self.db,'test',identity,fingerprint='fp',rules_digest='r',content_digest='c',thread_digest='t',now='2026-11-18T12:00:00+00:00'))
         task={'task_id':'task-1','run_id':'test','item':'M1','account':'test','message_id':'odd:mid@example.test','current_id':42,'summary':'Follow up','next_action':'Check response','status':'waiting_vendor','deadline':None,'waiting_on':'vendor','evidence_refs':['M1'],'result_link':None,'created_at':'2026-11-17T12:00:00+00:00','updated_at':'2026-11-17T12:00:00+00:00','result_confirmed_at':None}
         h.upsert_followup(self.db,task);self.assertEqual(h.list_followups(self.db)[0]['status'],'waiting_vendor')
         task.update(status='completed',updated_at='2026-11-18T12:00:00+00:00',result_confirmed_at='2026-11-18T12:00:00+00:00')
