@@ -36,7 +36,7 @@ Not a skill: a provisioned, verified headless OpenSCAD toolchain for agent-drive
 
 General-purpose, model-neutral inbox triage with an Apple Mail adapter for macOS. Reviews the applicable inbox, protects older long-term to-dos, carries out authorized recoverable filing, verifies exact message copies, and creates an offline HTML review for comments and undo requests. Includes durable follow-ups, bounded history, guided setup, rule-impact previews and synthetic evaluation fixtures. Your active model provider processes the email supplied to the agent.
 
-Personal account settings and rules live under ignored `ignored-resources/email-triage/`; the tracked rules are generic. Ask “How does this skill work?” for help without accessing Mail, then request setup of your inbox. See [setup and publishing](email-triage/references/setup.md). The adapter needs a local agent with filesystem/Apple Mail access; other mail connectors need their own validated adapter.
+Personal account settings and rules live under ignored `ignored-resources/email-triage/`; the tracked rules are generic. Ask “How does this skill work?” for help without accessing Mail, then request setup of your inbox. See [setup](email-triage/references/setup.md) and the skill’s [publishing workflow](email-triage/references/publishing.md). The adapter needs a local agent with filesystem/Apple Mail access; other mail connectors need their own validated adapter.
 
 ## Install
 

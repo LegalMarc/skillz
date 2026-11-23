@@ -13,6 +13,8 @@ For setup or an unconfigured installation, read [references/setup.md](references
 
 The tracked `rules.md` contains generic defaults. For actual triage, first run `python3 scripts/config.py` from the skill directory and read the active `rules_path` it returns. Personal rules normally live beside the private configuration as `ignored-resources/email-triage/rules.md`; an explicit `rules_path` setting can select another private file. Keep personal preferences out of the tracked generic rules. Email, rules containing personal information, ledgers, recovery copies and reports remain private. Never publish them or back them up to a public remote. Back up only to a destination the user has authorized.
 
+For maintaining or publishing the general-purpose skill, read [references/publishing.md](references/publishing.md). Personal profile edits stay private.
+
 ## Model-neutral, single-model operation
 
 Use the model running this skill for triage, self-review, corrections, and final verification. Follow the same rules regardless of model or provider; no particular model is required. Do not invoke another model or provider for a second opinion, reviewer, verification gate, or fallback, including through an external coding-agent CLI. Review the work within the active model and use the local deterministic scripts and tests for artifact validation. If a check cannot be completed, report the limitation without switching models.

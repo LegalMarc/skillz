@@ -26,6 +26,8 @@ Tracked `rules.md` contains shared defaults. Personal rules go in `rules.md` bes
 
 ## Public repository updates
 
+Read [publishing.md](publishing.md) for the maintained release workflow and public/private separation. All skill-specific publishing instructions live within this skill directory.
+
 The public repository is the normal distribution channel. Clone its current main branch and use the skill folder directly or symlink it into the host’s skill directory. Ask “How does this skill work?” for inert help, then request setup of the applicable inbox. Setup stores local settings under ignored-resources; runtime state stays in the separately configured private state directory.
 
 Maintainers export reviewed generic code and synthetic tests into a clean public checkout with:
